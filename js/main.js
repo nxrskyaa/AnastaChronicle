@@ -1,4 +1,3 @@
-import { loadAll } from "./assets.js";
 import { Game } from "./game.js";
 import { UI } from "./ui.js";
 
@@ -9,39 +8,38 @@ const wrap = document.getElementById("game-wrap");
 const canvas = document.getElementById("game");
 
 async function main() {
+  bootStatus.textContent = "Loading Three.js…";
   try {
-    await loadAll((done, total) => {
-      bootStatus.textContent = `Loading ${done}/${total}…`;
-    });
+    // warm import
+    await import("three");
     bootStatus.textContent = "Ready.";
     btnStart.disabled = false;
-
-    const ui = new UI();
-    let game = null;
-
-    btnStart.addEventListener("click", () => {
-      try {
-        boot.classList.add("hidden");
-        wrap.classList.remove("hidden");
-        game = new Game(canvas, ui);
-        ui.bind(game);
-        ui.sync(game);
-        ui.renderInv(game);
-        ui.renderCraft(game);
-        game.start();
-        ui.toast("Welcome to the Forest of Anasta");
-      } catch (e) {
-        console.error(e);
-        boot.classList.remove("hidden");
-        wrap.classList.add("hidden");
-        bootStatus.textContent = "Game failed to start: " + (e?.message || e);
-        btnStart.disabled = false;
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    bootStatus.textContent = "Failed to load assets. Check console.";
+  } catch (e) {
+    console.error(e);
+    bootStatus.textContent = "Failed to load engine. Check network/CDN.";
+    return;
   }
+
+  const ui = new UI();
+  btnStart.addEventListener("click", () => {
+    try {
+      boot.classList.add("hidden");
+      wrap.classList.remove("hidden");
+      // size canvas
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const game = new Game(canvas, ui);
+      ui.bind(game);
+      game.start();
+      ui.toast("Welcome to Anasta Wilds");
+    } catch (e) {
+      console.error(e);
+      boot.classList.remove("hidden");
+      wrap.classList.add("hidden");
+      bootStatus.textContent = "Failed: " + (e?.message || e);
+      btnStart.disabled = false;
+    }
+  });
 }
 
 main();
