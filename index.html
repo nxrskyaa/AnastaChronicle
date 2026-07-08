@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Anasta Chronicle</title>
+  <meta name="description" content="Anasta Chronicle — pixel top-down MMO-style adventure. Level up, craft weapons, slay slimes." />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="boot">
+    <div class="boot-card">
+      <div class="boot-mark"></div>
+      <h1>ANASTA CHRONICLE</h1>
+      <p class="boot-sub">Pixel Top-Down · Forest of Anasta</p>
+      <div id="boot-status">Loading assets…</div>
+      <button id="btn-start" disabled>Enter Anasta</button>
+      <div class="boot-keys">
+        <span><kbd>WASD</kbd> Move</span>
+        <span><kbd>Click</kbd> Attack</span>
+        <span><kbd>Shift</kbd> Shield</span>
+        <span><kbd>Space</kbd> Evade</span>
+        <span><kbd>C</kbd> Craft</span>
+        <span><kbd>I</kbd> Inventory</span>
+        <span><kbd>1-4</kbd> Skills</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="game-wrap" class="hidden">
+    <canvas id="game" width="1280" height="720"></canvas>
+    <div id="hud">
+      <div id="minimap-wrap">
+        <canvas id="minimap" width="140" height="140"></canvas>
+        <div class="mm-label">Anasta Wilds</div>
+      </div>
+
+      <div id="hud-bottom">
+        <div class="orb orb-hp" title="Health">
+          <div class="orb-fill" id="hp-fill"></div>
+          <span id="hp-text">50</span>
+        </div>
+
+        <div class="center-bar">
+          <div id="hearts"></div>
+          <div id="action-bar">
+            <div class="slot" data-slot="1"><span class="key">1</span><img id="slot1-icon" alt="" /><div class="cd" id="slot1-cd"></div></div>
+            <div class="slot" data-slot="2"><span class="key">2</span><img id="slot2-icon" alt="" /><div class="cd" id="slot2-cd"></div></div>
+            <div class="slot" data-slot="3"><span class="key">3</span><img id="slot3-icon" alt="" /><div class="cd" id="slot3-cd"></div></div>
+            <div class="slot" data-slot="4"><span class="key">4</span><img id="slot4-icon" alt="" /><div class="cd" id="slot4-cd"></div></div>
+          </div>
+          <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text">Lv 1</span></div>
+        </div>
+
+        <div class="orb orb-stamina" title="Stamina">
+          <div class="orb-fill" id="stamina-fill"></div>
+          <span id="stamina-text">100</span>
+        </div>
+      </div>
+
+      <div id="hints">
+        <div><kbd>Shift</kbd> Shield</div>
+        <div><span class="mouse">LMB</span> Attack</div>
+        <div><kbd>Space</kbd> Evade</div>
+      </div>
+
+      <div id="toast"></div>
+      <div id="dmg-layer"></div>
+    </div>
+
+    <div id="panel-inv" class="panel hidden">
+      <div class="panel-head">
+        <h2>Inventory</h2>
+        <button class="panel-close" data-close="inv">✕</button>
+      </div>
+      <div id="inv-grid"></div>
+      <div class="panel-foot">Gold: <b id="gold-text">0</b></div>
+    </div>
+
+    <div id="panel-craft" class="panel hidden">
+      <div class="panel-head">
+        <h2>Weapon Forge</h2>
+        <button class="panel-close" data-close="craft">✕</button>
+      </div>
+      <div id="craft-list"></div>
+      <p class="panel-hint">Gather materials from slimes, trees & rocks. Craft to grow stronger.</p>
+    </div>
+
+    <div id="panel-level" class="panel hidden">
+      <div class="panel-head"><h2>Level Up!</h2></div>
+      <p id="level-msg">You reached a new level.</p>
+      <button id="btn-level-ok">Continue</button>
+    </div>
+
+    <div id="death-screen" class="panel hidden">
+      <h2>Fallen in Anasta</h2>
+      <p>The wilds reclaim you… but the Chronicle continues.</p>
+      <button id="btn-respawn">Respawn at Camp</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

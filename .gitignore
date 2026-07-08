@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+.env
+.env.*
+*.log
+.vercel
+dist/
+.idea/
+.vscode/
+
+# secrets
+.env
+.env.*
+*.pem
