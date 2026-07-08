@@ -202,3 +202,48 @@ kbd, .mouse {
   .slot { width: 40px; height: 40px; }
   #xp-bar { width: 170px; }
 }
+
+/* Touch controls */
+#touch-ui {
+  position: absolute; inset: 0; pointer-events: none; z-index: 15;
+}
+#stick {
+  position: absolute; left: 24px; bottom: 180px;
+  width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(20,28,40,.45); border: 2px solid rgba(255,255,255,.22);
+  pointer-events: auto; touch-action: none;
+}
+#stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
+  margin: -26px 0 0 -26px; border-radius: 50%;
+  background: rgba(90,216,168,.75); border: 2px solid rgba(255,255,255,.35);
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+}
+#touch-btns {
+  position: absolute; right: 16px; bottom: 170px;
+  display: grid; grid-template-columns: repeat(2, 64px); gap: 10px;
+  pointer-events: auto;
+}
+.tbtn {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.25);
+  background: rgba(16,22,32,.72); color: #eef2f8;
+  font-weight: 800; font-size: .72rem; letter-spacing: .04em;
+  pointer-events: auto; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0,0,0,.35);
+}
+.tbtn.atk { background: rgba(180,48,56,.82); border-color: #ff8a90; }
+.tbtn.shd { background: rgba(48,90,160,.82); border-color: #8ab4ff; }
+.tbtn.evd { background: rgba(160,100,30,.82); border-color: #ffc060; }
+.tbtn:active { transform: scale(0.94); filter: brightness(1.15); }
+
+#action-bar .slot {
+  pointer-events: auto;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+@media (min-width: 900px) {
+  /* keep stick on desktop too so always playable without keyboard focus issues */
+}

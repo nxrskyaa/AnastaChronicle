@@ -43,8 +43,11 @@ export class Game {
     this._initThree();
     this._buildWorld();
     this._initPlayer();
+    this._clearPlayableSpace();
     this._spawnSlimes(26);
     this._bind();
+    this._bindTouch();
+    this.stick = { x: 0, y: 0, active: false };
     this.ui.sync();
   }
 
@@ -290,7 +293,7 @@ export class Game {
         const r = rng();
         const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.4;
         const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.4;
-        if (r < 0.085) {
+        if (r < 0.045) {
           const g = new THREE.Group();
           const trunk = new THREE.Mesh(treeGeoTrunk, bark);
           trunk.position.y = 0.7;
@@ -304,8 +307,8 @@ export class Game {
           const s = 0.85 + rng() * 0.5;
           g.scale.setScalar(s);
           this.scene.add(g);
-          this.trees.push({ mesh: g, x: wx, z: wz, hp: 3, r: 0.55 * s });
-        } else if (r < 0.1) {
+          this.trees.push({ mesh: g, x: wx, z: wz, hp: 3, r: 0.38 * s });
+        } else if (r < 0.055) {
           const rock = new THREE.Mesh(
             new THREE.DodecahedronGeometry(0.35 + rng() * 0.2, 0),
             new THREE.MeshStandardMaterial({ color: 0x6a7078, flatShading: true, roughness: 1 })
@@ -432,7 +435,7 @@ export class Game {
       vx: 0,
       vz: 0,
       yaw: 0,
-      speed: 7.2,
+      speed: 9.5,
       level: 1,
       xp: 0,
       hp: 50,
@@ -455,6 +458,55 @@ export class Game {
     applyLevel(this.player);
     this.player.hp = this.player.maxHp;
     this.player.stamina = this.player.maxStamina;
+  }
+
+
+  _clearPlayableSpace() {
+    // Remove props that trap the player at camp / on the road
+    const keepTree = (tr) => {
+      // world path tiles
+      if (this.tileAt(tr.x, tr.z) === 1 || this.tileAt(tr.x, tr.z) === 2) return false;
+      // near spawn
+      if (Math.hypot(tr.x - this.spawn.x, tr.z - this.spawn.z) < 6.5) return false;
+      // near road corridor
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+        const tx = tr.x + Math.cos(a) * 0.8;
+        const tz = tr.z + Math.sin(a) * 0.8;
+        if (this.tileAt(tx, tz) === 1) return false;
+      }
+      return true;
+    };
+    for (const tr of [...this.trees]) {
+      if (!keepTree(tr)) {
+        this.scene.remove(tr.mesh);
+        tr.hp = 0;
+      }
+    }
+    this.trees = this.trees.filter((t) => t.hp > 0);
+    for (const rk of [...this.rocks]) {
+      if (Math.hypot(rk.x - this.spawn.x, rk.z - this.spawn.z) < 6 || this.tileAt(rk.x, rk.z) === 1) {
+        this.scene.remove(rk.mesh);
+        rk.hp = 0;
+      }
+    }
+    this.rocks = this.rocks.filter((r) => r.hp > 0);
+
+    // Ensure spawn is walkable
+    this.player.x = this.spawn.x;
+    this.player.z = this.spawn.z;
+    this.playerMesh.position.set(this.spawn.x, 0, this.spawn.z);
+    // micro-nudge if still blocked
+    for (let i = 0; i < 16; i++) {
+      if (!this.blocked(this.player.x, this.player.z, 0.35)) break;
+      const a = (i / 16) * Math.PI * 2;
+      const nx = this.spawn.x + Math.cos(a) * 1.5;
+      const nz = this.spawn.z + Math.sin(a) * 1.5;
+      if (!this.blocked(nx, nz, 0.35)) {
+        this.player.x = nx; this.player.z = nz;
+        this.playerMesh.position.set(nx, 0, nz);
+        break;
+      }
+    }
   }
 
   _makeSlime(x, z, tier = 1) {
@@ -595,6 +647,25 @@ export class Game {
       if (e.button === 0) this.mouse.down = false;
     });
     c.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Mobile tap-to-move / attack on canvas
+    c.addEventListener("touchstart", (e) => {
+      if (!e.touches[0]) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      const fake = { clientX: t.clientX, clientY: t.clientY, button: 0, shiftKey: false };
+      this._mouse(fake);
+      // enemy near tap?
+      let nearEnemy = false;
+      for (const en of this.enemies) {
+        if (en.dead) continue;
+        if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.4) { nearEnemy = true; break; }
+      }
+      if (nearEnemy) this.tryAttack();
+      else {
+        this.moveTarget = this._hit.clone();
+        this.moveTarget.y = 0;
+      }
+    }, { passive: false });
   }
 
   _mouse(e) {
@@ -605,6 +676,72 @@ export class Game {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     this.raycaster.ray.intersectPlane(this.groundPlane, this._hit);
+  }
+
+
+  _bindTouch() {
+    const stick = document.getElementById("stick");
+    const knob = document.getElementById("stick-knob");
+    if (stick && knob) {
+      const maxR = 40;
+      const setFromEvent = (clientX, clientY) => {
+        const rect = stick.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const len = Math.hypot(dx, dy) || 1;
+        if (len > maxR) { dx = (dx / len) * maxR; dy = (dy / len) * maxR; }
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        // stick.y positive = down on screen = +Z world
+        this.stick.active = true;
+        this.stick.x = dx / maxR;
+        this.stick.y = dy / maxR;
+      };
+      const end = () => {
+        this.stick.active = false;
+        this.stick.x = 0;
+        this.stick.y = 0;
+        knob.style.transform = "translate(0,0)";
+      };
+      const onDown = (e) => {
+        e.preventDefault();
+        const t = e.touches ? e.touches[0] : e;
+        setFromEvent(t.clientX, t.clientY);
+      };
+      const onMove = (e) => {
+        if (!this.stick.active) return;
+        e.preventDefault();
+        const t = e.touches ? e.touches[0] : e;
+        setFromEvent(t.clientX, t.clientY);
+      };
+      stick.addEventListener("pointerdown", onDown);
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", end);
+      stick.addEventListener("touchstart", onDown, { passive: false });
+      stick.addEventListener("touchmove", onMove, { passive: false });
+      stick.addEventListener("touchend", end);
+    }
+
+    const hold = (id, on, off) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const start = (e) => { e.preventDefault(); on(); };
+      const stop = (e) => { e.preventDefault(); off(); };
+      el.addEventListener("pointerdown", start);
+      el.addEventListener("pointerup", stop);
+      el.addEventListener("pointerleave", stop);
+      el.addEventListener("touchstart", start, { passive: false });
+      el.addEventListener("touchend", stop);
+    };
+    hold("btn-attack", () => { this.mouse.down = true; this.tryAttack(); }, () => { this.mouse.down = false; });
+    hold("btn-shield", () => { this.keys.ShiftLeft = true; }, () => { this.keys.ShiftLeft = false; });
+    hold("btn-evade", () => { this.keys.Space = true; setTimeout(() => { this.keys.Space = false; }, 120); }, () => {});
+    document.getElementById("btn-craft")?.addEventListener("click", () => this.ui.toggle("craft"));
+    document.getElementById("btn-inv")?.addEventListener("click", () => this.ui.toggle("inv"));
+    document.querySelectorAll("#action-bar .slot").forEach((btn) => {
+      btn.addEventListener("click", () => this.useSkill(Number(btn.dataset.i)));
+    });
   }
 
   start() {
@@ -664,17 +801,20 @@ export class Game {
       this.moveTarget = null;
     }
 
-    // WASD
+    // WASD + virtual stick (camera-aligned: W = screen-up = -Z)
     let mx = 0, mz = 0;
     if (this.keys.KeyW || this.keys.ArrowUp) mz -= 1;
     if (this.keys.KeyS || this.keys.ArrowDown) mz += 1;
     if (this.keys.KeyA || this.keys.ArrowLeft) mx -= 1;
     if (this.keys.KeyD || this.keys.ArrowRight) mx += 1;
-    if (mx || mz) {
+    if (this.stick && this.stick.active) {
+      mx += this.stick.x;
+      mz += this.stick.y;
+    }
+    if (Math.abs(mx) > 0.05 || Math.abs(mz) > 0.05) {
       this.moveTarget = null;
       const len = Math.hypot(mx, mz) || 1;
       mx /= len; mz /= len;
-      // camera-relative: camera looks from +z-ish; simplify world axes
       const slow = p.shield ? 0.55 : 1;
       if (p.evadeT <= 0) {
         p.vx = mx * p.speed * slow;

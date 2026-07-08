@@ -8,15 +8,14 @@ const wrap = document.getElementById("game-wrap");
 const canvas = document.getElementById("game");
 
 async function main() {
-  bootStatus.textContent = "Loading Three.js…";
+  bootStatus.textContent = "Loading engine…";
   try {
-    // warm import
     await import("three");
-    bootStatus.textContent = "Ready.";
+    bootStatus.textContent = "Ready — tap Enter";
     btnStart.disabled = false;
   } catch (e) {
     console.error(e);
-    bootStatus.textContent = "Failed to load engine. Check network/CDN.";
+    bootStatus.textContent = "Engine load failed: " + (e?.message || e);
     return;
   }
 
@@ -25,13 +24,16 @@ async function main() {
     try {
       boot.classList.add("hidden");
       wrap.classList.remove("hidden");
-      // size canvas
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      canvas.width = window.innerWidth * (window.devicePixelRatio > 1.5 ? 1.25 : 1);
+      canvas.height = window.innerHeight * (window.devicePixelRatio > 1.5 ? 1.25 : 1);
+      // better: let renderer set size
       const game = new Game(canvas, ui);
       ui.bind(game);
       game.start();
-      ui.toast("Welcome to Anasta Wilds");
+      // focus so keyboard works immediately
+      window.focus();
+      canvas.focus?.();
+      ui.toast("Use stick / WASD to move · ATK to fight");
     } catch (e) {
       console.error(e);
       boot.classList.remove("hidden");

@@ -4,14 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Anasta Chronicle</title>
-  <meta name="description" content="Anasta Chronicle — 2.5D pixel top-down MMO adventure" />
+  <meta name="description" content="Anasta Chronicle — 2.5D top-down adventure" />
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="css/style.css" />
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+      "three": "./vendor/three.module.js"
     }
   }
   </script>
@@ -26,13 +25,12 @@
       <div id="boot-status">Loading…</div>
       <button id="btn-start" disabled>Enter the Forest</button>
       <div class="boot-keys">
-        <span><kbd>WASD</kbd> / click move</span>
-        <span><kbd>LMB</kbd> Attack</span>
+        <span><kbd>WASD</kbd> Move</span>
+        <span><kbd>LMB</kbd> / tap ground Move · enemy Attack</span>
         <span><kbd>Shift</kbd> Shield</span>
         <span><kbd>Space</kbd> Evade</span>
         <span><kbd>C</kbd> Craft</span>
         <span><kbd>I</kbd> Bag</span>
-        <span><kbd>1-4</kbd> Skills</span>
       </div>
     </div>
   </div>
@@ -57,10 +55,10 @@
         <div class="center-bar">
           <div id="hearts"></div>
           <div id="action-bar">
-            <div class="slot" data-i="0"><span class="key">1</span><div class="slot-icon" id="sk0">⚔</div><div class="cd" id="cd0"></div></div>
-            <div class="slot" data-i="1"><span class="key">2</span><div class="slot-icon" id="sk1">☘</div><div class="cd" id="cd1"></div></div>
-            <div class="slot" data-i="2"><span class="key">3</span><div class="slot-icon" id="sk2">🌀</div><div class="cd" id="cd2"></div></div>
-            <div class="slot" data-i="3"><span class="key">4</span><div class="slot-icon" id="sk3">💨</div><div class="cd" id="cd3"></div></div>
+            <button type="button" class="slot" data-i="0"><span class="key">1</span><div class="slot-icon">⚔</div><div class="cd" id="cd0"></div></button>
+            <button type="button" class="slot" data-i="1"><span class="key">2</span><div class="slot-icon">☘</div><div class="cd" id="cd1"></div></button>
+            <button type="button" class="slot" data-i="2"><span class="key">3</span><div class="slot-icon">🌀</div><div class="cd" id="cd2"></div></button>
+            <button type="button" class="slot" data-i="3"><span class="key">4</span><div class="slot-icon">💨</div><div class="cd" id="cd3"></div></button>
           </div>
           <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text">Lv 1</span></div>
         </div>
@@ -75,9 +73,23 @@
         <div><kbd>Space</kbd> Evade</div>
       </div>
 
+      <!-- Mobile / always-available controls -->
+      <div id="touch-ui">
+        <div id="stick" aria-label="Move">
+          <div id="stick-knob"></div>
+        </div>
+        <div id="touch-btns">
+          <button type="button" id="btn-attack" class="tbtn atk">ATK</button>
+          <button type="button" id="btn-shield" class="tbtn shd">SHD</button>
+          <button type="button" id="btn-evade" class="tbtn evd">EVD</button>
+          <button type="button" id="btn-craft" class="tbtn">CRAFT</button>
+          <button type="button" id="btn-inv" class="tbtn">BAG</button>
+        </div>
+      </div>
+
       <div id="toast"></div>
       <div id="dmg-layer"></div>
-      <div id="interact-prompt" class="hidden">Press <kbd>F</kbd> to open</div>
+      <div id="interact-prompt" class="hidden">Press <kbd>F</kbd> / tap to open</div>
     </div>
 
     <div id="panel-inv" class="panel hidden">
