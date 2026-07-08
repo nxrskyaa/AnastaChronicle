@@ -1,275 +1,362 @@
 import * as THREE from "../vendor/three.module.js";
 
-/** Shared materials — muted forest ARPG palette matching ref */
+const texLoader = new THREE.TextureLoader();
+const texCache = {};
+
+function loadTex(url, { repeat = 1, nearest = false } = {}) {
+  const key = url + "|" + repeat + "|" + nearest;
+  if (texCache[key]) return texCache[key];
+  const t = texLoader.load(url);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeat, repeat);
+  if (nearest) {
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+  } else {
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearMipmapLinearFilter;
+  }
+  texCache[key] = t;
+  return t;
+}
+
+function toon(color, map = null, opts = {}) {
+  const m = new THREE.MeshToonMaterial({
+    color,
+    map,
+    gradientMap: loadTex("assets/tex/toon.png", { nearest: true }),
+    transparent: !!opts.transparent,
+    opacity: opts.opacity ?? 1,
+  });
+  if (opts.emissive) {
+    m.emissive = new THREE.Color(opts.emissive);
+    m.emissiveIntensity = opts.emissiveIntensity ?? 0.2;
+  }
+  return m;
+}
+
+function std(color, map = null, opts = {}) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    map,
+    roughness: opts.roughness ?? 0.85,
+    metalness: opts.metalness ?? 0.05,
+    flatShading: opts.flat ?? true,
+    transparent: !!opts.transparent,
+    opacity: opts.opacity ?? 1,
+    emissive: opts.emissive ?? 0x000000,
+    emissiveIntensity: opts.emissiveIntensity ?? 0,
+  });
+}
+
 export function createPalette(isMobile) {
-  const flat = (hex, opts = {}) =>
-    new THREE.MeshStandardMaterial({
-      color: hex,
-      flatShading: true,
-      roughness: opts.roughness ?? 0.88,
-      metalness: opts.metalness ?? 0.02,
-      emissive: opts.emissive ?? 0x000000,
-      emissiveIntensity: opts.emissiveIntensity ?? 0,
-      transparent: !!opts.transparent,
-      opacity: opts.opacity ?? 1,
-    });
+  const grassMap = loadTex("assets/tex/grass.png", { repeat: 10 });
+  const pathMap = loadTex("assets/tex/path.png", { repeat: 6 });
+  const barkMap = loadTex("assets/tex/bark.png", { repeat: 1 });
+  const leafMap = loadTex("assets/tex/leaves.png", { repeat: 1 });
+  const waterMap = loadTex("assets/tex/water.png", { repeat: 2 });
+  const stoneMap = loadTex("assets/tex/stone.png", { repeat: 1 });
 
   return {
-    bark: flat(0x5c4030, { roughness: 1 }),
-    barkDark: flat(0x3d2a1f, { roughness: 1 }),
-    pine1: flat(0x2d5a3d, { roughness: 0.95 }),
-    pine2: flat(0x3a6b48, { roughness: 0.95 }),
-    pine3: flat(0x244a32, { roughness: 0.95 }),
-    pineTip: flat(0x4a7a55, { roughness: 0.9 }),
-    dirt: flat(0x8b6b45, { roughness: 1 }),
-    stone: flat(0x6a7078, { roughness: 0.95 }),
-    stoneDark: flat(0x4a5058, { roughness: 0.95 }),
-    torchWood: flat(0x4a3424),
-    flame: new THREE.MeshBasicMaterial({ color: 0xff9a40 }),
-    flameCore: new THREE.MeshBasicMaterial({ color: 0xffe080 }),
-    // player
-    skin: flat(0xe8b898, { roughness: 0.7 }),
-    hair: flat(0x2a2228, { roughness: 0.9 }),
-    tunic: flat(0x5a6470, { roughness: 0.75, metalness: 0.15 }),
-    tunicDark: flat(0x3a4450, { roughness: 0.8, metalness: 0.1 }),
-    cloak: flat(0x4a5568, { roughness: 0.85 }),
-    pants: flat(0x3a3a48, { roughness: 0.9 }),
-    boot: flat(0x2a2018, { roughness: 0.95 }),
-    metal: flat(0xc8d0dc, { roughness: 0.35, metalness: 0.65 }),
-    metalDark: flat(0x8a929c, { roughness: 0.4, metalness: 0.55 }),
-    leather: flat(0x6b4423, { roughness: 0.9 }),
-    // slime
-    slime: flat(0x5ee0b8, {
-      roughness: 0.35,
-      metalness: 0.05,
+    isMobile,
+    grassMap,
+    pathMap,
+    // ground materials
+    grass: std(0xffffff, grassMap, { roughness: 0.95, flat: true }),
+    path: std(0xffffff, pathMap, { roughness: 0.92, flat: true }),
+    water: std(0x5aa0b8, waterMap, {
+      roughness: 0.2,
+      metalness: 0.35,
+      transparent: true,
+      opacity: 0.82,
+      flat: true,
+    }),
+    // trees
+    bark: toon(0xffffff, barkMap),
+    barkDark: toon(0x8a7058, barkMap),
+    leafA: toon(0x3d7a4a, leafMap),
+    leafB: toon(0x2f6a3d, leafMap),
+    leafC: toon(0x4a8a55, leafMap),
+    leafDark: toon(0x245535, leafMap),
+    // rocks
+    stone: toon(0xb0b6be, stoneMap),
+    stoneDark: toon(0x7a8088, stoneMap),
+    // player — saturated game-hero palette
+    skin: toon(0xf0c2a0),
+    hair: toon(0x2c2430),
+    tunic: toon(0x5c6b7a),
+    tunicDark: toon(0x3e4a58),
+    cloak: toon(0x4a5a6e),
+    pants: toon(0x353545),
+    boot: toon(0x2a2018),
+    metal: toon(0xd8e0ea),
+    metalDark: toon(0x8a949e),
+    leather: toon(0x7a4a28),
+    accent: toon(0xc45a4a),
+    // slime jelly
+    slime: toon(0x5ef0c0, null, {
+      transparent: true,
+      opacity: 0.9,
       emissive: 0x2a8060,
-      emissiveIntensity: 0.18,
+      emissiveIntensity: 0.25,
+    }),
+    slimeDark: toon(0x3ad0a0, null, {
       transparent: true,
       opacity: 0.92,
-    }),
-    slimeDark: flat(0x3ab890, {
-      roughness: 0.4,
       emissive: 0x1a6048,
-      emissiveIntensity: 0.12,
-      transparent: true,
-      opacity: 0.95,
+      emissiveIntensity: 0.2,
     }),
-    slimeEye: flat(0x1a2030, { roughness: 0.5 }),
-    slimeEyeWhite: flat(0xf0f8ff, { roughness: 0.4 }),
-    chest: flat(0x8a6238),
-    chestLid: flat(0xb87840),
-    gold: flat(0xe8c040, { metalness: 0.5, roughness: 0.4, emissive: 0x806010, emissiveIntensity: 0.15 }),
-    herb: flat(0x50c060),
-    gelDrop: flat(0x60f0b0, { emissive: 0x208050, emissiveIntensity: 0.25 }),
-    isMobile,
+    eyeWhite: toon(0xffffff),
+    eye: toon(0x1a2030),
+    // props
+    chest: toon(0xa07040),
+    chestLid: toon(0xc09050),
+    gold: toon(0xf0c840, null, { emissive: 0x806010, emissiveIntensity: 0.2 }),
+    torchWood: toon(0x5a3a24),
+    flame: new THREE.MeshBasicMaterial({ color: 0xff9030 }),
+    flameCore: new THREE.MeshBasicMaterial({ color: 0xffe090 }),
   };
 }
 
-function addShadow(mesh, enabled) {
-  mesh.castShadow = enabled;
-  mesh.receiveShadow = enabled;
-  return mesh;
+function shadow(m, on) {
+  m.castShadow = on;
+  m.receiveShadow = on;
+  return m;
 }
 
-/** Stylized adventurer — cloak, tunic, boots, sword (ref-like) */
-export function createPlayerMesh(mat, castShadow = true) {
+/** Hero — more readable silhouette from top-down */
+export function createPlayerMesh(mat, cast = true) {
   const g = new THREE.Group();
-  g.name = "player";
+
+  // shadow blob
+  const blob = new THREE.Mesh(
+    new THREE.CircleGeometry(0.45, 20),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false })
+  );
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.y = 0.02;
+  g.add(blob);
 
   // legs
-  const legGeo = new THREE.CapsuleGeometry(0.1, 0.28, 3, 6);
-  const legL = addShadow(new THREE.Mesh(legGeo, mat.pants), castShadow);
-  legL.position.set(-0.12, 0.38, 0);
-  const legR = addShadow(new THREE.Mesh(legGeo, mat.pants), castShadow);
-  legR.position.set(0.12, 0.38, 0);
+  const legG = new THREE.CapsuleGeometry(0.11, 0.32, 4, 8);
+  const legL = shadow(new THREE.Mesh(legG, mat.pants), cast);
+  legL.position.set(-0.14, 0.42, 0);
+  const legR = shadow(new THREE.Mesh(legG, mat.pants), cast);
+  legR.position.set(0.14, 0.42, 0);
+
   // boots
-  const bootGeo = new THREE.BoxGeometry(0.16, 0.12, 0.24);
-  const bootL = addShadow(new THREE.Mesh(bootGeo, mat.boot), castShadow);
-  bootL.position.set(-0.12, 0.08, 0.02);
-  const bootR = addShadow(new THREE.Mesh(bootGeo, mat.boot), castShadow);
-  bootR.position.set(0.12, 0.08, 0.02);
+  const bootG = new THREE.BoxGeometry(0.18, 0.14, 0.28);
+  const bootL = shadow(new THREE.Mesh(bootG, mat.boot), cast);
+  bootL.position.set(-0.14, 0.09, 0.04);
+  const bootR = shadow(new THREE.Mesh(bootG, mat.boot), cast);
+  bootR.position.set(0.14, 0.09, 0.04);
 
-  // torso / tunic
-  const torso = addShadow(
-    new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.38, 4, 8), mat.tunic),
-    castShadow
-  );
-  torso.position.y = 0.95;
+  // hips / skirt plate
+  const hips = shadow(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.3, 0.22, 10), mat.tunicDark), cast);
+  hips.position.y = 0.72;
 
-  // chest plate accent
-  const plate = addShadow(
-    new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.22), mat.metal),
-    castShadow
-  );
-  plate.position.set(0, 1.0, 0.08);
+  // torso
+  const torso = shadow(new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.42, 5, 10), mat.tunic), cast);
+  torso.position.y = 1.05;
 
-  // belt
-  const belt = addShadow(
-    new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.28), mat.leather),
-    castShadow
-  );
-  belt.position.y = 0.72;
+  // chest plate
+  const plate = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.24), mat.metal), cast);
+  plate.position.set(0, 1.08, 0.1);
+  // red scarf / accent
+  const scarf = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.1, 0.2), mat.accent), cast);
+  scarf.position.set(0, 1.28, 0.12);
 
-  // cloak (back)
-  const cloak = addShadow(
-    new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.12), mat.cloak),
-    castShadow
-  );
-  cloak.position.set(0, 0.95, -0.18);
-  cloak.rotation.x = 0.12;
+  // belt + buckle
+  const belt = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.09, 0.32), mat.leather), cast);
+  belt.position.y = 0.8;
+  const buckle = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.06), mat.gold), cast);
+  buckle.position.set(0, 0.8, 0.18);
+
+  // cloak
+  const cloak = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.85, 0.14), mat.cloak), cast);
+  cloak.position.set(0, 1.0, -0.22);
+  cloak.rotation.x = 0.15;
+
+  // shoulders
+  const shL = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), mat.metalDark), cast);
+  shL.position.set(-0.34, 1.28, 0);
+  const shR = shL.clone();
+  shR.position.x = 0.34;
 
   // arms
-  const armGeo = new THREE.CapsuleGeometry(0.07, 0.28, 3, 6);
-  const armL = addShadow(new THREE.Mesh(armGeo, mat.tunicDark), castShadow);
-  armL.position.set(-0.36, 0.98, 0);
-  armL.rotation.z = 0.25;
-  const armR = addShadow(new THREE.Mesh(armGeo, mat.tunicDark), castShadow);
-  armR.position.set(0.36, 0.98, 0);
-  armR.rotation.z = -0.25;
+  const armG = new THREE.CapsuleGeometry(0.08, 0.32, 4, 8);
+  const armL = shadow(new THREE.Mesh(armG, mat.tunicDark), cast);
+  armL.position.set(-0.4, 1.02, 0.02);
+  armL.rotation.z = 0.28;
+  const armR = shadow(new THREE.Mesh(armG, mat.tunicDark), cast);
+  armR.position.set(0.4, 1.02, 0.02);
+  armR.rotation.z = -0.28;
 
   // hands
-  const handL = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), mat.skin), castShadow);
-  handL.position.set(-0.42, 0.72, 0.05);
-  const handR = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), mat.skin), castShadow);
-  handR.position.set(0.42, 0.72, 0.08);
+  const handL = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), mat.skin), cast);
+  handL.position.set(-0.48, 0.74, 0.06);
+  const handR = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), mat.skin), cast);
+  handR.position.set(0.48, 0.74, 0.1);
 
   // head
-  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), mat.skin), castShadow);
-  head.position.y = 1.48;
-  // hair / hood
-  const hair = addShadow(
-    new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), mat.hair),
-    castShadow
+  const head = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), mat.skin), cast);
+  head.position.y = 1.58;
+  // hair volume
+  const hair = shadow(
+    new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), mat.hair),
+    cast
   );
-  hair.position.set(0, 1.55, -0.02);
-  // face eyes (simple)
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 5, 5), mat.slimeEye);
-  eyeL.position.set(-0.07, 1.5, 0.16);
-  const eyeR = eyeL.clone();
-  eyeR.position.x = 0.07;
+  hair.position.set(0, 1.66, -0.02);
+  // bangs
+  const bang = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.12), mat.hair), cast);
+  bang.position.set(0, 1.68, 0.14);
 
-  // sword in right hand
+  // eyes
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), mat.eye);
+  eyeL.position.set(-0.08, 1.58, 0.18);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = 0.08;
+
+  // sword
   const weapon = new THREE.Group();
-  const blade = addShadow(
-    new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.85), mat.metal),
-    castShadow
-  );
-  blade.position.z = 0.35;
-  const guard = addShadow(
-    new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.06), mat.metalDark),
-    castShadow
-  );
-  const hilt = addShadow(
-    new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.22, 6), mat.leather),
-    castShadow
-  );
+  const blade = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.95), mat.metal), cast);
+  blade.position.z = 0.4;
+  // blade tip
+  const tip = shadow(new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 6), mat.metal), cast);
+  tip.rotation.x = Math.PI / 2;
+  tip.position.z = 0.92;
+  const guard = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.07, 0.07), mat.metalDark), cast);
+  const hilt = shadow(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.24, 8), mat.leather), cast);
   hilt.rotation.x = Math.PI / 2;
-  hilt.position.z = -0.12;
-  const pommel = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), mat.metalDark), castShadow);
-  pommel.position.z = -0.24;
-  weapon.add(blade, guard, hilt, pommel);
-  weapon.position.set(0.48, 0.85, 0.2);
-  weapon.rotation.x = -0.15;
-  weapon.rotation.y = 0.1;
+  hilt.position.z = -0.14;
+  const pommel = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mat.gold), cast);
+  pommel.position.z = -0.28;
+  weapon.add(blade, tip, guard, hilt, pommel);
+  weapon.position.set(0.52, 0.9, 0.22);
+  weapon.rotation.x = -0.2;
 
   g.add(
-    legL, legR, bootL, bootR,
-    torso, plate, belt, cloak,
-    armL, armR, handL, handR,
-    head, hair, eyeL, eyeR, weapon
+    blob, legL, legR, bootL, bootR, hips, torso, plate, scarf, belt, buckle, cloak,
+    shL, shR, armL, armR, handL, handR, head, hair, bang, eyeL, eyeR, weapon
   );
-
-  // store refs for anim
   g.userData.weapon = weapon;
   g.userData.legL = legL;
   g.userData.legR = legR;
   g.userData.cloak = cloak;
-
+  g.userData.blob = blob;
   return g;
 }
 
-/** Tall pine tree — multi-layer canopy like reference */
-export function createPineTree(mat, rng, castShadow = true) {
+/** Dense layered pine */
+export function createPineTree(mat, rng, cast = true) {
   const g = new THREE.Group();
-  const h = 2.4 + rng() * 2.2;
-  const trunkH = h * 0.55;
-  const trunkR = 0.14 + rng() * 0.08;
+  const h = 2.8 + rng() * 2.8;
+  const trunkH = h * 0.5;
+  const r0 = 0.16 + rng() * 0.1;
 
-  const trunk = addShadow(
-    new THREE.Mesh(
-      new THREE.CylinderGeometry(trunkR * 0.7, trunkR, trunkH, 7),
-      rng() > 0.5 ? mat.bark : mat.barkDark
-    ),
-    castShadow
+  const trunk = shadow(
+    new THREE.Mesh(new THREE.CylinderGeometry(r0 * 0.65, r0, trunkH, 8), rng() > 0.5 ? mat.bark : mat.barkDark),
+    cast
   );
   trunk.position.y = trunkH / 2;
   g.add(trunk);
 
-  // stacked cones / spheres for canopy
-  const layers = 3 + Math.floor(rng() * 2);
-  const pineMats = [mat.pine1, mat.pine2, mat.pine3, mat.pineTip];
+  // AO under tree
+  const ao = new THREE.Mesh(
+    new THREE.CircleGeometry(0.9 + rng() * 0.4, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })
+  );
+  ao.rotation.x = -Math.PI / 2;
+  ao.position.y = 0.03;
+  g.add(ao);
+
+  const layers = 4 + Math.floor(rng() * 2);
+  const mats = [mat.leafDark, mat.leafA, mat.leafB, mat.leafC, mat.leafA];
   for (let i = 0; i < layers; i++) {
     const t = i / (layers - 1 || 1);
-    const rad = (1.1 - t * 0.55) * (0.85 + rng() * 0.25);
-    const y = trunkH * 0.55 + i * (h * 0.18) + 0.3;
+    const rad = (1.35 - t * 0.75) * (0.9 + rng() * 0.25);
+    const y = trunkH * 0.45 + i * (h * 0.16) + 0.35;
+    // mix cone + icosa for organic mass
     const geo =
-      rng() > 0.35
-        ? new THREE.ConeGeometry(rad, rad * 1.15, 7)
-        : new THREE.DodecahedronGeometry(rad * 0.85, 0);
-    const leaf = addShadow(new THREE.Mesh(geo, pineMats[i % pineMats.length]), castShadow);
-    leaf.position.y = y;
+      i % 2 === 0
+        ? new THREE.ConeGeometry(rad, rad * 1.25, 8)
+        : new THREE.IcosahedronGeometry(rad * 0.85, 0);
+    const leaf = shadow(new THREE.Mesh(geo, mats[i % mats.length]), cast);
+    leaf.position.set((rng() - 0.5) * 0.15, y, (rng() - 0.5) * 0.15);
     leaf.rotation.y = rng() * Math.PI;
-    leaf.scale.y = 0.85 + rng() * 0.25;
+    leaf.scale.y = 0.9 + rng() * 0.25;
     g.add(leaf);
   }
 
-  // slight lean
-  g.rotation.z = (rng() - 0.5) * 0.08;
-  g.rotation.x = (rng() - 0.5) * 0.06;
-  const s = 0.9 + rng() * 0.45;
-  g.scale.setScalar(s);
+  // top tip
+  const tip = shadow(new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 7), mat.leafC), cast);
+  tip.position.y = trunkH * 0.45 + layers * (h * 0.16) + 0.2;
+  g.add(tip);
+
+  g.rotation.z = (rng() - 0.5) * 0.1;
+  g.rotation.x = (rng() - 0.5) * 0.08;
+  g.scale.setScalar(0.95 + rng() * 0.55);
   return g;
 }
 
-/** Soft jelly slime with eyes */
-export function createSlimeMesh(mat, tier = 1, castShadow = true) {
+export function createSlimeMesh(mat, tier = 1, cast = true) {
   const g = new THREE.Group();
-  const scale = tier > 1 ? 1.3 : 1;
+  const s = tier > 1 ? 1.35 : 1;
   const bodyMat = tier > 1 ? mat.slimeDark : mat.slime;
 
-  const body = addShadow(
-    new THREE.Mesh(new THREE.SphereGeometry(0.42 * scale, 12, 10), bodyMat),
-    castShadow
+  // shadow
+  const blob = new THREE.Mesh(
+    new THREE.CircleGeometry(0.4 * s, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false })
   );
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.y = 0.02;
+  g.add(blob);
+
+  const body = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.45 * s, 16, 12), bodyMat), cast);
   body.scale.y = 0.72;
-  body.position.y = 0.32 * scale;
+  body.position.y = 0.34 * s;
 
-  // translucent crown blob
-  const crown = addShadow(
-    new THREE.Mesh(new THREE.SphereGeometry(0.22 * scale, 10, 8), bodyMat),
-    castShadow
+  // drip blobs
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.4;
+    const drip = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.12 * s, 8, 8), bodyMat), cast);
+    drip.position.set(Math.cos(a) * 0.28 * s, 0.18 * s, Math.sin(a) * 0.28 * s);
+    drip.scale.y = 1.3;
+    g.add(drip);
+  }
+
+  const crown = shadow(new THREE.Mesh(new THREE.SphereGeometry(0.24 * s, 12, 10), bodyMat), cast);
+  crown.position.y = 0.58 * s;
+  crown.scale.set(1.15, 0.65, 1.15);
+
+  // big cute eyes
+  const wL = new THREE.Mesh(new THREE.SphereGeometry(0.11 * s, 10, 10), mat.eyeWhite);
+  wL.position.set(-0.16 * s, 0.4 * s, 0.3 * s);
+  const wR = wL.clone();
+  wR.position.x = 0.16 * s;
+  const pL = new THREE.Mesh(new THREE.SphereGeometry(0.055 * s, 8, 8), mat.eye);
+  pL.position.set(-0.16 * s, 0.4 * s, 0.38 * s);
+  const pR = pL.clone();
+  pR.position.x = 0.16 * s;
+
+  // mouth
+  const mouth = new THREE.Mesh(
+    new THREE.SphereGeometry(0.06 * s, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0x1a4038 })
   );
-  crown.position.y = 0.55 * scale;
-  crown.scale.set(1.1, 0.7, 1.1);
+  mouth.position.set(0, 0.28 * s, 0.35 * s);
+  mouth.scale.set(1.4, 0.5, 0.6);
 
-  // eyes
-  const eyeWhiteL = new THREE.Mesh(new THREE.SphereGeometry(0.09 * scale, 8, 8), mat.slimeEyeWhite);
-  eyeWhiteL.position.set(-0.14 * scale, 0.38 * scale, 0.28 * scale);
-  const eyeWhiteR = eyeWhiteL.clone();
-  eyeWhiteR.position.x = 0.14 * scale;
-  const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.045 * scale, 6, 6), mat.slimeEye);
-  pupilL.position.set(-0.14 * scale, 0.38 * scale, 0.35 * scale);
-  const pupilR = pupilL.clone();
-  pupilR.position.x = 0.14 * scale;
-
-  // cheek highlight
-  const cheek = new THREE.Mesh(
-    new THREE.SphereGeometry(0.08 * scale, 6, 6),
-    new THREE.MeshBasicMaterial({ color: 0xa0ffe0, transparent: true, opacity: 0.35 })
+  // shine
+  const shine = new THREE.Mesh(
+    new THREE.SphereGeometry(0.1 * s, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 })
   );
-  cheek.position.set(0, 0.22 * scale, 0.3 * scale);
+  shine.position.set(-0.12 * s, 0.5 * s, 0.2 * s);
 
-  g.add(body, crown, eyeWhiteL, eyeWhiteR, pupilL, pupilR, cheek);
+  g.add(body, crown, wL, wR, pL, pR, mouth, shine);
   g.userData.body = body;
   g.userData.crown = crown;
   return g;
@@ -277,26 +364,19 @@ export function createSlimeMesh(mat, tier = 1, castShadow = true) {
 
 export function createTorchMesh(mat, withLight, isMobile) {
   const g = new THREE.Group();
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.07, 1.15, 6),
-    mat.torchWood
-  );
-  pole.position.y = 0.55;
-  const wrap = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.09, 0.18, 6),
-    mat.leather
-  );
-  wrap.position.y = 1.05;
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 6), mat.flame);
-  flame.position.y = 1.3;
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), mat.flameCore);
-  core.position.y = 1.22;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 1.2, 7), mat.torchWood);
+  pole.position.y = 0.6;
+  const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.2, 7), mat.leather);
+  wrap.position.y = 1.1;
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.4, 7), mat.flame);
+  flame.position.y = 1.38;
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), mat.flameCore);
+  core.position.y = 1.28;
   g.add(pole, wrap, flame, core);
-
   let light = null;
   if (withLight) {
-    light = new THREE.PointLight(0xff9a40, isMobile ? 0.65 : 1.0, isMobile ? 5.5 : 7.5, 2);
-    light.position.y = 1.3;
+    light = new THREE.PointLight(0xff9a40, isMobile ? 0.7 : 1.15, isMobile ? 6 : 8, 2);
+    light.position.y = 1.35;
     g.add(light);
   }
   g.userData.flame = flame;
@@ -305,35 +385,42 @@ export function createTorchMesh(mat, withLight, isMobile) {
   return g;
 }
 
-export function createRockMesh(mat, rng, castShadow = true) {
+export function createRockMesh(mat, rng, cast = true) {
   const g = new THREE.Group();
-  const n = 1 + Math.floor(rng() * 2);
+  const n = 1 + Math.floor(rng() * 3);
   for (let i = 0; i < n; i++) {
-    const m = addShadow(
+    const m = shadow(
       new THREE.Mesh(
-        new THREE.DodecahedronGeometry(0.25 + rng() * 0.2, 0),
+        new THREE.DodecahedronGeometry(0.28 + rng() * 0.22, 0),
         rng() > 0.5 ? mat.stone : mat.stoneDark
       ),
-      castShadow
+      cast
     );
-    m.position.set((rng() - 0.5) * 0.3, 0.15 + rng() * 0.1, (rng() - 0.5) * 0.3);
-    m.rotation.set(rng(), rng(), rng());
-    m.scale.set(0.8 + rng() * 0.5, 0.55 + rng() * 0.35, 0.8 + rng() * 0.5);
+    m.position.set((rng() - 0.5) * 0.35, 0.16 + rng() * 0.1, (rng() - 0.5) * 0.35);
+    m.rotation.set(rng() * 2, rng() * 2, rng());
+    m.scale.set(0.85 + rng() * 0.5, 0.5 + rng() * 0.4, 0.85 + rng() * 0.5);
     g.add(m);
   }
+  const ao = new THREE.Mesh(
+    new THREE.CircleGeometry(0.5, 12),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false })
+  );
+  ao.rotation.x = -Math.PI / 2;
+  ao.position.y = 0.02;
+  g.add(ao);
   return g;
 }
 
-export function createChestMesh(mat, castShadow = true) {
+export function createChestMesh(mat, cast = true) {
   const g = new THREE.Group();
-  const box = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.45, 0.55), mat.chest), castShadow);
-  box.position.y = 0.22;
-  const band = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.08, 0.58), mat.metalDark), castShadow);
-  band.position.y = 0.28;
-  const lid = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.14, 0.58), mat.chestLid), castShadow);
-  lid.position.y = 0.5;
-  const lock = addShadow(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.08), mat.gold), castShadow);
-  lock.position.set(0, 0.38, 0.28);
+  const box = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.48, 0.58), mat.chest), cast);
+  box.position.y = 0.24;
+  const band = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.09, 0.62), mat.metalDark), cast);
+  band.position.y = 0.3;
+  const lid = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.16, 0.62), mat.chestLid), cast);
+  lid.position.y = 0.54;
+  const lock = shadow(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.1), mat.gold), cast);
+  lock.position.set(0, 0.4, 0.32);
   g.add(box, band, lid, lock);
   g.userData.lid = lid;
   return g;
@@ -341,34 +428,26 @@ export function createChestMesh(mat, castShadow = true) {
 
 export function createCampfire(mat, isMobile) {
   const g = new THREE.Group();
-  // ring stones
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    const rock = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(0.14, 0),
-      mat.stone
-    );
-    rock.position.set(Math.cos(a) * 0.45, 0.08, Math.sin(a) * 0.45);
-    rock.scale.y = 0.6;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15, 0), mat.stone);
+    rock.position.set(Math.cos(a) * 0.5, 0.09, Math.sin(a) * 0.5);
+    rock.scale.y = 0.55;
     g.add(rock);
   }
-  // logs
   for (let i = 0; i < 3; i++) {
-    const log = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.08, 0.7, 6),
-      mat.bark
-    );
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.75, 7), mat.bark);
     log.rotation.z = Math.PI / 2;
     log.rotation.y = (i / 3) * Math.PI;
-    log.position.y = 0.12;
+    log.position.y = 0.14;
     g.add(log);
   }
-  const fire = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 7), mat.flame);
-  fire.position.y = 0.45;
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), mat.flameCore);
-  core.position.y = 0.35;
-  const light = new THREE.PointLight(0xff8020, isMobile ? 1.0 : 1.8, isMobile ? 8 : 12, 2);
-  light.position.y = 0.8;
+  const fire = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.65, 8), mat.flame);
+  fire.position.y = 0.5;
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), mat.flameCore);
+  core.position.y = 0.38;
+  const light = new THREE.PointLight(0xff8020, isMobile ? 1.15 : 2.0, isMobile ? 9 : 13, 2);
+  light.position.y = 0.9;
   g.add(fire, core, light);
   g.userData.fire = fire;
   g.userData.core = core;
@@ -378,76 +457,33 @@ export function createCampfire(mat, isMobile) {
 export function createHpBar() {
   const g = new THREE.Group();
   const bg = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.95, 0.11),
-    new THREE.MeshBasicMaterial({ color: 0x1a1214, depthTest: false, transparent: true, opacity: 0.85 })
+    new THREE.PlaneGeometry(1.0, 0.12),
+    new THREE.MeshBasicMaterial({ color: 0x1a1214, depthTest: false, transparent: true, opacity: 0.88 })
   );
   const fill = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.9, 0.07),
-    new THREE.MeshBasicMaterial({ color: 0xe05058, depthTest: false })
+    new THREE.PlaneGeometry(0.94, 0.08),
+    new THREE.MeshBasicMaterial({ color: 0x50d070, depthTest: false })
   );
   fill.position.z = 0.01;
-  // green→red will be scaled
   g.add(bg, fill);
   g.userData.fill = fill;
   g.renderOrder = 10;
   return g;
 }
 
-/** Soft ground texture canvas */
-export function makeGroundTexture() {
-  const s = 128;
-  const c = document.createElement("canvas");
-  c.width = c.height = s;
-  const g = c.getContext("2d");
-  // base soft green
-  for (let y = 0; y < s; y++) {
-    for (let x = 0; x < s; x++) {
-      const n = (Math.sin(x * 0.2) + Math.cos(y * 0.17) + Math.sin((x + y) * 0.1)) / 3;
-      const v = 0.5 + n * 0.5;
-      const r = Math.floor(55 + v * 30);
-      const gr = Math.floor(90 + v * 40);
-      const b = Math.floor(58 + v * 22);
-      g.fillStyle = `rgb(${r},${gr},${b})`;
-      g.fillRect(x, y, 1, 1);
-    }
+/** Grass tuft for detail */
+export function createGrassTuft(mat, rng) {
+  const g = new THREE.Group();
+  const n = 3 + Math.floor(rng() * 3);
+  for (let i = 0; i < n; i++) {
+    const blade = new THREE.Mesh(
+      new THREE.ConeGeometry(0.04, 0.25 + rng() * 0.2, 4),
+      rng() > 0.5 ? mat.leafA : mat.leafC
+    );
+    blade.position.set((rng() - 0.5) * 0.2, 0.12, (rng() - 0.5) * 0.2);
+    blade.rotation.z = (rng() - 0.5) * 0.4;
+    blade.rotation.x = (rng() - 0.5) * 0.3;
+    g.add(blade);
   }
-  // patch noise
-  for (let i = 0; i < 80; i++) {
-    const x = Math.random() * s;
-    const y = Math.random() * s;
-    const r = 2 + Math.random() * 6;
-    g.fillStyle = `rgba(${40 + Math.random() * 40},${70 + Math.random() * 50},${40},0.25)`;
-    g.beginPath();
-    g.arc(x, y, r, 0, Math.PI * 2);
-    g.fill();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(12, 12);
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-export function makePathTexture() {
-  const s = 64;
-  const c = document.createElement("canvas");
-  c.width = c.height = s;
-  const g = c.getContext("2d");
-  for (let y = 0; y < s; y++) {
-    for (let x = 0; x < s; x++) {
-      const n = ((x * 7 + y * 13) % 9) / 9;
-      const r = Math.floor(140 + n * 40);
-      const gr = Math.floor(110 + n * 30);
-      const b = Math.floor(70 + n * 20);
-      g.fillStyle = `rgb(${r},${gr},${b})`;
-      g.fillRect(x, y, 1, 1);
-    }
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(8, 8);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  return g;
 }

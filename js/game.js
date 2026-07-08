@@ -10,7 +10,7 @@ import {
   createChestMesh,
   createCampfire,
   createHpBar,
-  makeGroundTexture,
+  createGrassTuft,
 } from "./meshes.js";
 
 const WORLD = 90;
@@ -76,13 +76,13 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     if (THREE.SRGBColorSpace) this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     // muted overcast sky like reference
-    this.renderer.setClearColor(0x8a9a92, 1);
+    this.renderer.setClearColor(0x7a9088, 1);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.12;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x8a9a92);
-    this.scene.fog = new THREE.FogExp2(0x8f9f94, 0.016);
+    this.scene.background = new THREE.Color(0x7a9088);
+    this.scene.fog = new THREE.FogExp2(0x7e948a, 0.014);
 
     // higher top-down camera (ref angle)
     this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 220);
@@ -90,10 +90,13 @@ export class Game {
     this.camera.lookAt(0, 0, 0);
 
     // soft forest light
-    const hemi = new THREE.HemisphereLight(0xd8e8e0, 0x3a4a38, 0.95);
+    const hemi = new THREE.HemisphereLight(0xe8f4ec, 0x3a4a32, 1.15);
     this.scene.add(hemi);
 
-    this.sun = new THREE.DirectionalLight(0xfff0d8, 1.15);
+    // ambient fill so toon materials read well
+    this.scene.add(new THREE.AmbientLight(0xb8c8c0, 0.35));
+
+    this.sun = new THREE.DirectionalLight(0xfff2dc, 1.35);
     this.sun.position.set(22, 36, 12);
     this.sun.castShadow = !isMobile;
     if (!isMobile) {
@@ -206,103 +209,67 @@ export class Game {
         }
     }
 
-    // terrain mesh with soft multi-tone greens (ref style)
-    const seg = this.isMobile ? 70 : MAP_N;
-    const geo = new THREE.PlaneGeometry(WORLD, WORLD, seg, seg);
-    geo.rotateX(-Math.PI / 2);
-    const col = new Float32Array((seg + 1) * (seg + 1) * 3);
-    const pos = geo.attributes.position;
-
-    const grassA = [0.35, 0.48, 0.36];
-    const grassB = [0.28, 0.42, 0.30];
-    const grassC = [0.40, 0.52, 0.38];
-    const moss = [0.32, 0.45, 0.34];
-    const pathC = [0.62, 0.52, 0.36];
-    const pathEdge = [0.48, 0.40, 0.28];
-    const waterC = [0.30, 0.48, 0.55];
-
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
+    // === textured multi-layer ground ===
+    // base grass
+    const grassGeo = new THREE.PlaneGeometry(WORLD, WORLD, this.isMobile ? 48 : 72, this.isMobile ? 48 : 72);
+    grassGeo.rotateX(-Math.PI / 2);
+    const gpos = grassGeo.attributes.position;
+    for (let i = 0; i < gpos.count; i++) {
+      const x = gpos.getX(i);
+      const z = gpos.getZ(i);
       const mx = Math.min(MAP_N - 1, Math.max(0, Math.floor((x / WORLD + 0.5) * MAP_N)));
       const mz = Math.min(MAP_N - 1, Math.max(0, Math.floor((z / WORLD + 0.5) * MAP_N)));
       const t = this.map[mz * MAP_N + mx];
-      const n =
-        Math.sin(mx * 0.35 + mz * 0.21) * 0.5 +
-        Math.cos(mx * 0.12 - mz * 0.28) * 0.5;
-      let rgb;
-      if (t === 1) rgb = pathC;
-      else if (t === 2) rgb = pathEdge;
-      else if (t === 3) rgb = waterC;
-      else {
-        const pick = (mx * 17 + mz * 31) % 4;
-        rgb = pick === 0 ? grassA : pick === 1 ? grassB : pick === 2 ? grassC : moss;
-      }
-      // subtle variation
-      const v = 0.92 + n * 0.08;
-      col[i * 3] = rgb[0] * v;
-      col[i * 3 + 1] = rgb[1] * v;
-      col[i * 3 + 2] = rgb[2] * v;
-
-      if (t === 0) pos.setY(i, (Math.sin(mx * 0.35) + Math.cos(mz * 0.3)) * 0.12 + n * 0.06);
-      else if (t === 3) pos.setY(i, -0.15);
-      else pos.setY(i, 0.03 + n * 0.02);
+      const n = Math.sin(mx * 0.3) * 0.1 + Math.cos(mz * 0.28) * 0.1;
+      if (t === 3) gpos.setY(i, -0.12);
+      else if (t === 1 || t === 2) gpos.setY(i, 0.01);
+      else gpos.setY(i, n);
     }
-    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    geo.computeVertexNormals();
+    grassGeo.computeVertexNormals();
+    const grassMesh = new THREE.Mesh(grassGeo, this.mat.grass);
+    grassMesh.receiveShadow = !this.isMobile;
+    this.scene.add(grassMesh);
+    this.ground = grassMesh;
 
-    const groundMat = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.94,
-      metalness: 0.0,
-      flatShading: true,
-      map: makeGroundTexture(),
-    });
-    // mix map lightly with vertex colors
-    groundMat.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        "#include <map_fragment>",
-        `
-        #ifdef USE_MAP
-          vec4 sampledDiffuseColor = texture2D( map, vMapUv );
-          diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * sampledDiffuseColor.rgb * 1.15, 0.35 );
-        #endif
-        `
-      );
-    };
-
-    const ground = new THREE.Mesh(geo, groundMat);
-    ground.receiveShadow = !this.isMobile;
-    this.ground = ground;
-    this.scene.add(ground);
-
-    // huge underlay so world edge never shows as empty sky slab
-    const under = new THREE.Mesh(
-      new THREE.PlaneGeometry(WORLD * 4, WORLD * 4),
-      new THREE.MeshStandardMaterial({ color: 0x4a6a52, roughness: 1, flatShading: true })
-    );
-    under.rotation.x = -Math.PI / 2;
-    under.position.y = -0.4;
-    under.receiveShadow = false;
-    this.scene.add(under);
-
-    // water discs with soft color
-    this.waters = [];
-    const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x4a90a8,
-      transparent: true,
-      opacity: 0.78,
-      roughness: 0.15,
-      metalness: 0.35,
-      flatShading: true,
-    });
-    this.waterMat = waterMat;
+    // path overlay via InstancedMesh (fast)
+    const pathCells = [];
     for (let z = 0; z < MAP_N; z++)
       for (let x = 0; x < MAP_N; x++) {
-        if (this.map[z * MAP_N + x] !== 3 || (x + z) % 4) continue;
-        const m = new THREE.Mesh(new THREE.CircleGeometry(1.3, 12), waterMat);
+        const t = this.map[z * MAP_N + x];
+        if (t === 1 || t === 2) pathCells.push([x, z, t]);
+      }
+    const cell = WORLD / MAP_N;
+    const pathGeo = new THREE.PlaneGeometry(cell * 1.08, cell * 1.08);
+    pathGeo.rotateX(-Math.PI / 2);
+    const pathIM = new THREE.InstancedMesh(pathGeo, this.mat.path, pathCells.length);
+    pathIM.receiveShadow = !this.isMobile;
+    const dummy = new THREE.Object3D();
+    pathCells.forEach(([x, z, t], i) => {
+      dummy.position.set((x / MAP_N - 0.5) * WORLD + cell * 0.5, t === 1 ? 0.05 : 0.035, (z / MAP_N - 0.5) * WORLD + cell * 0.5);
+      dummy.updateMatrix();
+      pathIM.setMatrixAt(i, dummy.matrix);
+    });
+    pathIM.instanceMatrix.needsUpdate = true;
+    this.scene.add(pathIM);
+
+    // underlay
+    const under = new THREE.Mesh(
+      new THREE.PlaneGeometry(WORLD * 4, WORLD * 4),
+      new THREE.MeshStandardMaterial({ color: 0x3d5a42, roughness: 1, flatShading: true })
+    );
+    under.rotation.x = -Math.PI / 2;
+    under.position.y = -0.5;
+    this.scene.add(under);
+
+    // water
+    this.waters = [];
+    this.waterMat = this.mat.water;
+    for (let z = 0; z < MAP_N; z++)
+      for (let x = 0; x < MAP_N; x++) {
+        if (this.map[z * MAP_N + x] !== 3 || (x + z) % 3) continue;
+        const m = new THREE.Mesh(new THREE.CircleGeometry(1.45, 16), this.waterMat);
         m.rotation.x = -Math.PI / 2;
-        m.position.set((x / MAP_N - 0.5) * WORLD, 0.04, (z / MAP_N - 0.5) * WORLD);
+        m.position.set((x / MAP_N - 0.5) * WORLD, 0.05, (z / MAP_N - 0.5) * WORLD);
         this.scene.add(m);
         this.waters.push(m);
       }
@@ -313,7 +280,7 @@ export class Game {
     this.chests = [];
     this.torches = [];
 
-    const treeChance = this.isMobile ? 0.032 : 0.048;
+    const treeChance = this.isMobile ? 0.04 : 0.065;
     for (let z = 2; z < MAP_N - 2; z++) {
       for (let x = 2; x < MAP_N - 2; x++) {
         const t = this.map[z * MAP_N + x];
@@ -335,6 +302,21 @@ export class Game {
           this.rocks.push({ mesh, x: wx, z: wz, hp: 2, r: 0.4 });
         }
       }
+    }
+
+    // grass tufts detail
+    this.tufts = [];
+    const tuftN = this.isMobile ? 80 : 180;
+    for (let i = 0; i < tuftN; i++) {
+      const x = 2 + Math.floor(rng() * (MAP_N - 4));
+      const z = 2 + Math.floor(rng() * (MAP_N - 4));
+      if (this.map[z * MAP_N + x] !== 0) continue;
+      const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5);
+      const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5);
+      const mesh = createGrassTuft(this.mat, rng);
+      mesh.position.set(wx, 0, wz);
+      this.scene.add(mesh);
+      this.tufts.push(mesh);
     }
 
     // path torches
@@ -384,11 +366,34 @@ export class Game {
     this.scene.add(camp);
     this.campFire = camp.userData.fire;
     this.campCore = camp.userData.core;
+
+    // floating dust / leaf particles
+    const pCount = this.isMobile ? 40 : 90;
+    const pGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(pCount * 3);
+    for (let i = 0; i < pCount; i++) {
+      pPos[i * 3] = (rng() - 0.5) * WORLD * 0.8;
+      pPos[i * 3 + 1] = 1 + rng() * 8;
+      pPos[i * 3 + 2] = (rng() - 0.5) * WORLD * 0.8;
+    }
+    pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
+    this.particles = new THREE.Points(
+      pGeo,
+      new THREE.PointsMaterial({
+        color: 0xc8e8b0,
+        size: 0.12,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+      })
+    );
+    this.scene.add(this.particles);
+    this._pCount = pCount;
   }
 
   _initPlayer() {
     const mesh = createPlayerMesh(this.mat, !this.isMobile);
-    mesh.scale.setScalar(1.35);
+    mesh.scale.setScalar(1.55);
     mesh.position.set(this.spawn.x, 0, this.spawn.z);
     this.scene.add(mesh);
     this.playerMesh = mesh;
@@ -735,7 +740,19 @@ export class Game {
       this.campFire.rotation.y += dt * 1.8;
     }
     if (this.campCore) this.campCore.scale.setScalar(0.95 + Math.sin(this.t * 16) * 0.12);
-    if (this.waterMat) this.waterMat.opacity = 0.7 + Math.sin(this.t * 1.8) * 0.08;
+    if (this.waterMat) this.waterMat.opacity = 0.72 + Math.sin(this.t * 1.8) * 0.08;
+    if (this.particles) {
+      const arr = this.particles.geometry.attributes.position.array;
+      for (let i = 0; i < this._pCount; i++) {
+        arr[i * 3 + 1] += Math.sin(this.t + i) * 0.003;
+        arr[i * 3] += Math.sin(this.t * 0.3 + i) * 0.004;
+        if (arr[i * 3 + 1] > 10) arr[i * 3 + 1] = 1;
+      }
+      this.particles.geometry.attributes.position.needsUpdate = true;
+      // follow player roughly
+      this.particles.position.x = p.x * 0.15;
+      this.particles.position.z = p.z * 0.15;
+    }
 
     p.shield = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
     if (p.shield) {
