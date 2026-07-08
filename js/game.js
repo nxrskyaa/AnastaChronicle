@@ -82,11 +82,11 @@ export class Game {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x8a9a92);
-    this.scene.fog = new THREE.FogExp2(0x8f9f94, 0.022);
+    this.scene.fog = new THREE.FogExp2(0x8f9f94, 0.016);
 
     // higher top-down camera (ref angle)
     this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 220);
-    this.camera.position.set(0, 32, 18);
+    this.camera.position.set(0, 36, 12);
     this.camera.lookAt(0, 0, 0);
 
     // soft forest light
@@ -276,6 +276,16 @@ export class Game {
     this.ground = ground;
     this.scene.add(ground);
 
+    // huge underlay so world edge never shows as empty sky slab
+    const under = new THREE.Mesh(
+      new THREE.PlaneGeometry(WORLD * 4, WORLD * 4),
+      new THREE.MeshStandardMaterial({ color: 0x4a6a52, roughness: 1, flatShading: true })
+    );
+    under.rotation.x = -Math.PI / 2;
+    under.position.y = -0.4;
+    under.receiveShadow = false;
+    this.scene.add(under);
+
     // water discs with soft color
     this.waters = [];
     const waterMat = new THREE.MeshStandardMaterial({
@@ -378,6 +388,7 @@ export class Game {
 
   _initPlayer() {
     const mesh = createPlayerMesh(this.mat, !this.isMobile);
+    mesh.scale.setScalar(1.35);
     mesh.position.set(this.spawn.x, 0, this.spawn.z);
     this.scene.add(mesh);
     this.playerMesh = mesh;
@@ -824,7 +835,7 @@ export class Game {
     this._updateDrops(dt);
 
     // camera follow — higher, softer
-    const camPos = new THREE.Vector3(p.x + 0.15, 30, p.z + 17);
+    const camPos = new THREE.Vector3(p.x + 0.1, 34, p.z + 12);
     this.camera.position.lerp(camPos, 1 - Math.pow(0.0008, dt));
     this.camera.lookAt(p.x, 0.6, p.z);
     this.sun.position.set(p.x + 22, 36, p.z + 12);
