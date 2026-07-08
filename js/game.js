@@ -26,9 +26,10 @@ function mulberry32(a) {
 }
 
 export class Game {
-  constructor(canvas, ui) {
+  constructor(canvas, ui, tex) {
     this.canvas = canvas;
     this.ui = ui;
+    this.tex = tex;
     this.paused = false;
     this.t = 0;
     this.keys = {};
@@ -39,7 +40,7 @@ export class Game {
 
     this.rng = mulberry32(0x414e4153);
     this._initThree();
-    this.mat = createPalette(this.isMobile);
+    this.mat = createPalette(this.isMobile, this.tex);
     this._buildWorld();
     this._initPlayer();
     this._clearPlayableSpace();

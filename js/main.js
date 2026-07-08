@@ -1,5 +1,6 @@
 import { Game } from "./game.js";
 import { UI } from "./ui.js";
+import { preloadTextures, configureRepeats } from "./textures.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -20,38 +21,36 @@ async function main() {
   bootStatus.textContent = "Loading engine…";
   try {
     await import("../vendor/three.module.js");
+    bootStatus.textContent = "Loading textures…";
+    const tex = configureRepeats(await preloadTextures());
     bootStatus.textContent = "Ready — tap Enter";
     btnStart.disabled = false;
-  } catch (e) {
-    showFatal("Engine load failed: " + (e?.message || e));
-    return;
-  }
 
-  const ui = new UI();
-  btnStart.addEventListener("click", () => {
-    try {
-      boot.classList.add("hidden");
-      wrap.classList.remove("hidden");
-      // Let Three set drawing buffer size
-      canvas.style.width = "100%";
-      canvas.style.height = "100%";
-      const game = new Game(canvas, ui);
-      window.__ANASTA__ = game;
-      ui.bind(game);
-      game.start();
-      window.focus();
-      ui.toast("Stick/WASD move · ATK fight");
-    } catch (e) {
-      showFatal(e?.message || String(e));
-    }
-  });
+    const ui = new UI();
+    btnStart.addEventListener("click", () => {
+      try {
+        boot.classList.add("hidden");
+        wrap.classList.remove("hidden");
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        const game = new Game(canvas, ui, tex);
+        window.__ANASTA__ = game;
+        ui.bind(game);
+        game.start();
+        window.focus();
+        ui.toast("Stick/WASD move · ATK fight");
+      } catch (e) {
+        showFatal(e?.message || String(e));
+      }
+    });
+  } catch (e) {
+    showFatal("Load failed: " + (e?.message || e));
+  }
 }
 
-window.addEventListener("error", (ev) => {
-  showFatal(ev.message || "Unknown error");
-});
-window.addEventListener("unhandledrejection", (ev) => {
-  showFatal(ev.reason?.message || String(ev.reason || "Promise error"));
-});
+window.addEventListener("error", (ev) => showFatal(ev.message || "Unknown error"));
+window.addEventListener("unhandledrejection", (ev) =>
+  showFatal(ev.reason?.message || String(ev.reason || "Promise error"))
+);
 
 main();

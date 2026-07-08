@@ -1,35 +1,14 @@
 import * as THREE from "../vendor/three.module.js";
 
-const texLoader = new THREE.TextureLoader();
-const texCache = {};
-
-function loadTex(url, { repeat = 1, nearest = false } = {}) {
-  const key = url + "|" + repeat + "|" + nearest;
-  if (texCache[key]) return texCache[key];
-  const t = texLoader.load(url);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(repeat, repeat);
-  if (nearest) {
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.NearestFilter;
-  } else {
-    t.magFilter = THREE.LinearFilter;
-    t.minFilter = THREE.LinearMipmapLinearFilter;
-  }
-  texCache[key] = t;
-  return t;
-}
-
-function toon(color, map = null, opts = {}) {
+function toon(color, map = null, opts = {}, gradientMap = null) {
   const m = new THREE.MeshToonMaterial({
     color,
     map,
-    gradientMap: loadTex("assets/tex/toon.png", { nearest: true }),
+    gradientMap,
     transparent: !!opts.transparent,
     opacity: opts.opacity ?? 1,
   });
-  if (opts.emissive) {
+  if (opts.emissive != null) {
     m.emissive = new THREE.Color(opts.emissive);
     m.emissiveIntensity = opts.emissiveIntensity ?? 0.2;
   }
@@ -42,7 +21,7 @@ function std(color, map = null, opts = {}) {
     map,
     roughness: opts.roughness ?? 0.85,
     metalness: opts.metalness ?? 0.05,
-    flatShading: opts.flat ?? true,
+    flatShading: opts.flat ?? false,
     transparent: !!opts.transparent,
     opacity: opts.opacity ?? 1,
     emissive: opts.emissive ?? 0x000000,
@@ -50,70 +29,56 @@ function std(color, map = null, opts = {}) {
   });
 }
 
-export function createPalette(isMobile) {
-  const grassMap = loadTex("assets/tex/grass.png", { repeat: 10 });
-  const pathMap = loadTex("assets/tex/path.png", { repeat: 6 });
-  const barkMap = loadTex("assets/tex/bark.png", { repeat: 1 });
-  const leafMap = loadTex("assets/tex/leaves.png", { repeat: 1 });
-  const waterMap = loadTex("assets/tex/water.png", { repeat: 2 });
-  const stoneMap = loadTex("assets/tex/stone.png", { repeat: 1 });
+/** @param {Record<string, THREE.Texture>} tex preloaded */
+export function createPalette(isMobile, tex) {
+  const gmap = tex.toon;
+  const grassMap = tex.grass;
+  const pathMap = tex.path;
+  const barkMap = tex.bark;
+  const leafMap = tex.leaves;
+  const waterMap = tex.water;
+  const stoneMap = tex.stone;
 
   return {
     isMobile,
     grassMap,
     pathMap,
-    // ground materials
-    grass: std(0xffffff, grassMap, { roughness: 0.95, flat: true }),
-    path: std(0xffffff, pathMap, { roughness: 0.92, flat: true }),
-    water: std(0x5aa0b8, waterMap, {
-      roughness: 0.2,
-      metalness: 0.35,
+    grass: std(0xd8e8d0, grassMap, { roughness: 0.96, flat: false }),
+    path: std(0xe8d8b8, pathMap, { roughness: 0.92, flat: false }),
+    water: std(0x6ab0c8, waterMap, {
+      roughness: 0.18,
+      metalness: 0.4,
       transparent: true,
-      opacity: 0.82,
-      flat: true,
+      opacity: 0.85,
+      flat: false,
     }),
-    // trees
-    bark: toon(0xffffff, barkMap),
-    barkDark: toon(0x8a7058, barkMap),
-    leafA: toon(0x3d7a4a, leafMap),
-    leafB: toon(0x2f6a3d, leafMap),
-    leafC: toon(0x4a8a55, leafMap),
-    leafDark: toon(0x245535, leafMap),
-    // rocks
-    stone: toon(0xb0b6be, stoneMap),
-    stoneDark: toon(0x7a8088, stoneMap),
-    // player — saturated game-hero palette
-    skin: toon(0xf0c2a0),
-    hair: toon(0x2c2430),
-    tunic: toon(0x5c6b7a),
-    tunicDark: toon(0x3e4a58),
-    cloak: toon(0x4a5a6e),
-    pants: toon(0x353545),
-    boot: toon(0x2a2018),
-    metal: toon(0xd8e0ea),
-    metalDark: toon(0x8a949e),
-    leather: toon(0x7a4a28),
-    accent: toon(0xc45a4a),
-    // slime jelly
-    slime: toon(0x5ef0c0, null, {
-      transparent: true,
-      opacity: 0.9,
-      emissive: 0x2a8060,
-      emissiveIntensity: 0.25,
-    }),
-    slimeDark: toon(0x3ad0a0, null, {
-      transparent: true,
-      opacity: 0.92,
-      emissive: 0x1a6048,
-      emissiveIntensity: 0.2,
-    }),
-    eyeWhite: toon(0xffffff),
-    eye: toon(0x1a2030),
-    // props
-    chest: toon(0xa07040),
-    chestLid: toon(0xc09050),
-    gold: toon(0xf0c840, null, { emissive: 0x806010, emissiveIntensity: 0.2 }),
-    torchWood: toon(0x5a3a24),
+    bark: toon(0xffffff, barkMap, {}, gmap),
+    barkDark: toon(0x9a8068, barkMap, {}, gmap),
+    leafA: toon(0x4a8a58, leafMap, {}, gmap),
+    leafB: toon(0x3a7a48, leafMap, {}, gmap),
+    leafC: toon(0x5a9a62, leafMap, {}, gmap),
+    leafDark: toon(0x2a6040, leafMap, {}, gmap),
+    stone: toon(0xc0c6ce, stoneMap, {}, gmap),
+    stoneDark: toon(0x8a9098, stoneMap, {}, gmap),
+    skin: toon(0xf0c2a0, null, {}, gmap),
+    hair: toon(0x2c2430, null, {}, gmap),
+    tunic: toon(0x5c6b7a, null, {}, gmap),
+    tunicDark: toon(0x3e4a58, null, {}, gmap),
+    cloak: toon(0x4a5a6e, null, {}, gmap),
+    pants: toon(0x353545, null, {}, gmap),
+    boot: toon(0x2a2018, null, {}, gmap),
+    metal: toon(0xd8e0ea, null, {}, gmap),
+    metalDark: toon(0x8a949e, null, {}, gmap),
+    leather: toon(0x7a4a28, null, {}, gmap),
+    accent: toon(0xc45a4a, null, {}, gmap),
+    slime: toon(0x5ef0c0, null, { transparent: true, opacity: 0.9, emissive: 0x2a8060, emissiveIntensity: 0.28 }, gmap),
+    slimeDark: toon(0x3ad0a0, null, { transparent: true, opacity: 0.92, emissive: 0x1a6048, emissiveIntensity: 0.22 }, gmap),
+    eyeWhite: toon(0xffffff, null, {}, gmap),
+    eye: toon(0x1a2030, null, {}, gmap),
+    chest: toon(0xa07040, null, {}, gmap),
+    chestLid: toon(0xc09050, null, {}, gmap),
+    gold: toon(0xf0c840, null, { emissive: 0x806010, emissiveIntensity: 0.22 }, gmap),
+    torchWood: toon(0x5a3a24, null, {}, gmap),
     flame: new THREE.MeshBasicMaterial({ color: 0xff9030 }),
     flameCore: new THREE.MeshBasicMaterial({ color: 0xffe090 }),
   };
