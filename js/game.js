@@ -37,10 +37,16 @@ export class Game {
     this.paused = false;
 
     this.rng = mulberry32(0x414e4153); // ANAS
+    // Props MUST exist before spawnSlimes → blocked() iterates trees/rocks
+    this.trees = [];
+    this.torches = [];
+    this.rocks = [];
+    this.chests = [];
+    this.enemies = [];
     this.genWorld();
+    this.placeProps();
     this.resetPlayer();
     this.spawnSlimes(28);
-    this.placeProps();
 
     this._bindInput();
   }
@@ -250,11 +256,11 @@ export class Game {
     if (this.tileAt(x, y - r) === T.WATER) return true;
     if (this.tileAt(x, y + r) === T.WATER) return true;
     // tree trunks
-    for (const tr of this.trees) {
+    for (const tr of this.trees || []) {
       if (tr.hp <= 0) continue;
       if (Math.hypot(x - tr.x, y - (tr.y + 6)) < 7 + r * 0.3) return true;
     }
-    for (const rk of this.rocks) {
+    for (const rk of this.rocks || []) {
       if (rk.hp <= 0) continue;
       if (Math.hypot(x - rk.x, y - rk.y) < 6 + r * 0.2) return true;
     }
