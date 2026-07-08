@@ -7,15 +7,23 @@ const btnStart = document.getElementById("btn-start");
 const wrap = document.getElementById("game-wrap");
 const canvas = document.getElementById("game");
 
+function showFatal(msg) {
+  console.error(msg);
+  boot.classList.remove("hidden");
+  wrap.classList.add("hidden");
+  bootStatus.innerHTML = `<span style="color:#ff8a90">ERROR:</span> ${msg}`;
+  btnStart.disabled = false;
+  btnStart.textContent = "Retry";
+}
+
 async function main() {
   bootStatus.textContent = "Loading engine…";
   try {
-    await import("three");
+    await import("../vendor/three.module.js");
     bootStatus.textContent = "Ready — tap Enter";
     btnStart.disabled = false;
   } catch (e) {
-    console.error(e);
-    bootStatus.textContent = "Engine load failed: " + (e?.message || e);
+    showFatal("Engine load failed: " + (e?.message || e));
     return;
   }
 
@@ -24,24 +32,26 @@ async function main() {
     try {
       boot.classList.add("hidden");
       wrap.classList.remove("hidden");
-      canvas.width = window.innerWidth * (window.devicePixelRatio > 1.5 ? 1.25 : 1);
-      canvas.height = window.innerHeight * (window.devicePixelRatio > 1.5 ? 1.25 : 1);
-      // better: let renderer set size
+      // Let Three set drawing buffer size
+      canvas.style.width = "100%";
+      canvas.style.height = "100%";
       const game = new Game(canvas, ui);
+      window.__ANASTA__ = game;
       ui.bind(game);
       game.start();
-      // focus so keyboard works immediately
       window.focus();
-      canvas.focus?.();
-      ui.toast("Use stick / WASD to move · ATK to fight");
+      ui.toast("Stick/WASD move · ATK fight");
     } catch (e) {
-      console.error(e);
-      boot.classList.remove("hidden");
-      wrap.classList.add("hidden");
-      bootStatus.textContent = "Failed: " + (e?.message || e);
-      btnStart.disabled = false;
+      showFatal(e?.message || String(e));
     }
   });
 }
+
+window.addEventListener("error", (ev) => {
+  showFatal(ev.message || "Unknown error");
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  showFatal(ev.reason?.message || String(ev.reason || "Promise error"));
+});
 
 main();

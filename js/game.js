@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "../vendor/three.module.js";
 import { ITEMS, RECIPES, canCraft, doCraft, xpFor, applyLevel } from "./crafting.js";
 
 const WORLD = 80; // units
@@ -54,16 +54,30 @@ export class Game {
   _initThree() {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: this.canvas,
-      antialias: false,
-      powerPreference: "high-performance",
-    });
+    const isMobile = /Mobi|Android|iPhone|iPad|Telegram/i.test(navigator.userAgent) || w < 900;
+    this.isMobile = isMobile;
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: this.canvas,
+        antialias: false,
+        powerPreference: isMobile ? "low-power" : "high-performance",
+        alpha: false,
+        failIfMajorPerformanceCaveat: false,
+      });
+    } catch (e) {
+      throw new Error("WebGL unavailable on this device: " + (e?.message || e));
+    }
+    this.renderer = renderer;
+    if (!this.renderer.getContext()) {
+      throw new Error("WebGL context failed to create");
+    }
     this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.25 : 1.5));
+    // Shadows kill low-end mobile GPUs → black screen
+    this.renderer.shadowMap.enabled = !isMobile;
     this.renderer.shadowMap.type = THREE.BasicShadowMap;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    if (THREE.SRGBColorSpace) this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x87a0b4, 1);
 
     // low-res pixel look via CSS + renderer size? use full res but nearest textures
@@ -80,8 +94,8 @@ export class Game {
     this.scene.add(hemi);
     this.sun = new THREE.DirectionalLight(0xfff2d6, 1.35);
     this.sun.position.set(18, 30, 10);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.castShadow = !this.isMobile;
+    if (!this.isMobile) this.sun.shadow.mapSize.set(1024, 1024);
     this.sun.shadow.camera.left = -40;
     this.sun.shadow.camera.right = 40;
     this.sun.shadow.camera.top = 40;
@@ -242,7 +256,7 @@ export class Game {
         flatShading: true,
       })
     );
-    ground.receiveShadow = true;
+    ground.receiveShadow = !this.isMobile;
     this.ground = ground;
     this.scene.add(ground);
 
@@ -293,15 +307,15 @@ export class Game {
         const r = rng();
         const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.4;
         const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.4;
-        if (r < 0.045) {
+        if (r < (this.isMobile ? 0.03 : 0.045)) {
           const g = new THREE.Group();
           const trunk = new THREE.Mesh(treeGeoTrunk, bark);
           trunk.position.y = 0.7;
-          trunk.castShadow = true;
+          trunk.castShadow = !this.isMobile;
           const leaf = new THREE.Mesh(treeGeoLeaf, leafs[Math.floor(rng() * 3)]);
           leaf.position.y = 2.1;
-          leaf.castShadow = true;
-          leaf.receiveShadow = true;
+          leaf.castShadow = !this.isMobile;
+          leaf.receiveShadow = !this.isMobile;
           g.add(trunk, leaf);
           g.position.set(wx, 0, wz);
           const s = 0.85 + rng() * 0.5;
@@ -325,7 +339,7 @@ export class Game {
     // path torches
     for (let z = 0; z < MAP_N; z++)
       for (let x = 0; x < MAP_N; x++) {
-        if (this.map[z * MAP_N + x] !== 1 || rng() > 0.035) continue;
+        if (this.map[z * MAP_N + x] !== 1 || rng() > 0.02) continue;
         const wx = (x / MAP_N - 0.5) * WORLD;
         const wz = (z / MAP_N - 0.5) * WORLD;
         const g = new THREE.Group();
@@ -339,9 +353,14 @@ export class Game {
           new THREE.MeshBasicMaterial({ color: 0xffa040 })
         );
         flame.position.y = 1.2;
-        const light = new THREE.PointLight(0xff9a40, 1.2, 8, 2);
-        light.position.y = 1.25;
-        g.add(pole, flame, light);
+        g.add(pole, flame);
+        // Only a few real lights — dozens of PointLights black-screen mobile GPUs
+        let light = null;
+        if (this.torches.length < (this.isMobile ? 3 : 8)) {
+          light = new THREE.PointLight(0xff9a40, this.isMobile ? 0.7 : 1.1, this.isMobile ? 6 : 8, 2);
+          light.position.y = 1.25;
+          g.add(light);
+        }
         g.position.set(wx, 0, wz);
         this.scene.add(g);
         this.torches.push({ mesh: g, flame, light });
@@ -384,7 +403,7 @@ export class Game {
       new THREE.MeshBasicMaterial({ color: 0xff7030 })
     );
     fire.position.y = 0.55;
-    const cl = new THREE.PointLight(0xff8020, 2.2, 14, 2);
+    const cl = new THREE.PointLight(0xff8020, this.isMobile ? 1.1 : 2.0, this.isMobile ? 9 : 14, 2);
     cl.position.y = 1;
     camp.add(logs, fire, cl);
     camp.position.set(this.spawn.x, 0, this.spawn.z);
@@ -400,14 +419,14 @@ export class Game {
       new THREE.MeshStandardMaterial({ color: 0xc44048, flatShading: true })
     );
     body.position.y = 0.75;
-    body.castShadow = true;
+    body.castShadow = !this.isMobile;
     // head
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(0.26, 8, 8),
       new THREE.MeshStandardMaterial({ color: 0xe8bc94, flatShading: true })
     );
     head.position.y = 1.35;
-    head.castShadow = true;
+    head.castShadow = !this.isMobile;
     // hair
     const hair = new THREE.Mesh(
       new THREE.SphereGeometry(0.27, 8, 6, 0, Math.PI * 2, 0, Math.PI / 1.7),
@@ -420,7 +439,7 @@ export class Game {
       new THREE.MeshStandardMaterial({ color: 0xc0c8d4, metalness: 0.6, roughness: 0.35, flatShading: true })
     );
     weapon.position.set(0.38, 0.85, 0.15);
-    weapon.castShadow = true;
+    weapon.castShadow = !this.isMobile;
 
     g.add(body, head, hair, weapon);
     g.position.set(this.spawn.x, 0, this.spawn.z);
@@ -524,7 +543,7 @@ export class Game {
     );
     mesh.scale.y = 0.75;
     mesh.position.set(x, 0.35 * (tier > 1 ? 1.2 : 1), z);
-    mesh.castShadow = true;
+    mesh.castShadow = !this.isMobile;
     this.scene.add(mesh);
 
     // HP bar sprite
@@ -774,7 +793,7 @@ export class Game {
     for (const to of this.torches) {
       const s = 0.9 + Math.sin(this.t * 10 + to.mesh.position.x) * 0.15;
       to.flame.scale.setScalar(s);
-      to.light.intensity = 1.0 + Math.sin(this.t * 12 + to.mesh.position.z) * 0.35;
+      if (to.light) to.light.intensity = 0.9 + Math.sin(this.t * 12 + to.mesh.position.z) * 0.25;
     }
     if (this.campFire) {
       this.campFire.scale.y = 0.9 + Math.sin(this.t * 14) * 0.15;
