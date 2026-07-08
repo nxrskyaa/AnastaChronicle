@@ -1,8 +1,20 @@
 import * as THREE from "../vendor/three.module.js";
 import { ITEMS, RECIPES, canCraft, doCraft, xpFor, applyLevel } from "./crafting.js";
+import {
+  createPalette,
+  createPlayerMesh,
+  createPineTree,
+  createSlimeMesh,
+  createTorchMesh,
+  createRockMesh,
+  createChestMesh,
+  createCampfire,
+  createHpBar,
+  makeGroundTexture,
+} from "./meshes.js";
 
-const WORLD = 80; // units
-const MAP_N = 80; // heightmap resolution
+const WORLD = 90;
+const MAP_N = 90;
 
 function mulberry32(a) {
   return function () {
@@ -11,20 +23,6 @@ function mulberry32(a) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function makePixelTex(draw, size = 32) {
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  const g = c.getContext("2d");
-  g.imageSmoothingEnabled = false;
-  draw(g, size);
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
 }
 
 export class Game {
@@ -37,17 +35,17 @@ export class Game {
     this.mouse = { x: 0, y: 0, down: false };
     this.projectiles = [];
     this.drops = [];
-    this.dmgCd = 0;
+    this.stick = { x: 0, y: 0, active: false };
 
     this.rng = mulberry32(0x414e4153);
     this._initThree();
+    this.mat = createPalette(this.isMobile);
     this._buildWorld();
     this._initPlayer();
     this._clearPlayableSpace();
-    this._spawnSlimes(26);
+    this._spawnSlimes(24);
     this._bind();
     this._bindTouch();
-    this.stick = { x: 0, y: 0, active: false };
     this.ui.sync();
   }
 
@@ -56,54 +54,63 @@ export class Game {
     const h = window.innerHeight;
     const isMobile = /Mobi|Android|iPhone|iPad|Telegram/i.test(navigator.userAgent) || w < 900;
     this.isMobile = isMobile;
+
     let renderer;
     try {
       renderer = new THREE.WebGLRenderer({
         canvas: this.canvas,
-        antialias: false,
+        antialias: !isMobile,
         powerPreference: isMobile ? "low-power" : "high-performance",
         alpha: false,
         failIfMajorPerformanceCaveat: false,
       });
     } catch (e) {
-      throw new Error("WebGL unavailable on this device: " + (e?.message || e));
+      throw new Error("WebGL unavailable: " + (e?.message || e));
     }
     this.renderer = renderer;
-    if (!this.renderer.getContext()) {
-      throw new Error("WebGL context failed to create");
-    }
+    if (!this.renderer.getContext()) throw new Error("WebGL context failed");
+
     this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.25 : 1.5));
-    // Shadows kill low-end mobile GPUs → black screen
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.35 : 1.75));
     this.renderer.shadowMap.enabled = !isMobile;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     if (THREE.SRGBColorSpace) this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.setClearColor(0x87a0b4, 1);
+    // muted overcast sky like reference
+    this.renderer.setClearColor(0x8a9a92, 1);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
 
-    // low-res pixel look via CSS + renderer size? use full res but nearest textures
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x9eb6a8, 0.028);
+    this.scene.background = new THREE.Color(0x8a9a92);
+    this.scene.fog = new THREE.FogExp2(0x8f9f94, 0.022);
 
-    // 2.5D: orthographic-ish perspective from above
-    this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 200);
-    this.camera.position.set(0, 28, 22);
+    // higher top-down camera (ref angle)
+    this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 220);
+    this.camera.position.set(0, 32, 18);
     this.camera.lookAt(0, 0, 0);
 
-    // lights
-    const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x3a4a30, 1.05);
+    // soft forest light
+    const hemi = new THREE.HemisphereLight(0xd8e8e0, 0x3a4a38, 0.95);
     this.scene.add(hemi);
-    this.sun = new THREE.DirectionalLight(0xfff2d6, 1.35);
-    this.sun.position.set(18, 30, 10);
-    this.sun.castShadow = !this.isMobile;
-    if (!this.isMobile) this.sun.shadow.mapSize.set(1024, 1024);
-    this.sun.shadow.camera.left = -40;
-    this.sun.shadow.camera.right = 40;
-    this.sun.shadow.camera.top = 40;
-    this.sun.shadow.camera.bottom = -40;
-    this.scene.add(this.sun);
 
-    this.ambTorch = new THREE.Group();
-    this.scene.add(this.ambTorch);
+    this.sun = new THREE.DirectionalLight(0xfff0d8, 1.15);
+    this.sun.position.set(22, 36, 12);
+    this.sun.castShadow = !isMobile;
+    if (!isMobile) {
+      this.sun.shadow.mapSize.set(1536, 1536);
+      this.sun.shadow.camera.left = -45;
+      this.sun.shadow.camera.right = 45;
+      this.sun.shadow.camera.top = 45;
+      this.sun.shadow.camera.bottom = -45;
+      this.sun.shadow.bias = -0.0005;
+    }
+    this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
+
+    // fill light cool
+    const fill = new THREE.DirectionalLight(0xa8c8c0, 0.35);
+    fill.position.set(-16, 18, -10);
+    this.scene.add(fill);
 
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
@@ -111,20 +118,32 @@ export class Game {
     this._hit = new THREE.Vector3();
     this.moveTarget = null;
 
-    // cursor ring
+    // soft green ground cursor (ref)
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.35, 0.5, 24),
-      new THREE.MeshBasicMaterial({ color: 0x5ad8a8, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+      new THREE.RingGeometry(0.4, 0.58, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x6ad8a0,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.05;
+    ring.position.y = 0.08;
     this.cursor = ring;
     this.scene.add(ring);
 
-    // attack slash helper
+    const inner = new THREE.Mesh(
+      new THREE.RingGeometry(0.12, 0.2, 16),
+      new THREE.MeshBasicMaterial({ color: 0xb8ffe0, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })
+    );
+    inner.rotation.x = -Math.PI / 2;
+    ring.add(inner);
+
     this.slash = new THREE.Mesh(
-      new THREE.TorusGeometry(1.2, 0.08, 6, 18, Math.PI * 1.1),
-      new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true, opacity: 0 })
+      new THREE.TorusGeometry(1.25, 0.07, 6, 24, Math.PI * 1.15),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0 })
     );
     this.slash.rotation.x = Math.PI / 2;
     this.scene.add(this.slash);
@@ -140,198 +159,170 @@ export class Game {
     this.renderer.setSize(w, h, false);
   }
 
-  _texGrass() {
-    return makePixelTex((g, s) => {
-      for (let y = 0; y < s; y++)
-        for (let x = 0; x < s; x++) {
-          const v = ((x * 13 + y * 7) % 5) / 5;
-          g.fillStyle = v < 0.4 ? "#4a8c48" : v < 0.75 ? "#3f7a3e" : "#56a050";
-          g.fillRect(x, y, 1, 1);
-        }
-    }, 32);
-  }
-
-  _texPath() {
-    return makePixelTex((g, s) => {
-      for (let y = 0; y < s; y++)
-        for (let x = 0; x < s; x++) {
-          g.fillStyle = ((x + y) % 3) ? "#b89660" : "#9a7a48";
-          g.fillRect(x, y, 1, 1);
-        }
-    }, 16);
-  }
-
-  _texWater() {
-    return makePixelTex((g, s) => {
-      for (let y = 0; y < s; y++)
-        for (let x = 0; x < s; x++) {
-          const v = (x + y) % 6;
-          g.fillStyle = v < 2 ? "#2f6fb0" : v < 4 ? "#3d86c8" : "#245a96";
-          g.fillRect(x, y, 1, 1);
-        }
-    }, 16);
-  }
-
   _buildWorld() {
-    this.map = new Uint8Array(MAP_N * MAP_N); // 0 grass 1 path 2 dirt 3 water
+    this.map = new Uint8Array(MAP_N * MAP_N);
     const rng = this.rng;
-
     for (let i = 0; i < this.map.length; i++) this.map[i] = 0;
 
-    // path
-    let px = 8;
+    // winding dirt path
+    let px = 10;
     let pz = MAP_N >> 1;
     this.spawn = {
-      x: (px / MAP_N - 0.5) * WORLD + 1,
+      x: (px / MAP_N - 0.5) * WORLD + 1.5,
       z: (pz / MAP_N - 0.5) * WORLD,
     };
-    for (let s = 0; s < 240; s++) {
-      for (let oz = -1; oz <= 1; oz++)
-        for (let ox = -1; ox <= 1; ox++) {
+    for (let s = 0; s < 280; s++) {
+      for (let oz = -2; oz <= 2; oz++)
+        for (let ox = -2; ox <= 2; ox++) {
           const x = px + ox;
           const z = pz + oz;
           if (x < 0 || z < 0 || x >= MAP_N || z >= MAP_N) continue;
-          this.map[z * MAP_N + x] = ox === 0 && oz === 0 ? 1 : 2;
+          const edge = Math.abs(ox) === 2 || Math.abs(oz) === 2;
+          this.map[z * MAP_N + x] = edge ? 2 : 1;
         }
       const r = rng();
-      if (r < 0.58) px++;
-      else if (r < 0.75) pz++;
-      else if (r < 0.92) pz--;
+      if (r < 0.55) px++;
+      else if (r < 0.72) pz++;
+      else if (r < 0.89) pz--;
       else px++;
-      px = Math.max(2, Math.min(MAP_N - 3, px));
-      pz = Math.max(2, Math.min(MAP_N - 3, pz));
+      px = Math.max(3, Math.min(MAP_N - 4, px));
+      pz = Math.max(3, Math.min(MAP_N - 4, pz));
     }
 
-    // camp pad
-    for (let z = (MAP_N >> 1) - 3; z <= (MAP_N >> 1) + 3; z++)
-      for (let x = 6; x <= 14; x++) this.map[z * MAP_N + x] = 1;
+    // camp clearing
+    for (let z = (MAP_N >> 1) - 4; z <= (MAP_N >> 1) + 4; z++)
+      for (let x = 7; x <= 16; x++) this.map[z * MAP_N + x] = 1;
 
     // ponds
-    for (let n = 0; n < 8; n++) {
-      const cx = 8 + Math.floor(rng() * (MAP_N - 16));
-      const cz = 8 + Math.floor(rng() * (MAP_N - 16));
+    for (let n = 0; n < 7; n++) {
+      const cx = 10 + Math.floor(rng() * (MAP_N - 20));
+      const cz = 10 + Math.floor(rng() * (MAP_N - 20));
       const rr = 3 + Math.floor(rng() * 4);
       for (let z = cz - rr; z <= cz + rr; z++)
         for (let x = cx - rr; x <= cx + rr; x++) {
           if (x < 1 || z < 1 || x >= MAP_N - 1 || z >= MAP_N - 1) continue;
-          if ((x - cx) ** 2 + (z - cz) ** 2 <= rr * rr && this.map[z * MAP_N + x] !== 1)
-            this.map[z * MAP_N + x] = 3;
+          const d = (x - cx) ** 2 + (z - cz) ** 2;
+          if (d <= rr * rr && this.map[z * MAP_N + x] !== 1) this.map[z * MAP_N + x] = 3;
         }
     }
 
-    // ground mesh from map colors (vertex color plane subdivisions)
-    const seg = MAP_N;
+    // terrain mesh with soft multi-tone greens (ref style)
+    const seg = this.isMobile ? 70 : MAP_N;
     const geo = new THREE.PlaneGeometry(WORLD, WORLD, seg, seg);
     geo.rotateX(-Math.PI / 2);
     const col = new Float32Array((seg + 1) * (seg + 1) * 3);
     const pos = geo.attributes.position;
+
+    const grassA = [0.35, 0.48, 0.36];
+    const grassB = [0.28, 0.42, 0.30];
+    const grassC = [0.40, 0.52, 0.38];
+    const moss = [0.32, 0.45, 0.34];
+    const pathC = [0.62, 0.52, 0.36];
+    const pathEdge = [0.48, 0.40, 0.28];
+    const waterC = [0.30, 0.48, 0.55];
+
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      const mx = Math.min(MAP_N - 1, Math.max(0, Math.floor(((x / WORLD) + 0.5) * MAP_N)));
-      const mz = Math.min(MAP_N - 1, Math.max(0, Math.floor(((z / WORLD) + 0.5) * MAP_N)));
+      const mx = Math.min(MAP_N - 1, Math.max(0, Math.floor((x / WORLD + 0.5) * MAP_N)));
+      const mz = Math.min(MAP_N - 1, Math.max(0, Math.floor((z / WORLD + 0.5) * MAP_N)));
       const t = this.map[mz * MAP_N + mx];
-      let r, g, b;
-      if (t === 1) { r = 0.72; g = 0.58; b = 0.36; }
-      else if (t === 2) { r = 0.48; g = 0.38; b = 0.24; }
-      else if (t === 3) { r = 0.22; g = 0.45; b = 0.72; }
+      const n =
+        Math.sin(mx * 0.35 + mz * 0.21) * 0.5 +
+        Math.cos(mx * 0.12 - mz * 0.28) * 0.5;
+      let rgb;
+      if (t === 1) rgb = pathC;
+      else if (t === 2) rgb = pathEdge;
+      else if (t === 3) rgb = waterC;
       else {
-        const n = ((mx * 13 + mz * 7) % 5) / 5;
-        r = 0.28 + n * 0.08; g = 0.52 + n * 0.1; b = 0.26;
+        const pick = (mx * 17 + mz * 31) % 4;
+        rgb = pick === 0 ? grassA : pick === 1 ? grassB : pick === 2 ? grassC : moss;
       }
-      col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
-      // slight height
-      if (t === 0) pos.setY(i, (Math.sin(mx * 0.4) + Math.cos(mz * 0.35)) * 0.08);
-      else if (t === 3) pos.setY(i, -0.12);
-      else pos.setY(i, 0.02);
+      // subtle variation
+      const v = 0.92 + n * 0.08;
+      col[i * 3] = rgb[0] * v;
+      col[i * 3 + 1] = rgb[1] * v;
+      col[i * 3 + 2] = rgb[2] * v;
+
+      if (t === 0) pos.setY(i, (Math.sin(mx * 0.35) + Math.cos(mz * 0.3)) * 0.12 + n * 0.06);
+      else if (t === 3) pos.setY(i, -0.15);
+      else pos.setY(i, 0.03 + n * 0.02);
     }
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
     geo.computeVertexNormals();
-    const ground = new THREE.Mesh(
-      geo,
-      new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        roughness: 0.92,
-        metalness: 0.02,
-        flatShading: true,
-      })
-    );
+
+    const groundMat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.94,
+      metalness: 0.0,
+      flatShading: true,
+      map: makeGroundTexture(),
+    });
+    // mix map lightly with vertex colors
+    groundMat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <map_fragment>",
+        `
+        #ifdef USE_MAP
+          vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+          diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * sampledDiffuseColor.rgb * 1.15, 0.35 );
+        #endif
+        `
+      );
+    };
+
+    const ground = new THREE.Mesh(geo, groundMat);
     ground.receiveShadow = !this.isMobile;
     this.ground = ground;
     this.scene.add(ground);
 
-    // water plane overlays with animated material
+    // water discs with soft color
     this.waters = [];
     const waterMat = new THREE.MeshStandardMaterial({
-      color: 0x3a8fd0,
+      color: 0x4a90a8,
       transparent: true,
-      opacity: 0.72,
-      roughness: 0.2,
-      metalness: 0.3,
+      opacity: 0.78,
+      roughness: 0.15,
+      metalness: 0.35,
       flatShading: true,
     });
     this.waterMat = waterMat;
-    // simple full water patches as discs where map water
     for (let z = 0; z < MAP_N; z++)
       for (let x = 0; x < MAP_N; x++) {
-        if (this.map[z * MAP_N + x] !== 3) continue;
-        // only place one mesh per connected seed roughly: sample every few
-        if ((x + z) % 3) continue;
-        const wx = (x / MAP_N - 0.5) * WORLD;
-        const wz = (z / MAP_N - 0.5) * WORLD;
-        const m = new THREE.Mesh(new THREE.CircleGeometry(1.15, 10), waterMat);
+        if (this.map[z * MAP_N + x] !== 3 || (x + z) % 4) continue;
+        const m = new THREE.Mesh(new THREE.CircleGeometry(1.3, 12), waterMat);
         m.rotation.x = -Math.PI / 2;
-        m.position.set(wx, 0.02, wz);
+        m.position.set((x / MAP_N - 0.5) * WORLD, 0.04, (z / MAP_N - 0.5) * WORLD);
         this.scene.add(m);
         this.waters.push(m);
       }
 
-    // trees
+    // props
     this.trees = [];
     this.rocks = [];
     this.chests = [];
     this.torches = [];
-    const treeGeoTrunk = new THREE.CylinderGeometry(0.18, 0.28, 1.4, 6);
-    const treeGeoLeaf = new THREE.ConeGeometry(1.05, 2.1, 7);
-    const bark = new THREE.MeshStandardMaterial({ color: 0x5a3c28, flatShading: true, roughness: 1 });
-    const leafs = [
-      new THREE.MeshStandardMaterial({ color: 0x2f7a42, flatShading: true }),
-      new THREE.MeshStandardMaterial({ color: 0x3d8f50, flatShading: true }),
-      new THREE.MeshStandardMaterial({ color: 0x256638, flatShading: true }),
-    ];
 
+    const treeChance = this.isMobile ? 0.032 : 0.048;
     for (let z = 2; z < MAP_N - 2; z++) {
       for (let x = 2; x < MAP_N - 2; x++) {
         const t = this.map[z * MAP_N + x];
         if (t === 1 || t === 3) continue;
         const r = rng();
-        const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.4;
-        const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.4;
-        if (r < (this.isMobile ? 0.03 : 0.045)) {
-          const g = new THREE.Group();
-          const trunk = new THREE.Mesh(treeGeoTrunk, bark);
-          trunk.position.y = 0.7;
-          trunk.castShadow = !this.isMobile;
-          const leaf = new THREE.Mesh(treeGeoLeaf, leafs[Math.floor(rng() * 3)]);
-          leaf.position.y = 2.1;
-          leaf.castShadow = !this.isMobile;
-          leaf.receiveShadow = !this.isMobile;
-          g.add(trunk, leaf);
-          g.position.set(wx, 0, wz);
-          const s = 0.85 + rng() * 0.5;
-          g.scale.setScalar(s);
-          this.scene.add(g);
-          this.trees.push({ mesh: g, x: wx, z: wz, hp: 3, r: 0.38 * s });
-        } else if (r < 0.055) {
-          const rock = new THREE.Mesh(
-            new THREE.DodecahedronGeometry(0.35 + rng() * 0.2, 0),
-            new THREE.MeshStandardMaterial({ color: 0x6a7078, flatShading: true, roughness: 1 })
-          );
-          rock.position.set(wx, 0.25, wz);
-          rock.castShadow = true;
-          rock.receiveShadow = true;
-          this.scene.add(rock);
-          this.rocks.push({ mesh: rock, x: wx, z: wz, hp: 2, r: 0.45 });
+        const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.35;
+        const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.35;
+
+        if (r < treeChance) {
+          const mesh = createPineTree(this.mat, rng, !this.isMobile);
+          mesh.position.set(wx, 0, wz);
+          this.scene.add(mesh);
+          const s = mesh.scale.x;
+          this.trees.push({ mesh, x: wx, z: wz, hp: 3, r: 0.42 * s });
+        } else if (r < treeChance + 0.012) {
+          const mesh = createRockMesh(this.mat, rng, !this.isMobile);
+          mesh.position.set(wx, 0, wz);
+          this.scene.add(mesh);
+          this.rocks.push({ mesh, x: wx, z: wz, hp: 2, r: 0.4 });
         }
       }
     }
@@ -339,114 +330,59 @@ export class Game {
     // path torches
     for (let z = 0; z < MAP_N; z++)
       for (let x = 0; x < MAP_N; x++) {
-        if (this.map[z * MAP_N + x] !== 1 || rng() > 0.02) continue;
-        const wx = (x / MAP_N - 0.5) * WORLD;
+        if (this.map[z * MAP_N + x] !== 1 || rng() > 0.018) continue;
+        const wx = (x / MAP_N - 0.5) * WORLD + (rng() > 0.5 ? 1.1 : -1.1);
         const wz = (z / MAP_N - 0.5) * WORLD;
-        const g = new THREE.Group();
-        const pole = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.06, 0.08, 1.1, 5),
-          new THREE.MeshStandardMaterial({ color: 0x4a3424, flatShading: true })
-        );
-        pole.position.y = 0.55;
-        const flame = new THREE.Mesh(
-          new THREE.SphereGeometry(0.14, 6, 6),
-          new THREE.MeshBasicMaterial({ color: 0xffa040 })
-        );
-        flame.position.y = 1.2;
-        g.add(pole, flame);
-        // Only a few real lights — dozens of PointLights black-screen mobile GPUs
-        let light = null;
-        if (this.torches.length < (this.isMobile ? 3 : 8)) {
-          light = new THREE.PointLight(0xff9a40, this.isMobile ? 0.7 : 1.1, this.isMobile ? 6 : 8, 2);
-          light.position.y = 1.25;
-          g.add(light);
-        }
-        g.position.set(wx, 0, wz);
-        this.scene.add(g);
-        this.torches.push({ mesh: g, flame, light });
+        const withLight = this.torches.length < (this.isMobile ? 3 : 7);
+        const mesh = createTorchMesh(this.mat, withLight, this.isMobile);
+        mesh.position.set(wx, 0, wz);
+        this.scene.add(mesh);
+        this.torches.push({
+          mesh,
+          flame: mesh.userData.flame,
+          core: mesh.userData.core,
+          light: mesh.userData.light,
+        });
       }
 
     // chests
     for (let i = 0; i < 7; i++) {
-      for (let tries = 0; tries < 40; tries++) {
-        const x = 4 + Math.floor(rng() * (MAP_N - 8));
-        const z = 4 + Math.floor(rng() * (MAP_N - 8));
+      for (let tries = 0; tries < 50; tries++) {
+        const x = 5 + Math.floor(rng() * (MAP_N - 10));
+        const z = 5 + Math.floor(rng() * (MAP_N - 10));
         if (this.map[z * MAP_N + x] !== 0) continue;
         const wx = (x / MAP_N - 0.5) * WORLD;
         const wz = (z / MAP_N - 0.5) * WORLD;
-        const box = new THREE.Mesh(
-          new THREE.BoxGeometry(0.7, 0.45, 0.5),
-          new THREE.MeshStandardMaterial({ color: 0x8a6238, flatShading: true })
-        );
-        box.position.set(wx, 0.22, wz);
-        box.castShadow = true;
-        const lid = new THREE.Mesh(
-          new THREE.BoxGeometry(0.72, 0.12, 0.52),
-          new THREE.MeshStandardMaterial({ color: 0xa87840, flatShading: true })
-        );
-        lid.position.set(wx, 0.48, wz);
-        this.scene.add(box, lid);
-        this.chests.push({ box, lid, x: wx, z: wz, open: false });
+        const mesh = createChestMesh(this.mat, !this.isMobile);
+        mesh.position.set(wx, 0, wz);
+        mesh.rotation.y = rng() * Math.PI * 2;
+        this.scene.add(mesh);
+        this.chests.push({
+          mesh,
+          lid: mesh.userData.lid,
+          x: wx,
+          z: wz,
+          open: false,
+        });
         break;
       }
     }
 
-    // campfire at spawn
-    const camp = new THREE.Group();
-    const logs = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.5, 0.55, 0.25, 8),
-      new THREE.MeshStandardMaterial({ color: 0x4a3424, flatShading: true })
-    );
-    logs.position.y = 0.1;
-    const fire = new THREE.Mesh(
-      new THREE.ConeGeometry(0.35, 0.7, 6),
-      new THREE.MeshBasicMaterial({ color: 0xff7030 })
-    );
-    fire.position.y = 0.55;
-    const cl = new THREE.PointLight(0xff8020, this.isMobile ? 1.1 : 2.0, this.isMobile ? 9 : 14, 2);
-    cl.position.y = 1;
-    camp.add(logs, fire, cl);
+    // campfire
+    const camp = createCampfire(this.mat, this.isMobile);
     camp.position.set(this.spawn.x, 0, this.spawn.z);
     this.scene.add(camp);
-    this.campFire = fire;
+    this.campFire = camp.userData.fire;
+    this.campCore = camp.userData.core;
   }
 
   _initPlayer() {
-    const g = new THREE.Group();
-    // body
-    const body = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.28, 0.55, 4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xc44048, flatShading: true })
-    );
-    body.position.y = 0.75;
-    body.castShadow = !this.isMobile;
-    // head
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.26, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xe8bc94, flatShading: true })
-    );
-    head.position.y = 1.35;
-    head.castShadow = !this.isMobile;
-    // hair
-    const hair = new THREE.Mesh(
-      new THREE.SphereGeometry(0.27, 8, 6, 0, Math.PI * 2, 0, Math.PI / 1.7),
-      new THREE.MeshStandardMaterial({ color: 0x2a2228, flatShading: true })
-    );
-    hair.position.y = 1.42;
-    // weapon
-    const weapon = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.08, 0.95),
-      new THREE.MeshStandardMaterial({ color: 0xc0c8d4, metalness: 0.6, roughness: 0.35, flatShading: true })
-    );
-    weapon.position.set(0.38, 0.85, 0.15);
-    weapon.castShadow = !this.isMobile;
+    const mesh = createPlayerMesh(this.mat, !this.isMobile);
+    mesh.position.set(this.spawn.x, 0, this.spawn.z);
+    this.scene.add(mesh);
+    this.playerMesh = mesh;
+    this.playerWeapon = mesh.userData.weapon;
 
-    g.add(body, head, hair, weapon);
-    g.position.set(this.spawn.x, 0, this.spawn.z);
-    this.scene.add(g);
-
-    this.playerMesh = g;
-    this.playerWeapon = weapon;
     this.player = {
       x: this.spawn.x,
       z: this.spawn.z,
@@ -479,19 +415,14 @@ export class Game {
     this.player.stamina = this.player.maxStamina;
   }
 
-
   _clearPlayableSpace() {
-    // Remove props that trap the player at camp / on the road
+    const sx = this.spawn.x;
+    const sz = this.spawn.z;
     const keepTree = (tr) => {
-      // world path tiles
       if (this.tileAt(tr.x, tr.z) === 1 || this.tileAt(tr.x, tr.z) === 2) return false;
-      // near spawn
-      if (Math.hypot(tr.x - this.spawn.x, tr.z - this.spawn.z) < 6.5) return false;
-      // near road corridor
+      if (Math.hypot(tr.x - sx, tr.z - sz) < 7) return false;
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
-        const tx = tr.x + Math.cos(a) * 0.8;
-        const tz = tr.z + Math.sin(a) * 0.8;
-        if (this.tileAt(tx, tz) === 1) return false;
+        if (this.tileAt(tr.x + Math.cos(a) * 0.9, tr.z + Math.sin(a) * 0.9) === 1) return false;
       }
       return true;
     };
@@ -503,88 +434,43 @@ export class Game {
     }
     this.trees = this.trees.filter((t) => t.hp > 0);
     for (const rk of [...this.rocks]) {
-      if (Math.hypot(rk.x - this.spawn.x, rk.z - this.spawn.z) < 6 || this.tileAt(rk.x, rk.z) === 1) {
+      if (Math.hypot(rk.x - sx, rk.z - sz) < 7 || this.tileAt(rk.x, rk.z) === 1) {
         this.scene.remove(rk.mesh);
         rk.hp = 0;
       }
     }
     this.rocks = this.rocks.filter((r) => r.hp > 0);
-
-    // Ensure spawn is walkable
-    this.player.x = this.spawn.x;
-    this.player.z = this.spawn.z;
-    this.playerMesh.position.set(this.spawn.x, 0, this.spawn.z);
-    // micro-nudge if still blocked
-    for (let i = 0; i < 16; i++) {
-      if (!this.blocked(this.player.x, this.player.z, 0.35)) break;
-      const a = (i / 16) * Math.PI * 2;
-      const nx = this.spawn.x + Math.cos(a) * 1.5;
-      const nz = this.spawn.z + Math.sin(a) * 1.5;
-      if (!this.blocked(nx, nz, 0.35)) {
-        this.player.x = nx; this.player.z = nz;
-        this.playerMesh.position.set(nx, 0, nz);
-        break;
-      }
-    }
+    this.player.x = sx;
+    this.player.z = sz;
+    this.playerMesh.position.set(sx, 0, sz);
   }
 
   _makeSlime(x, z, tier = 1) {
-    const col = tier > 1 ? 0x40e0a0 : 0x50d890;
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.45 * (tier > 1 ? 1.25 : 1), 10, 8),
-      new THREE.MeshStandardMaterial({
-        color: col,
-        flatShading: true,
-        roughness: 0.45,
-        metalness: 0.05,
-        emissive: col,
-        emissiveIntensity: 0.08,
-      })
-    );
-    mesh.scale.y = 0.75;
-    mesh.position.set(x, 0.35 * (tier > 1 ? 1.2 : 1), z);
-    mesh.castShadow = !this.isMobile;
+    const mesh = createSlimeMesh(this.mat, tier, !this.isMobile);
+    mesh.position.set(x, 0, z);
     this.scene.add(mesh);
-
-    // HP bar sprite
-    const bar = this._makeHpBar();
-    bar.position.set(0, 0.9, 0);
+    const bar = createHpBar();
+    bar.position.set(0, 0.95 * (tier > 1 ? 1.25 : 1), 0);
     mesh.add(bar);
-
     return {
       mesh,
       bar,
       barFill: bar.userData.fill,
+      body: mesh.userData.body,
       x,
       z,
       hp: 20 * tier,
       maxHp: 20 * tier,
       dmg: 5 * tier,
-      speed: 2.4 + tier * 0.5,
+      speed: 2.5 + tier * 0.45,
       tier,
       xp: 14 * tier,
       atkCd: 0,
       hurtT: 0,
       dead: false,
-      aggro: 11 + tier * 2,
+      aggro: 12 + tier * 2,
       bob: Math.random() * Math.PI * 2,
     };
-  }
-
-  _makeHpBar() {
-    const g = new THREE.Group();
-    const bg = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.9, 0.1),
-      new THREE.MeshBasicMaterial({ color: 0x1a1010, depthTest: false })
-    );
-    const fill = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.86, 0.07),
-      new THREE.MeshBasicMaterial({ color: 0xe05050, depthTest: false })
-    );
-    fill.position.z = 0.01;
-    g.add(bg, fill);
-    g.userData.fill = fill;
-    return g;
   }
 
   _spawnSlimes(n) {
@@ -592,10 +478,10 @@ export class Game {
     const rng = this.rng;
     for (let i = 0; i < n; i++) {
       let x, z, ok = false;
-      for (let t = 0; t < 40 && !ok; t++) {
-        x = (rng() - 0.5) * (WORLD - 8);
-        z = (rng() - 0.5) * (WORLD - 8);
-        if (!this.blocked(x, z, 0.5) && Math.hypot(x - this.spawn.x, z - this.spawn.z) > 10) ok = true;
+      for (let t = 0; t < 45 && !ok; t++) {
+        x = (rng() - 0.5) * (WORLD - 10);
+        z = (rng() - 0.5) * (WORLD - 10);
+        if (!this.blocked(x, z, 0.5) && Math.hypot(x - this.spawn.x, z - this.spawn.z) > 11) ok = true;
       }
       if (!ok) continue;
       this.enemies.push(this._makeSlime(x, z, rng() < 0.18 ? 2 : 1));
@@ -603,8 +489,8 @@ export class Game {
   }
 
   tileAt(x, z) {
-    const mx = Math.floor(((x / WORLD) + 0.5) * MAP_N);
-    const mz = Math.floor(((z / WORLD) + 0.5) * MAP_N);
+    const mx = Math.floor((x / WORLD + 0.5) * MAP_N);
+    const mz = Math.floor((z / WORLD + 0.5) * MAP_N);
     if (mx < 0 || mz < 0 || mx >= MAP_N || mz >= MAP_N) return 3;
     return this.map[mz * MAP_N + mx];
   }
@@ -637,7 +523,9 @@ export class Game {
       if (e.code === "Digit4") this.useSkill(3);
       if (e.code === "KeyF") this.interact();
     });
-    window.addEventListener("keyup", (e) => { this.keys[e.code] = false; });
+    window.addEventListener("keyup", (e) => {
+      this.keys[e.code] = false;
+    });
 
     const c = this.canvas;
     c.addEventListener("mousemove", (e) => this._mouse(e));
@@ -645,12 +533,10 @@ export class Game {
       this._mouse(e);
       if (e.button === 0) {
         this.mouse.down = true;
-        // click-to-move if not near enemy, else attack
-        const p = this.player;
         let nearEnemy = false;
         for (const en of this.enemies) {
           if (en.dead) continue;
-          if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.2) {
+          if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.25) {
             nearEnemy = true;
             break;
           }
@@ -666,37 +552,30 @@ export class Game {
       if (e.button === 0) this.mouse.down = false;
     });
     c.addEventListener("contextmenu", (e) => e.preventDefault());
-    // Mobile tap-to-move / attack on canvas
-    c.addEventListener("touchstart", (e) => {
-      if (!e.touches[0]) return;
-      e.preventDefault();
-      const t = e.touches[0];
-      const fake = { clientX: t.clientX, clientY: t.clientY, button: 0, shiftKey: false };
-      this._mouse(fake);
-      // enemy near tap?
-      let nearEnemy = false;
-      for (const en of this.enemies) {
-        if (en.dead) continue;
-        if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.4) { nearEnemy = true; break; }
-      }
-      if (nearEnemy) this.tryAttack();
-      else {
-        this.moveTarget = this._hit.clone();
-        this.moveTarget.y = 0;
-      }
-    }, { passive: false });
+    c.addEventListener(
+      "touchstart",
+      (e) => {
+        if (!e.touches[0]) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        this._mouse({ clientX: t.clientX, clientY: t.clientY, button: 0, shiftKey: false });
+        let nearEnemy = false;
+        for (const en of this.enemies) {
+          if (en.dead) continue;
+          if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.4) {
+            nearEnemy = true;
+            break;
+          }
+        }
+        if (nearEnemy) this.tryAttack();
+        else {
+          this.moveTarget = this._hit.clone();
+          this.moveTarget.y = 0;
+        }
+      },
+      { passive: false }
+    );
   }
-
-  _mouse(e) {
-    const rect = this.canvas.getBoundingClientRect();
-    this.mouse.x = e.clientX - rect.left;
-    this.mouse.y = e.clientY - rect.top;
-    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    this.raycaster.ray.intersectPlane(this.groundPlane, this._hit);
-  }
-
 
   _bindTouch() {
     const stick = document.getElementById("stick");
@@ -710,9 +589,11 @@ export class Game {
         let dx = clientX - cx;
         let dy = clientY - cy;
         const len = Math.hypot(dx, dy) || 1;
-        if (len > maxR) { dx = (dx / len) * maxR; dy = (dy / len) * maxR; }
+        if (len > maxR) {
+          dx = (dx / len) * maxR;
+          dy = (dy / len) * maxR;
+        }
         knob.style.transform = `translate(${dx}px, ${dy}px)`;
-        // stick.y positive = down on screen = +Z world
         this.stick.active = true;
         this.stick.x = dx / maxR;
         this.stick.y = dy / maxR;
@@ -745,22 +626,64 @@ export class Game {
     const hold = (id, on, off) => {
       const el = document.getElementById(id);
       if (!el) return;
-      const start = (e) => { e.preventDefault(); on(); };
-      const stop = (e) => { e.preventDefault(); off(); };
+      const start = (e) => {
+        e.preventDefault();
+        on();
+      };
+      const stop = (e) => {
+        e.preventDefault();
+        off();
+      };
       el.addEventListener("pointerdown", start);
       el.addEventListener("pointerup", stop);
       el.addEventListener("pointerleave", stop);
       el.addEventListener("touchstart", start, { passive: false });
       el.addEventListener("touchend", stop);
     };
-    hold("btn-attack", () => { this.mouse.down = true; this.tryAttack(); }, () => { this.mouse.down = false; });
-    hold("btn-shield", () => { this.keys.ShiftLeft = true; }, () => { this.keys.ShiftLeft = false; });
-    hold("btn-evade", () => { this.keys.Space = true; setTimeout(() => { this.keys.Space = false; }, 120); }, () => {});
+    hold(
+      "btn-attack",
+      () => {
+        this.mouse.down = true;
+        this.tryAttack();
+      },
+      () => {
+        this.mouse.down = false;
+      }
+    );
+    hold(
+      "btn-shield",
+      () => {
+        this.keys.ShiftLeft = true;
+      },
+      () => {
+        this.keys.ShiftLeft = false;
+      }
+    );
+    hold(
+      "btn-evade",
+      () => {
+        this.keys.Space = true;
+        setTimeout(() => {
+          this.keys.Space = false;
+        }, 120);
+      },
+      () => {}
+    );
     document.getElementById("btn-craft")?.addEventListener("click", () => this.ui.toggle("craft"));
     document.getElementById("btn-inv")?.addEventListener("click", () => this.ui.toggle("inv"));
     document.querySelectorAll("#action-bar .slot").forEach((btn) => {
       btn.addEventListener("click", () => this.useSkill(Number(btn.dataset.i)));
     });
+  }
+
+  _mouse(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.mouse.x = e.clientX - rect.left;
+    this.mouse.y = e.clientY - rect.top;
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    this.raycaster.ray.intersectPlane(this.groundPlane, this._hit);
   }
 
   start() {
@@ -791,15 +714,17 @@ export class Game {
 
     // torch / fire anim
     for (const to of this.torches) {
-      const s = 0.9 + Math.sin(this.t * 10 + to.mesh.position.x) * 0.15;
-      to.flame.scale.setScalar(s);
-      if (to.light) to.light.intensity = 0.9 + Math.sin(this.t * 12 + to.mesh.position.z) * 0.25;
+      const s = 0.85 + Math.sin(this.t * 11 + to.mesh.position.x) * 0.2;
+      if (to.flame) to.flame.scale.set(s, 0.9 + s * 0.2, s);
+      if (to.core) to.core.scale.setScalar(0.9 + Math.sin(this.t * 14) * 0.15);
+      if (to.light) to.light.intensity = 0.75 + Math.sin(this.t * 12 + to.mesh.position.z) * 0.25;
     }
     if (this.campFire) {
-      this.campFire.scale.y = 0.9 + Math.sin(this.t * 14) * 0.15;
-      this.campFire.rotation.y += dt * 2;
+      this.campFire.scale.y = 0.9 + Math.sin(this.t * 13) * 0.18;
+      this.campFire.rotation.y += dt * 1.8;
     }
-    if (this.waterMat) this.waterMat.opacity = 0.65 + Math.sin(this.t * 2) * 0.08;
+    if (this.campCore) this.campCore.scale.setScalar(0.95 + Math.sin(this.t * 16) * 0.12);
+    if (this.waterMat) this.waterMat.opacity = 0.7 + Math.sin(this.t * 1.8) * 0.08;
 
     p.shield = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
     if (p.shield) {
@@ -807,21 +732,19 @@ export class Game {
       if (p.stamina <= 0) p.shield = false;
     } else p.stamina = Math.min(p.maxStamina, p.stamina + 20 * dt);
 
-    // evade toward cursor
     if ((this.keys.Space || this.keys.KeyE) && p.evadeCd <= 0 && p.stamina >= 18) {
       p.evadeT = 0.2;
       p.evadeCd = 0.85;
       p.stamina -= 18;
       p.invuln = 0.2;
       const ang = Math.atan2(this._hit.x - p.x, this._hit.z - p.z);
-      // in XZ: yaw from atan2(dx,dz)
       p.vx = Math.sin(ang) * 18;
       p.vz = Math.cos(ang) * 18;
       this.moveTarget = null;
     }
 
-    // WASD + virtual stick (camera-aligned: W = screen-up = -Z)
-    let mx = 0, mz = 0;
+    let mx = 0,
+      mz = 0;
     if (this.keys.KeyW || this.keys.ArrowUp) mz -= 1;
     if (this.keys.KeyS || this.keys.ArrowDown) mz += 1;
     if (this.keys.KeyA || this.keys.ArrowLeft) mx -= 1;
@@ -833,7 +756,8 @@ export class Game {
     if (Math.abs(mx) > 0.05 || Math.abs(mz) > 0.05) {
       this.moveTarget = null;
       const len = Math.hypot(mx, mz) || 1;
-      mx /= len; mz /= len;
+      mx /= len;
+      mz /= len;
       const slow = p.shield ? 0.55 : 1;
       if (p.evadeT <= 0) {
         p.vx = mx * p.speed * slow;
@@ -862,24 +786,33 @@ export class Game {
     this._move(p, p.vx * dt, p.vz * dt, 0.35);
     this.playerMesh.position.set(p.x, 0, p.z);
     this.playerMesh.rotation.y = p.yaw;
-    // bob
-    const moving = Math.hypot(p.vx, p.vz) > 0.5;
-    this.playerMesh.position.y = moving ? Math.abs(Math.sin(this.t * 12)) * 0.06 : 0;
-    if (p.attackT > 0) {
-      this.playerWeapon.rotation.x = -Math.sin((1 - p.attackT / 0.18) * Math.PI) * 1.2;
-    } else this.playerWeapon.rotation.x = 0;
 
-    // face cursor for combat
+    // walk cycle
+    const moving = Math.hypot(p.vx, p.vz) > 0.5;
+    const bob = moving ? Math.sin(this.t * 14) : 0;
+    this.playerMesh.position.y = Math.abs(bob) * 0.05;
+    if (this.playerMesh.userData.legL) {
+      this.playerMesh.userData.legL.rotation.x = bob * 0.45;
+      this.playerMesh.userData.legR.rotation.x = -bob * 0.45;
+    }
+    if (this.playerMesh.userData.cloak) {
+      this.playerMesh.userData.cloak.rotation.x = 0.12 + (moving ? Math.abs(bob) * 0.08 : 0);
+    }
+
+    if (p.attackT > 0 && this.playerWeapon) {
+      this.playerWeapon.rotation.x = -0.15 - Math.sin((1 - p.attackT / 0.18) * Math.PI) * 1.3;
+    } else if (this.playerWeapon) {
+      this.playerWeapon.rotation.x = -0.15;
+    }
+
     const faceAng = Math.atan2(this._hit.x - p.x, this._hit.z - p.z);
     if (p.attackT > 0 || this.mouse.down) p.yaw = faceAng;
 
     if (this.mouse.down && p.attackCd <= 0) this.tryAttack();
 
-    // cursor
-    this.cursor.position.set(this._hit.x, 0.06, this._hit.z);
-    this.cursor.rotation.z = this.t * 1.5;
+    this.cursor.position.set(this._hit.x, 0.08, this._hit.z);
+    this.cursor.rotation.z = this.t * 1.2;
 
-    // interact prompt
     let nearChest = false;
     for (const c of this.chests) {
       if (!c.open && Math.hypot(c.x - p.x, c.z - p.z) < 1.6) nearChest = true;
@@ -890,16 +823,14 @@ export class Game {
     this._updateProjectiles(dt);
     this._updateDrops(dt);
 
-    // camera follow
-    const camTarget = new THREE.Vector3(p.x, 0, p.z);
-    const camPos = new THREE.Vector3(p.x + 0.2, 26, p.z + 20);
-    this.camera.position.lerp(camPos, 1 - Math.pow(0.001, dt));
-    this.camera.lookAt(camTarget.x, 0.5, camTarget.z);
-    this.sun.position.set(p.x + 18, 30, p.z + 10);
-    this.sun.target.position.copy(camTarget);
+    // camera follow — higher, softer
+    const camPos = new THREE.Vector3(p.x + 0.15, 30, p.z + 17);
+    this.camera.position.lerp(camPos, 1 - Math.pow(0.0008, dt));
+    this.camera.lookAt(p.x, 0.6, p.z);
+    this.sun.position.set(p.x + 22, 36, p.z + 12);
+    this.sun.target.position.set(p.x, 0, p.z);
     this.sun.target.updateMatrixWorld();
 
-    // slash fade
     if (this.slash.material.opacity > 0) {
       this.slash.material.opacity = Math.max(0, this.slash.material.opacity - dt * 3);
     }
@@ -931,16 +862,15 @@ export class Game {
     p.attackCd = w.speed;
     p.yaw = Math.atan2(this._hit.x - p.x, this._hit.z - p.z);
 
-    // slash FX
-    this.slash.position.set(p.x + Math.sin(p.yaw) * 1.1, 0.8, p.z + Math.cos(p.yaw) * 1.1);
+    this.slash.position.set(p.x + Math.sin(p.yaw) * 1.15, 0.85, p.z + Math.cos(p.yaw) * 1.15);
     this.slash.rotation.z = -p.yaw;
-    this.slash.material.opacity = 0.9;
+    this.slash.material.opacity = 0.95;
 
     const dmg = w.dmg + p.baseDmg;
 
     if (w.ranged) {
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 6, 6),
+        new THREE.SphereGeometry(0.12, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0xffe080 })
       );
       mesh.position.set(p.x, 1, p.z);
@@ -962,19 +892,18 @@ export class Game {
       const dx = e.x - p.x;
       const dz = e.z - p.z;
       const dist = Math.hypot(dx, dz);
-      if (dist > w.range + 0.4) continue;
+      if (dist > w.range + 0.45) continue;
       const a = Math.atan2(dx, dz);
       let da = Math.abs(a - p.yaw);
       while (da > Math.PI) da = Math.abs(da - Math.PI * 2);
       if (da < 1.05) this.damageEnemy(e, dmg);
     }
 
-    // harvest
     for (const tr of this.trees) {
       if (tr.hp <= 0) continue;
-      if (Math.hypot(tr.x - p.x, tr.z - p.z) < w.range + 0.6) {
+      if (Math.hypot(tr.x - p.x, tr.z - p.z) < w.range + 0.65) {
         tr.hp--;
-        this.floatDmg(tr.x, 1.5, tr.z, "-1");
+        this.floatDmg(tr.x, 1.8, tr.z, "-1");
         if (tr.hp <= 0) {
           this.scene.remove(tr.mesh);
           this.addItem("wood", 2 + Math.floor(Math.random() * 3));
@@ -984,7 +913,7 @@ export class Game {
     }
     for (const rk of this.rocks) {
       if (rk.hp <= 0) continue;
-      if (Math.hypot(rk.x - p.x, rk.z - p.z) < w.range + 0.4) {
+      if (Math.hypot(rk.x - p.x, rk.z - p.z) < w.range + 0.45) {
         rk.hp--;
         if (rk.hp <= 0) {
           this.scene.remove(rk.mesh);
@@ -1001,8 +930,10 @@ export class Game {
       if (c.open) continue;
       if (Math.hypot(c.x - p.x, c.z - p.z) < 1.7) {
         c.open = true;
-        c.lid.rotation.x = -1.1;
-        c.lid.material.color.setHex(0xd4a050);
+        if (c.lid) {
+          c.lid.rotation.x = -1.15;
+          c.lid.position.z -= 0.1;
+        }
         const loot = [
           ["gel", 2],
           ["ore", 2],
@@ -1021,7 +952,6 @@ export class Game {
         return;
       }
     }
-    // forage
     this.addItem("herb", 1);
     this.ui.toast("+ Wild Herb");
   }
@@ -1038,7 +968,7 @@ export class Game {
           this.damageEnemy(e, Math.floor((w.dmg + p.baseDmg) * 1.85), true);
       }
       this.slash.material.opacity = 1;
-      this.slash.scale.setScalar(1.4);
+      this.slash.scale.setScalar(1.45);
       this.ui.toast("Power Strike!");
       setTimeout(() => this.slash.scale.setScalar(1), 200);
     } else if (i === 1) {
@@ -1076,9 +1006,8 @@ export class Game {
     }
     e.hp -= dmg;
     e.hurtT = 0.18;
-    e.mesh.material.emissiveIntensity = 0.55;
+    if (e.body?.material) e.body.material.emissiveIntensity = 0.55;
     this.floatDmg(e.x, 1.1, e.z, String(dmg), crit);
-    // knockback
     const p = this.player;
     const dx = e.x - p.x;
     const dz = e.z - p.z;
@@ -1090,7 +1019,8 @@ export class Game {
 
     const ratio = Math.max(0, e.hp / e.maxHp);
     e.barFill.scale.x = Math.max(0.01, ratio);
-    e.barFill.position.x = -0.43 * (1 - ratio);
+    e.barFill.position.x = -0.45 * (1 - ratio);
+    e.barFill.material.color.setHex(ratio > 0.5 ? 0x60d070 : ratio > 0.25 ? 0xe0a040 : 0xe05058);
 
     if (e.hp <= 0) {
       e.dead = true;
@@ -1099,16 +1029,14 @@ export class Game {
       this.drop(e.x, e.z, "gel", 1 + Math.floor(Math.random() * 2));
       if (Math.random() < 0.28) this.drop(e.x, e.z, "herb", 1);
       if (Math.random() < 0.16) this.drop(e.x, e.z, "ore", 1);
-      // death pop
       e.mesh.scale.setScalar(0.01);
       setTimeout(() => {
         this.scene.remove(e.mesh);
-        // respawn
         const rng = Math.random;
         let x, z;
         for (let t = 0; t < 30; t++) {
-          x = (rng() - 0.5) * (WORLD - 8);
-          z = (rng() - 0.5) * (WORLD - 8);
+          x = (rng() - 0.5) * (WORLD - 10);
+          z = (rng() - 0.5) * (WORLD - 10);
           if (!this.blocked(x, z, 0.5) && Math.hypot(x - this.player.x, z - this.player.z) > 14) break;
         }
         const idx = this.enemies.indexOf(e);
@@ -1146,7 +1074,7 @@ export class Game {
         color: id === "gel" ? 0x60f0b0 : id === "ore" ? 0x8090a8 : id === "herb" ? 0x50c060 : 0xb08040,
         flatShading: true,
         emissive: 0x224422,
-        emissiveIntensity: 0.2,
+        emissiveIntensity: 0.25,
       })
     );
     mesh.position.set(x, 0.35, z);
@@ -1204,11 +1132,14 @@ export class Game {
       e.bob += dt * 4;
       e.hurtT = Math.max(0, e.hurtT - dt);
       e.atkCd = Math.max(0, e.atkCd - dt);
-      if (e.hurtT <= 0) e.mesh.material.emissiveIntensity = 0.08;
+      if (e.hurtT <= 0 && e.body?.material) e.body.material.emissiveIntensity = 0.18;
 
-      e.mesh.scale.y = 0.7 + Math.sin(e.bob) * 0.08;
-      e.mesh.position.y = 0.32 + Math.abs(Math.sin(e.bob)) * 0.06;
-      // billboard HP bar
+      // jelly squash
+      const sq = 0.7 + Math.sin(e.bob) * 0.1;
+      e.mesh.scale.y = sq;
+      e.mesh.scale.x = 1.05 - (sq - 0.7) * 0.4;
+      e.mesh.scale.z = e.mesh.scale.x;
+      e.mesh.position.y = Math.abs(Math.sin(e.bob)) * 0.05;
       e.bar.quaternion.copy(this.camera.quaternion);
 
       const dx = p.x - e.x;
@@ -1246,7 +1177,6 @@ export class Game {
   }
 
   floatDmg(x, y, z, text, crit = false, heal = false) {
-    // project to screen
     const v = new THREE.Vector3(x, y, z);
     v.project(this.camera);
     const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
@@ -1299,27 +1229,22 @@ export class Game {
         const mx = Math.floor((x / W) * MAP_N);
         const mz = Math.floor((y / H) * MAP_N);
         const t = this.map[mz * MAP_N + mx];
-        m.fillStyle = t === 3 ? "#3a80c0" : t === 1 ? "#c0a060" : t === 2 ? "#7a6038" : "#3f8048";
+        m.fillStyle = t === 3 ? "#4a90a8" : t === 1 ? "#b89860" : t === 2 ? "#7a6038" : "#4a7a52";
         m.fillRect(x, y, 1, 1);
       }
     }
-    // trees dots
     m.fillStyle = "#1e5030";
     for (const tr of this.trees) {
       if (tr.hp <= 0) continue;
-      const x = ((tr.x / WORLD) + 0.5) * W;
-      const y = ((tr.z / WORLD) + 0.5) * H;
-      m.fillRect(x, y, 1, 1);
+      m.fillRect(((tr.x / WORLD + 0.5) * W) | 0, ((tr.z / WORLD + 0.5) * H) | 0, 1, 1);
     }
     m.fillStyle = "#60f0b0";
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const x = ((e.x / WORLD) + 0.5) * W;
-      const y = ((e.z / WORLD) + 0.5) * H;
-      m.fillRect(x - 1, y - 1, 2, 2);
+      m.fillRect(((e.x / WORLD + 0.5) * W) | 0, ((e.z / WORLD + 0.5) * H) | 0, 2, 2);
     }
-    const px = ((this.player.x / WORLD) + 0.5) * W;
-    const py = ((this.player.z / WORLD) + 0.5) * H;
+    const px = ((this.player.x / WORLD + 0.5) * W) | 0;
+    const py = ((this.player.z / WORLD + 0.5) * H) | 0;
     m.fillStyle = "#fff";
     m.fillRect(px - 2, py - 2, 4, 4);
     m.fillStyle = "#f0c84a";
@@ -1327,14 +1252,17 @@ export class Game {
   }
 
   render() {
-    // invuln blink
     this.playerMesh.visible = !(this.player.invuln > 0 && Math.floor(this.t * 18) % 2 === 0);
-    // shield aura
     if (this.player.shield) {
       if (!this._shieldMesh) {
         this._shieldMesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.85, 12, 10),
-          new THREE.MeshBasicMaterial({ color: 0x80c0ff, transparent: true, opacity: 0.18, wireframe: true })
+          new THREE.SphereGeometry(0.9, 16, 12),
+          new THREE.MeshBasicMaterial({
+            color: 0x80c0ff,
+            transparent: true,
+            opacity: 0.16,
+            wireframe: true,
+          })
         );
         this.playerMesh.add(this._shieldMesh);
       }
