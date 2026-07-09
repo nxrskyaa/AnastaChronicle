@@ -418,6 +418,12 @@ export class Game {
     applyLevel(this.player);
     this.player.hp = this.player.maxHp;
     this.player.stamina = this.player.maxStamina;
+    // snap camera to player immediately (avoid side-horizon view from world origin)
+    this.camera.position.set(this.player.x + 0.05, 26, this.player.z + 9);
+    this.camera.lookAt(this.player.x, 0.8, this.player.z);
+    this.sun.position.set(this.player.x + 22, 36, this.player.z + 12);
+    this.sun.target.position.set(this.player.x, 0, this.player.z);
+    this.sun.target.updateMatrixWorld();
   }
 
   _clearPlayableSpace() {
@@ -841,8 +847,8 @@ export class Game {
     this._updateDrops(dt);
 
     // camera follow — higher, softer
-    const camPos = new THREE.Vector3(p.x + 0.05, 28, p.z + 10);
-    this.camera.position.lerp(camPos, 1 - Math.pow(0.0008, dt));
+    const camPos = new THREE.Vector3(p.x + 0.05, 26, p.z + 9);
+    this.camera.position.lerp(camPos, 1 - Math.pow(0.00005, dt));
     this.camera.lookAt(p.x, 0.6, p.z);
     this.sun.position.set(p.x + 22, 36, p.z + 12);
     this.sun.target.position.set(p.x, 0, p.z);
