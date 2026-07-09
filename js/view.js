@@ -1,21 +1,20 @@
-// Shared, mutable viewport. Recomputed on resize so the canvas fills the
-// whole screen (no letterbox bars) while keeping a consistent zoom level.
+// Shared, mutable viewport. The canvas internal resolution is set to EXACTLY
+// match the display area's aspect ratio (display px / integer scale), so the
+// CSS "fill 100%" never stretches/distorts. Fullscreen, no letterbox, no gepeng.
 export const view = { w: 420, h: 236, scale: 3 };
 
-// Target ~236px of vertical "game space" at 3x zoom. We keep tile density
-// constant and expand width/height to match the device aspect ratio.
 export function computeView(canvas) {
-  const sw = window.innerWidth, sh = window.innerHeight;
-  const aspect = sw / sh;
-  // internal vertical resolution stays ~ constant for consistent zoom
-  const baseH = 240;
-  let h = baseH;
-  let w = Math.round(h * aspect);
-  // clamp so we never render absurd widths on ultrawide
-  w = Math.max(320, Math.min(720, w));
-  // even numbers avoid half-pixel seams
-  view.w = w % 2 ? w + 1 : w;
-  view.h = h % 2 ? h + 1 : h;
-  if (canvas) { canvas.width = view.w; canvas.height = view.h; }
+  const sw = Math.max(1, window.innerWidth);
+  const sh = Math.max(1, window.innerHeight);
+  // choose a pixel scale so we get a comfortable zoom (~250px of game height)
+  let scale = Math.round(sh / 250);
+  scale = Math.max(2, Math.min(5, scale));
+  // internal resolution = display / scale  -> aspect ratio matches display exactly
+  let w = Math.round(sw / scale);
+  let h = Math.round(sh / scale);
+  view.scale = scale;
+  view.w = w;
+  view.h = h;
+  if (canvas) { canvas.width = w; canvas.height = h; }
   return view;
 }
