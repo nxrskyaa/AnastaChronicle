@@ -86,8 +86,8 @@ export class Game {
     this.scene.fog = new THREE.FogExp2(0x7e948a, 0.014);
 
     // higher top-down camera (ref angle)
-    this.camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 220);
-    this.camera.position.set(0, 36, 12);
+    this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 220);
+    this.camera.position.set(0, 28, 10);
     this.camera.lookAt(0, 0, 0);
 
     // soft forest light
@@ -97,7 +97,7 @@ export class Game {
     // ambient fill so toon materials read well
     this.scene.add(new THREE.AmbientLight(0xb8c8c0, 0.35));
 
-    this.sun = new THREE.DirectionalLight(0xfff2dc, 1.35);
+    this.sun = new THREE.DirectionalLight(0xfff2dc, 1.55);
     this.sun.position.set(22, 36, 12);
     this.sun.castShadow = !isMobile;
     if (!isMobile) {
@@ -212,21 +212,9 @@ export class Game {
 
     // === textured multi-layer ground ===
     // base grass
-    const grassGeo = new THREE.PlaneGeometry(WORLD, WORLD, this.isMobile ? 48 : 72, this.isMobile ? 48 : 72);
+    // flat grass plane (no displacement grid)
+    const grassGeo = new THREE.PlaneGeometry(WORLD, WORLD, 1, 1);
     grassGeo.rotateX(-Math.PI / 2);
-    const gpos = grassGeo.attributes.position;
-    for (let i = 0; i < gpos.count; i++) {
-      const x = gpos.getX(i);
-      const z = gpos.getZ(i);
-      const mx = Math.min(MAP_N - 1, Math.max(0, Math.floor((x / WORLD + 0.5) * MAP_N)));
-      const mz = Math.min(MAP_N - 1, Math.max(0, Math.floor((z / WORLD + 0.5) * MAP_N)));
-      const t = this.map[mz * MAP_N + mx];
-      const n = Math.sin(mx * 0.3) * 0.1 + Math.cos(mz * 0.28) * 0.1;
-      if (t === 3) gpos.setY(i, -0.12);
-      else if (t === 1 || t === 2) gpos.setY(i, 0.01);
-      else gpos.setY(i, n);
-    }
-    grassGeo.computeVertexNormals();
     const grassMesh = new THREE.Mesh(grassGeo, this.mat.grass);
     grassMesh.receiveShadow = !this.isMobile;
     this.scene.add(grassMesh);
@@ -246,7 +234,7 @@ export class Game {
     pathIM.receiveShadow = !this.isMobile;
     const dummy = new THREE.Object3D();
     pathCells.forEach(([x, z, t], i) => {
-      dummy.position.set((x / MAP_N - 0.5) * WORLD + cell * 0.5, t === 1 ? 0.05 : 0.035, (z / MAP_N - 0.5) * WORLD + cell * 0.5);
+      dummy.position.set((x / MAP_N - 0.5) * WORLD + cell * 0.5, t === 1 ? 0.06 : 0.04, (z / MAP_N - 0.5) * WORLD + cell * 0.5);
       dummy.updateMatrix();
       pathIM.setMatrixAt(i, dummy.matrix);
     });
@@ -394,7 +382,7 @@ export class Game {
 
   _initPlayer() {
     const mesh = createPlayerMesh(this.mat, !this.isMobile);
-    mesh.scale.setScalar(1.55);
+    mesh.scale.setScalar(1.85);
     mesh.position.set(this.spawn.x, 0, this.spawn.z);
     this.scene.add(mesh);
     this.playerMesh = mesh;
@@ -853,7 +841,7 @@ export class Game {
     this._updateDrops(dt);
 
     // camera follow — higher, softer
-    const camPos = new THREE.Vector3(p.x + 0.1, 34, p.z + 12);
+    const camPos = new THREE.Vector3(p.x + 0.05, 28, p.z + 10);
     this.camera.position.lerp(camPos, 1 - Math.pow(0.0008, dt));
     this.camera.lookAt(p.x, 0.6, p.z);
     this.sun.position.set(p.x + 22, 36, p.z + 12);
