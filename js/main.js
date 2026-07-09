@@ -6,6 +6,7 @@ import { UI } from "./ui.js";
 import { buildCharacter, PRESETS, HAIRSTYLES, DEFAULT_LOOK } from "./chargen.js";
 import { audio } from "./audio.js";
 import { computeView } from "./view.js";
+import { connectMultiplayer, net } from "./net.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -105,6 +106,15 @@ function startGame() {
     // recompute internal resolution on rotate/resize so it stays fullscreen
     addEventListener("resize", () => computeView(canvas));
     game.start();
+    // Multiplayer presence (no-op unless enabled in config.js). Fire-and-forget.
+    connectMultiplayer(look, look.name, { x: game.player.x, y: game.player.y })
+      .then((room) => {
+        if (room) {
+          net.onChat = (m) => game.ui.toast(`${m.name}: ${m.text}`);
+          game.ui.toast("Connected — you're online!");
+        }
+      })
+      .catch(() => {});
   } catch (e) { console.error(e); alert("Start failed: " + e.message); }
 }
 

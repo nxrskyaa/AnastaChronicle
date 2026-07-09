@@ -2,6 +2,8 @@ import { Game } from "./game.js";
 import { img } from "./assets.js";
 import { view } from "./view.js";
 import { tile as gtile, grassFringe, waterFoam } from "./tilegen.js";
+import { buildCharacter, DEFAULT_LOOK } from "./chargen.js";
+import { net } from "./net.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -107,6 +109,15 @@ Game.prototype.render = function () {
   for (const e of this.enemies) if (!e.dead && inv(e.x)) draw.push({ y: e.sortY, k: "enemy", o: e });
   if (this.pet) draw.push({ y: this.pet.sortY, k: "pet", o: this.pet });
   draw.push({ y: p.sortY, k: "player", o: p });
+  // remote players (multiplayer presence) — interpolate toward server pos
+  for (const id in net.remote) {
+    const rp = net.remote[id];
+    rp.rx += (rp.x - rp.rx) * 0.25;
+    rp.ry += (rp.y - rp.ry) * 0.25;
+    if (rp.moving) { rp.frameT += 0.016; if (rp.frameT > 0.12) { rp.frameT = 0; rp.frame = (rp.frame + 1) % 4; } }
+    else rp.frame = 0;
+    if (inv(rp.rx)) draw.push({ y: rp.ry, k: "remote", o: rp });
+  }
   draw.sort((a, b) => a.y - b.y);
 
   for (const d of draw) {
@@ -141,6 +152,20 @@ Game.prototype.render = function () {
       ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 18, sy - 46, 36, 9);
       ctx.fillStyle = "#e8ecf2"; ctx.fillText(o.name, sx, sy - 39); ctx.textAlign = "left";
+    }
+    else if (d.k === "remote") {
+      const rsx = Math.round(o.rx - camx), rsy = Math.round(o.ry - camy);
+      if (!o.cache) {
+        let lk; try { lk = JSON.parse(o.look); } catch { lk = {}; }
+        o.cache = buildCharacter({ ...DEFAULT_LOOK, ...lk, name: o.name });
+      }
+      const dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
+      const cv = o.cache.walk[dir][o.frame % 4];
+      ctx.drawImage(cv, rsx - 16, rsy - 36);
+      // name tag (blue tint to distinguish other players)
+      ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 18, rsy - 46, 36, 9);
+      ctx.fillStyle = "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39); ctx.textAlign = "left";
     }
     else if (d.k === "enemy") {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;

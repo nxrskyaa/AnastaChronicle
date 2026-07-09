@@ -7,6 +7,7 @@ import { audio } from "./audio.js";
 import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
 import { view, computeView } from "./view.js";
 import { buildTiles } from "./tilegen.js";
+import { net, sendMove } from "./net.js";
 
 const T = 24;
 const MAP_W = 110, MAP_H = 110;
@@ -315,6 +316,7 @@ export class Game {
     const loop = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (!this.paused) this.update(dt);
+      if (net.connected) sendMove(this.player, now);
       this.render();
       requestAnimationFrame(loop);
     };
