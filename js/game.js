@@ -2,6 +2,8 @@ import { img, MONSTERS, PET_IDS } from "./assets.js";
 import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { buildCharacter, buildWeapon, DEFAULT_LOOK } from "./chargen.js";
 import { QuestLog, NPC_DEFS } from "./quests.js";
+import { buildVillage } from "./buildings.js";
+import { audio } from "./audio.js";
 
 const T = 24;
 const MAP_W = 110, MAP_H = 110;
@@ -39,6 +41,12 @@ export class Game {
     this.weather = "clear";     // clear | rain | snow
     this.weatherT = 30;
     this.quests = new QuestLog();
+    this.shake = 0;
+    this.hitStop = 0;
+    this.fx = [];               // skill/impact visual effects
+    this.audio = audio;
+    this.village = buildVillage();
+    this.buildings = [];
 
     this.look = look || { ...DEFAULT_LOOK };
     this.charCache = buildCharacter(this.look);
@@ -93,12 +101,30 @@ export class Game {
     this.map = m; this.vmap = v;
     this.camp = { x: 55 * T, y: 55 * T };
 
+    // ---- VILLAGE layout around camp ----
+    const cx = 55, cy = 55;
+    const place = (type, tx, ty, w, h) => {
+      this.buildings.push({ type, x: tx * T, y: ty * T, sortY: ty * T });
+      // clear decorations + set ground to path under footprint
+      for (let yy = ty - 1; yy <= ty + 1; yy++) for (let xx = tx - 2; xx <= tx + 2; xx++) {
+        const ii = yy * MAP_W + xx; if (ii >= 0 && ii < m.length && m[ii] !== 2) m[ii] = (Math.random() < 0.5 ? 1 : 0);
+      }
+    };
+    place("house_red", cx - 6, cy - 5);
+    place("house_blue", cx + 6, cy - 4);
+    place("house_thatch", cx - 7, cy + 4);
+    place("shop", cx + 6, cy + 5);
+    place("well", cx, cy - 6);
+    place("stall", cx + 3, cy + 2);
+    // fence line along south edge of camp
+    for (let i = -5; i <= 5; i++) if (i !== 0) this.buildings.push({ type: "fenceH", x: (cx + i) * T, y: (cy + 7) * T, sortY: (cy + 7) * T });
+
     // decorations: trees, bushes, rocks, flowers by biome
     for (let y = 3; y < MAP_H - 3; y++) {
       for (let x = 3; x < MAP_W - 3; x++) {
         const i = y * MAP_W + x, t = m[i];
         if (t === 1 || t === 2) continue;
-        const nearCamp = Math.hypot(x - 55, y - 55) < 8;
+        const nearCamp = Math.hypot(x - 55, y - 55) < 10;
         if (nearCamp) continue;
         const edge = Math.min(x, y, MAP_W - x, MAP_H - y);
         const wx = x * T + T / 2, wy = y * T + T / 2;

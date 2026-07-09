@@ -16,7 +16,13 @@ const WEAPONS = {
 Game.prototype.WEAPONS = WEAPONS;
 
 Game.prototype.update = function (dt) {
+  // hit-stop: freeze action briefly on big hits
+  if (this.hitStop > 0) { this.hitStop -= dt; this.shake = Math.max(this.shake, 0); return; }
   this.t += dt;
+  if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 60);
+  // advance skill/impact fx
+  for (const f of this.fx) f.t += dt;
+  this.fx = this.fx.filter(f => f.t < f.dur);
   const p = this.player;
   this.time = (this.time + dt * 6) % 1440;
 
@@ -79,6 +85,7 @@ Game.prototype.update = function (dt) {
       if (p.dustT <= 0 && sp > 40) {
         p.dustT = 0.16;
         this.particles.push({ x: p.x + (Math.random() - 0.5) * 6, y: p.y + 2, vx: (Math.random() - 0.5) * 10, vy: -8 - Math.random() * 8, life: 0.3, color: "rgba(150,130,90,0.7)" });
+        this.audio.sfx("step");
       }
     } else {
       const sp = Math.hypot(p.vx, p.vy);
@@ -155,10 +162,12 @@ Game.prototype.doAttack = function () {
   if (p.stamina < w.cost * 0.4) return;
   p.stamina = Math.max(0, p.stamina - w.cost);
   p.attackT = p.attackDur; p.attackCd = w.speed;
+  this.audio.sfx("attack");
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
   const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
   p.vx += fx * 55; p.vy += fy * 55;
   const dmg = w.dmg + p.level * 2;
+  let anyHit = false;
   for (const e of this.enemies) {
     if (e.dead) continue;
     const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy);
@@ -171,6 +180,10 @@ Game.prototype.doAttack = function () {
     e.x += (dx / d) * 8; e.y += (dy / d) * 8;
     this.spawnHit(e.x, e.y - e.h * 0.4);
     this.addFloater(e.x, e.y - e.h, hit, crit);
+    this.audio.sfx(crit ? "crit" : "hit");
+    this.shake = Math.max(this.shake, crit ? 6 : 3);
+    if (crit) this.hitStop = 0.05;
+    anyHit = true;
     if (e.hp <= 0) this.killEnemy(e);
   }
 };
@@ -184,7 +197,10 @@ Game.prototype.killEnemy = function (e) {
   p.inv[drop] = (p.inv[drop] || 0) + 1 + (Math.random() < 0.5 ? 1 : 0);
   if (Math.random() < 0.4) p.inv.herb = (p.inv.herb || 0) + 1;
   for (let i = 0; i < 6; i++) this.particles.push({ x: e.x, y: e.y - e.h / 2, vx: (Math.random() - 0.5) * 40, vy: -20 - Math.random() * 30, life: 0.4, color: "rgba(120,220,150,0.8)" });
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
+  this.fx.push({ kind: "pop", x: e.x, y: e.y - e.h / 2, t: 0, dur: 0.35 });
+  this.shake = Math.max(this.shake, 4);
+  this.audio.sfx("coin");
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.audio.sfx("level"); this.fx.push({ kind: "levelring", x: p.x, y: p.y, t: 0, dur: 0.7 }); }
   setTimeout(() => { this.enemies = this.enemies.filter(x => x !== e); this.spawnEnemy(); }, 400);
 };
 
@@ -200,7 +216,7 @@ Game.prototype.updateEnemies = function (dt) {
     e.sortY = e.y;
     if (d < 22 && e.atkCd <= 0) {
       e.atkCd = 1;
-      if (p.invuln <= 0 && !p.shield) { p.hp -= e.dmg; p.invuln = 0.5; this.addFloater(p.x, p.y - 36, e.dmg, false, true); }
+      if (p.invuln <= 0 && !p.shield) { p.hp -= e.dmg; p.invuln = 0.5; this.addFloater(p.x, p.y - 36, e.dmg, false, true); this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 5); }
       else if (p.shield) p.stamina = Math.max(0, p.stamina - 6);
     }
   }
@@ -238,6 +254,7 @@ Game.prototype.interact = function () {
   if (kind === "chest" && !t.opened) {
     t.opened = true; t.openT = 0;
     this.quests.chestCount++;
+    this.audio.sfx("chest");
     const p = this.player;
     for (let i = 0; i < 10; i++) this.particles.push({ x: t.x, y: t.y - 8, vx: (Math.random() - 0.5) * 50, vy: -30 - Math.random() * 40, life: 0.6, color: "rgba(255,220,120,0.9)" });
     if (t.pet) {
@@ -257,10 +274,10 @@ Game.prototype.interact = function () {
 Game.prototype.useSkill = function (i) {
   const p = this.player;
   if (p.skillCd[i] > 0) return;
-  if (i === 0) { p.skillCd[0] = 4; this.mouse.down = true; this.doAttack(); this.mouse.down = false; this.ui.toast("Power Strike!"); }
-  else if (i === 1) { if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[1] = 6; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.ui.toast("Healed +30"); } else this.ui.toast("No herbs"); }
-  else if (i === 2) { p.skillCd[2] = 7; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackT = p.attackDur; for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 64) { const hit = Math.round((w.dmg + p.level * 2) * 1.3); e.hp -= hit; e.hurt = 0.2; this.addFloater(e.x, e.y - e.h, hit, true); this.spawnHit(e.x, e.y - e.h * 0.4); if (e.hp <= 0) this.killEnemy(e); } } this.ui.toast("Whirlwind!"); }
-  else if (i === 3) { if (p.stamina >= 16) { p.evadeT = 0.16; p.evadeCd = 0.4; p.stamina -= 16; p.invuln = 0.2; p.skillCd[3] = 5; const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0, fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0; p.vx = fx * 340; p.vy = fy * 340; if (!fx && !fy) p.vy = 340; } }
+  if (i === 0) { p.skillCd[0] = 4; this.mouse.down = true; this.doAttack(); this.mouse.down = false; this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.3 }); this.shake = Math.max(this.shake, 5); this.ui.toast("Power Strike!"); }
+  else if (i === 1) { if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[1] = 6; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, t: 0, dur: 0.8 }); this.ui.toast("Healed +30"); } else this.ui.toast("No herbs"); }
+  else if (i === 2) { p.skillCd[2] = 7; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackT = p.attackDur; this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, t: 0, dur: 0.4 }); this.shake = Math.max(this.shake, 7); for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 64) { const hit = Math.round((w.dmg + p.level * 2) * 1.3); e.hp -= hit; e.hurt = 0.2; this.addFloater(e.x, e.y - e.h, hit, true); this.spawnHit(e.x, e.y - e.h * 0.4); if (e.hp <= 0) this.killEnemy(e); } } this.ui.toast("Whirlwind!"); }
+  else if (i === 3) { if (p.stamina >= 16) { p.evadeT = 0.16; p.evadeCd = 0.4; p.stamina -= 16; p.invuln = 0.2; p.skillCd[3] = 5; this.audio.sfx("dash"); this.fx.push({ kind: "dashline", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.25 }); const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0, fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0; p.vx = fx * 340; p.vy = fy * 340; if (!fx && !fy) p.vy = 340; } }
 };
 
 Game.prototype.equip = function (id) { this.player.equipped = id; this.ui.toast("Equipped " + (ITEMS[id]?.name || id)); this.ui.renderInv(); };

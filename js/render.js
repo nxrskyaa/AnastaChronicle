@@ -8,7 +8,11 @@ Game.prototype.render = function () {
   const ctx = this.ctx, p = this.player;
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-  const camx = Math.round(this.cam.x), camy = Math.round(this.cam.y);
+  // screen shake offset
+  const shk = this.shake > 0 ? this.shake : 0;
+  const shx = shk ? (Math.random() - 0.5) * shk : 0;
+  const shy = shk ? (Math.random() - 0.5) * shk : 0;
+  const camx = Math.round(this.cam.x + shx), camy = Math.round(this.cam.y + shy);
   const x0 = Math.max(0, (camx / T) | 0), y0 = Math.max(0, (camy / T) | 0);
   const x1 = Math.min(MAP_W, x0 + (VIEW_W / T) + 2), y1 = Math.min(MAP_H, y0 + (VIEW_H / T) + 2);
 
@@ -53,7 +57,8 @@ Game.prototype.render = function () {
   }
 
   const draw = [];
-  const inv = (wx) => { const sx = wx - camx; return sx > -60 && sx < VIEW_W + 60; };
+  const inv = (wx) => { const sx = wx - camx; return sx > -80 && sx < VIEW_W + 80; };
+  for (const o of this.buildings) if (inv(o.x)) draw.push({ y: o.sortY, k: "building", o });
   for (const o of this.trees) if (inv(o.x)) draw.push({ y: o.sortY, k: "tree", o });
   for (const o of this.bushes) if (inv(o.x)) draw.push({ y: o.sortY, k: "bush", o });
   for (const o of this.rocks) if (inv(o.x)) draw.push({ y: o.sortY, k: "rock", o });
@@ -66,7 +71,8 @@ Game.prototype.render = function () {
 
   for (const d of draw) {
     const o = d.o, sx = Math.round(o.x - camx), sy = Math.round(o.y - camy);
-    if (d.k === "tree") { const im = img(`tree_${o.v}`); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 6); }
+    if (d.k === "building") { const cv = this.village[o.type]; if (cv) ctx.drawImage(cv, sx - cv.width / 2, sy - cv.height + 8); }
+    else if (d.k === "tree") { const im = img(`tree_${o.v}`); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 6); }
     else if (d.k === "bush") { const im = img("bush_0"); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 4); }
     else if (d.k === "rock") {
       ctx.fillStyle = "rgba(20,18,22,0.25)"; ctx.beginPath(); ctx.ellipse(sx, sy, 9, 3, 0, 0, 7); ctx.fill();
@@ -140,9 +146,52 @@ Game.prototype.render = function () {
   for (const pa of this.particles) { ctx.fillStyle = pa.color; ctx.globalAlpha = Math.max(0, pa.life * 2); ctx.fillRect(Math.round(pa.x - camx), Math.round(pa.y - camy), 2, 2); }
   ctx.globalAlpha = 1;
 
+  this.renderFX(ctx, camx, camy);
   this.renderDayNight(ctx);
   this.renderWeather(ctx);
   this.renderMinimap();
+};
+
+Game.prototype.renderFX = function (ctx, camx, camy) {
+  for (const f of this.fx) {
+    const sx = f.x - camx, sy = f.y - camy, pr = f.t / f.dur;
+    if (f.kind === "heal") {
+      ctx.globalAlpha = 1 - pr;
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * 7 + f.t * 3;
+        const rr = 6 + pr * 20;
+        ctx.fillStyle = "#88f0a8";
+        ctx.fillRect(sx + Math.cos(a) * rr, sy - 8 - pr * 24 + Math.sin(a) * rr * 0.4, 2, 3);
+      }
+      ctx.globalAlpha = 1;
+    } else if (f.kind === "whirl") {
+      ctx.save(); ctx.translate(sx, sy - 14); ctx.rotate(pr * 12);
+      ctx.strokeStyle = `rgba(230,240,255,${1 - pr})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, 20 + pr * 30, 0, 5); ctx.stroke();
+      ctx.strokeStyle = `rgba(160,200,255,${(1 - pr) * 0.6})`; ctx.beginPath(); ctx.arc(0, 0, 12 + pr * 24, 1, 6); ctx.stroke();
+      ctx.restore();
+    } else if (f.kind === "slashbig") {
+      const ox = f.dir === "left" ? -18 : f.dir === "right" ? 18 : 0;
+      const oy = f.dir === "up" ? -20 : f.dir === "down" ? 6 : -8;
+      ctx.save(); ctx.translate(sx + ox, sy - 16 + oy);
+      ctx.strokeStyle = `rgba(255,240,180,${1 - pr})`; ctx.lineWidth = 4 - pr * 3;
+      ctx.beginPath(); ctx.arc(0, 0, 18 + pr * 16, -1, 1.8); ctx.stroke();
+      ctx.restore();
+    } else if (f.kind === "levelring") {
+      ctx.strokeStyle = `rgba(240,216,120,${1 - pr})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(sx, sy - 16, 8 + pr * 40, 0, 7); ctx.stroke();
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 7; ctx.fillStyle = `rgba(255,230,140,${1 - pr})`; ctx.fillRect(sx + Math.cos(a) * (10 + pr * 40), sy - 16 + Math.sin(a) * (10 + pr * 40), 3, 3); }
+    } else if (f.kind === "dashline") {
+      const ox = f.dir === "left" ? 1 : f.dir === "right" ? -1 : 0;
+      const oy = f.dir === "up" ? 1 : f.dir === "down" ? -1 : 0;
+      ctx.strokeStyle = `rgba(200,230,255,${(1 - pr) * 0.7})`; ctx.lineWidth = 2;
+      for (let i = 1; i <= 4; i++) { ctx.beginPath(); ctx.moveTo(sx + ox * i * 6, sy - 16 + oy * i * 6 - 4); ctx.lineTo(sx + ox * i * 6, sy - 16 + oy * i * 6 + 4); ctx.stroke(); }
+    } else if (f.kind === "pop") {
+      ctx.strokeStyle = `rgba(255,255,255,${1 - pr})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sx, sy, 4 + pr * 16, 0, 7); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
 };
 
 Game.prototype.renderDayNight = function (ctx) {

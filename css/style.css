@@ -133,4 +133,51 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
 .tbtn:active{transform:scale(.92)}
 @media(max-width:760px){#status-card{width:160px;padding:8px 10px;left:8px;top:8px}.status-name{font-size:.74rem}#minimap-wrap{right:8px;top:8px}#minimap{width:82px;height:82px}#skillbar{bottom:10px;gap:4px;padding:6px 7px;border-radius:13px}.sk{width:42px;height:42px;border-radius:9px}.sk-name{font-size:.55rem}.sk-key{font-size:.48rem}.sk-div{display:none}.sk-util{display:none}#btn-inv-hot,#btn-quest-hot{display:flex}}
 @media(min-width:1000px){#touch-ui{display:none}}
-@media(max-height:480px){#skillbar{bottom:6px}#stick{bottom:70px}#touch-btns{bottom:70px}}
+@media(max-height:480px){#skillbar{bottom:6px}#stick{bottom:70px}#dpad{bottom:70px}#touch-btns{bottom:70px}}
+
+/* ===== PIXEL-ART TITLE + BUTTONS ===== */
+.title-scene{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+.title-stars{position:absolute;inset:0;background:
+  radial-gradient(2px 2px at 20% 30%,rgba(255,255,255,.8),transparent),
+  radial-gradient(1px 1px at 60% 20%,rgba(200,230,255,.7),transparent),
+  radial-gradient(2px 2px at 80% 60%,rgba(255,255,255,.6),transparent),
+  radial-gradient(1px 1px at 35% 70%,rgba(180,220,255,.6),transparent),
+  radial-gradient(1px 1px at 75% 85%,rgba(255,255,255,.5),transparent);
+  background-size:cover;animation:twinkle 4s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:.5}50%{opacity:1}}
+.pixel-title{font-family:"Press Start 2P",monospace!important;font-size:2.6rem!important;letter-spacing:.06em!important;color:#f5e4a8!important;-webkit-text-fill-color:#f5e4a8!important;text-shadow:3px 3px 0 #7d3029,6px 6px 0 rgba(0,0,0,.4),0 0 24px rgba(232,201,106,.4)!important;image-rendering:pixelated;animation:floatY 3s ease-in-out infinite}
+.boot-kicker{font-family:"VT323",monospace;font-size:.95rem!important;letter-spacing:.2em!important;color:var(--gold)!important}
+.pixel-btn{font-family:"Press Start 2P",monospace!important;font-size:.72rem!important;background:linear-gradient(180deg,#43a179,#2b6b4e)!important;border:3px solid #1a3a2a!important;box-shadow:0 4px 0 #14281c,0 6px 12px rgba(0,0,0,.4)!important;border-radius:4px!important;padding:.9rem 1.4rem!important;color:#fff!important;text-shadow:2px 2px 0 rgba(0,0,0,.4);animation:pixelPulse 1.6s ease-in-out infinite;transition:transform .08s!important}
+.pixel-btn.small{font-size:.62rem!important;padding:.7rem 1.1rem!important;animation:none}
+.pixel-btn:not(:disabled):hover{filter:brightness(1.12)}
+.pixel-btn:not(:disabled):active{transform:translateY(4px)!important;box-shadow:0 0 0 #14281c,0 2px 6px rgba(0,0,0,.4)!important}
+.pixel-btn:disabled{opacity:.5;animation:none}
+@keyframes pixelPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.pixel-h2{font-family:"Press Start 2P",monospace!important;font-size:.9rem!important;color:var(--gold)!important;text-shadow:2px 2px 0 rgba(0,0,0,.5)!important;letter-spacing:.02em!important}
+
+/* creator eye/more swatches: text style for hairstyle */
+.swatch.txt{width:auto;min-width:34px;padding:0 6px;font-size:.56rem;text-transform:capitalize;background:rgba(255,255,255,.08)}
+.swatch.txt.sel{background:rgba(232,201,106,.2)}
+
+/* top-right cluster + settings gear */
+#top-right{position:absolute;right:14px;top:14px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.icon-btn{pointer-events:auto;width:34px;height:34px;border-radius:9px;background:var(--glass);border:1px solid var(--line2);color:var(--text);font-size:1.1rem;backdrop-filter:blur(8px);transition:.15s;box-shadow:0 6px 16px rgba(0,0,0,.35)}
+.icon-btn:hover{background:rgba(110,224,176,.2);border-color:var(--accent);transform:rotate(45deg)}
+#minimap-wrap{position:static}
+
+/* settings panel */
+.set-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:.55rem 0;border-bottom:1px solid var(--line)}
+.set-row>span{font-size:.82rem;color:var(--text);font-weight:600}
+.set-row input[type=range]{flex:1;max-width:150px;accent-color:var(--accent)}
+.seg{display:flex;background:rgba(0,0,0,.35);border:1px solid var(--line2);border-radius:9px;overflow:hidden}
+.seg-btn{padding:.4rem .8rem;font-size:.74rem;background:none;border:none;color:var(--muted);transition:.15s}
+.seg-btn.active{background:linear-gradient(180deg,#43a179,#2b6b4e);color:#fff}
+.set-help{margin-top:.9rem;font-size:.68rem;color:var(--muted);line-height:1.6}
+
+/* D-PAD */
+.ctrl-dpad{position:absolute;left:26px;bottom:92px;width:120px;height:120px;pointer-events:auto}
+.dpad-btn{position:absolute;width:40px;height:40px;background:rgba(14,18,26,.8);border:1px solid var(--line2);color:var(--text);font-size:.8rem;border-radius:8px;backdrop-filter:blur(4px);box-shadow:0 3px 8px rgba(0,0,0,.4)}
+.dpad-btn:active{background:rgba(110,224,176,.3)}
+.dpad-btn.up{left:40px;top:0}.dpad-btn.down{left:40px;top:80px}.dpad-btn.left{left:0;top:40px}.dpad-btn.right{left:80px;top:40px}
+#touch-btns{grid-template-columns:repeat(2,58px)}
+

@@ -5,18 +5,20 @@ const DIRS = ["down", "up", "left", "right"];
 const CW = 32, CH = 40;
 
 export const PRESETS = {
-  skin:  ["#ffd6b4", "#f0b892", "#c98a63", "#8d5a3c", "#6b4228"],
-  hair:  ["#5c3a2e", "#2b2b2f", "#caa24a", "#b5432f", "#7a5a86", "#d7d2c8"],
-  shirt: ["#4a9678", "#3d6fa8", "#b0503f", "#8557a8", "#c9a23e", "#2f2f38"],
-  pants: ["#42486a", "#5a3f2e", "#37503a", "#6a2f3a", "#2c2c34"],
-  boots: ["#5c3c2c", "#3a3a42", "#7a5230"],
+  skin:  ["#ffe0c0", "#ffd6b4", "#f0b892", "#d89b6e", "#c98a63", "#a86b45", "#8d5a3c", "#6b4228", "#4e2f1e"],
+  hair:  ["#2b2b2f", "#4a3225", "#5c3a2e", "#8a5a34", "#caa24a", "#e8d27a", "#b5432f", "#d0603a", "#7a5a86", "#4a6ea0", "#3a8a6a", "#d7d2c8", "#f0f0f0"],
+  eyes:  ["#3a2a1e", "#2a4a6a", "#2a6a4a", "#6a2a2a", "#4a2a6a", "#1a1a1a"],
+  shirt: ["#4a9678", "#3d6fa8", "#b0503f", "#8557a8", "#c9a23e", "#2f2f38", "#d8683f", "#2b8a7a", "#a03a5a", "#e0e0e8"],
+  pants: ["#42486a", "#5a3f2e", "#37503a", "#6a2f3a", "#2c2c34", "#7a6a4a", "#3a3a48", "#5a2a3a"],
+  boots: ["#5c3c2c", "#3a3a42", "#7a5230", "#2a2a30", "#8a6a3a"],
 };
-export const HAIRSTYLES = ["short", "spiky", "long"];
+export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail"];
 
 export const DEFAULT_LOOK = {
   name: "Anasta",
-  skin: PRESETS.skin[0],
-  hair: PRESETS.hair[0],
+  skin: PRESETS.skin[1],
+  hair: PRESETS.hair[2],
+  eyes: PRESETS.eyes[0],
   shirt: PRESETS.shirt[0],
   pants: PRESETS.pants[0],
   boots: PRESETS.boots[0],
@@ -107,27 +109,34 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
 
   // hair by style
   const st = look.style;
-  if (dir !== "up") {
-    ctx.fillStyle = hr; ctx.beginPath(); ctx.ellipse(16, hy - 3, 6, 4, 0, 0, 7); ctx.fill();
-    px(ctx, 11, hy - 2, 10, 3, hr2);
-    if (st === "spiky") { for (let i = 0; i < 5; i++) px(ctx, 11 + i * 2.2, hy - 6, 2, 3, hr); }
-    if (st === "long") { px(ctx, 10, hy, 2, 8, hr); px(ctx, 20, hy, 2, 8, hr); }
-    px(ctx, 10, hy, 2, 4, hr); px(ctx, 20, hy, 2, 4, hr);
-    for (let x = 12; x < 21; x++) if ((x + frame) % 3) px(ctx, x, hy, 1, 1, hr3);
-  } else {
-    ctx.fillStyle = hr; ctx.beginPath(); ctx.ellipse(16, hy - 2, 6, 5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = hr2; ctx.beginPath(); ctx.ellipse(16, hy, 5, 3, 0, 0, 7); ctx.fill();
-    if (st === "long") { px(ctx, 10, hy, 2, 9, hr); px(ctx, 20, hy, 2, 9, hr); }
+  const eyeCol = look.eyes || "#26222a";
+  if (st !== "bald") {
+    if (dir !== "up") {
+      ctx.fillStyle = hr; ctx.beginPath(); ctx.ellipse(16, hy - 3, 6, 4, 0, 0, 7); ctx.fill();
+      px(ctx, 11, hy - 2, 10, 3, hr2);
+      if (st === "spiky") { for (let i = 0; i < 5; i++) px(ctx, 11 + i * 2.2, hy - 6, 2, 3, hr); }
+      if (st === "mohawk") { px(ctx, 15, hy - 8, 2, 6, hr); px(ctx, 15, hy - 8, 2, 2, hr2); }
+      if (st === "long") { px(ctx, 10, hy, 2, 9, hr); px(ctx, 20, hy, 2, 9, hr); }
+      if (st === "ponytail") { px(ctx, 20, hy - 2, 3, 3, hr); px(ctx, 21, hy + 1, 2, 7, hr); }
+      px(ctx, 10, hy, 2, 4, hr); px(ctx, 20, hy, 2, 4, hr);
+      for (let x = 12; x < 21; x++) if ((x + frame) % 3) px(ctx, x, hy, 1, 1, hr3);
+    } else {
+      ctx.fillStyle = hr; ctx.beginPath(); ctx.ellipse(16, hy - 2, 6, 5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = hr2; ctx.beginPath(); ctx.ellipse(16, hy, 5, 3, 0, 0, 7); ctx.fill();
+      if (st === "long") { px(ctx, 10, hy, 2, 9, hr); px(ctx, 20, hy, 2, 9, hr); }
+      if (st === "ponytail") { px(ctx, 15, hy + 3, 2, 7, hr); }
+      if (st === "mohawk") { px(ctx, 15, hy - 4, 2, 6, hr); }
+    }
   }
 
   // face
   if (dir === "down") {
-    px(ctx, 13, hy, 2, 2, O); px(ctx, 18, hy, 2, 2, O);
+    px(ctx, 13, hy, 2, 2, eyeCol); px(ctx, 18, hy, 2, 2, eyeCol);
     px(ctx, 13, hy - 1, 1, 1, "#fff"); px(ctx, 18, hy - 1, 1, 1, "#fff");
     px(ctx, 12, hy + 2, 1, 1, sk3); px(ctx, 20, hy + 2, 1, 1, sk3);
     px(ctx, 15, hy + 3, 3, 1, sk3);
-  } else if (dir === "left") { px(ctx, 12, hy, 2, 2, O); px(ctx, 12, hy - 1, 1, 1, "#fff"); }
-  else if (dir === "right") { px(ctx, 19, hy, 2, 2, O); px(ctx, 19, hy - 1, 1, 1, "#fff"); }
+  } else if (dir === "left") { px(ctx, 12, hy, 2, 2, eyeCol); px(ctx, 12, hy - 1, 1, 1, "#fff"); }
+  else if (dir === "right") { px(ctx, 19, hy, 2, 2, eyeCol); px(ctx, 19, hy - 1, 1, 1, "#fff"); }
 }
 
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)

@@ -6,24 +6,26 @@
 <title>Anasta Chronicle</title>
 <link rel="stylesheet" href="css/style.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Cinzel:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
 <div id="boot">
-  <div class="boot-card">
-    <p class="boot-kicker">CHRONICLE OF THE WILDS</p>
-    <h1>ANASTA</h1>
-    <p class="boot-sub">Explore · Tame · Survive</p>
-    <div id="boot-status">Loading…</div>
-    <button id="btn-start" disabled>Create Character</button>
-    <div class="boot-credit">Creatures & tiles: Tuxemon (CC-BY-SA 4.0)</div>
+  <div class="title-scene">
+    <div class="title-stars"></div>
+    <div class="boot-card">
+      <p class="boot-kicker">◆ CHRONICLE OF THE WILDS ◆</p>
+      <h1 class="pixel-title">ANASTA</h1>
+      <p class="boot-sub">Explore · Tame · Survive</p>
+      <div id="boot-status">Loading…</div>
+      <button id="btn-start" class="pixel-btn" disabled>▶ PRESS START</button>
+      <div class="boot-credit">Creatures & tiles: Tuxemon (CC-BY-SA 4.0) · Audio & world: procedural</div>
+    </div>
   </div>
 </div>
 
-<!-- CHARACTER CREATOR -->
 <div id="creator" class="hidden">
   <div class="creator-card">
-    <h2>Create Your Traveler</h2>
+    <h2 class="pixel-h2">CREATE YOUR TRAVELER</h2>
     <div class="creator-body">
       <div class="creator-preview">
         <canvas id="char-preview" width="128" height="160"></canvas>
@@ -35,18 +37,19 @@
         </div>
       </div>
       <div class="creator-opts">
-        <label class="opt-name">Name<input id="opt-name" maxlength="14" value="Anasta" /></label>
-        <div class="opt-row" data-part="style"><span>Hair Style</span><div class="swatches" id="sw-style"></div></div>
-        <div class="opt-row" data-part="hair"><span>Hair</span><div class="swatches" id="sw-hair"></div></div>
-        <div class="opt-row" data-part="skin"><span>Skin</span><div class="swatches" id="sw-skin"></div></div>
-        <div class="opt-row" data-part="shirt"><span>Shirt</span><div class="swatches" id="sw-shirt"></div></div>
-        <div class="opt-row" data-part="pants"><span>Pants</span><div class="swatches" id="sw-pants"></div></div>
-        <div class="opt-row" data-part="boots"><span>Boots</span><div class="swatches" id="sw-boots"></div></div>
+        <label class="opt-name">NAME<input id="opt-name" maxlength="14" value="Anasta" /></label>
+        <div class="opt-row" data-part="style"><span>HAIR STYLE</span><div class="swatches" id="sw-style"></div></div>
+        <div class="opt-row" data-part="hair"><span>HAIR</span><div class="swatches" id="sw-hair"></div></div>
+        <div class="opt-row" data-part="eyes"><span>EYES</span><div class="swatches" id="sw-eyes"></div></div>
+        <div class="opt-row" data-part="skin"><span>SKIN</span><div class="swatches" id="sw-skin"></div></div>
+        <div class="opt-row" data-part="shirt"><span>SHIRT</span><div class="swatches" id="sw-shirt"></div></div>
+        <div class="opt-row" data-part="pants"><span>PANTS</span><div class="swatches" id="sw-pants"></div></div>
+        <div class="opt-row" data-part="boots"><span>BOOTS</span><div class="swatches" id="sw-boots"></div></div>
       </div>
     </div>
     <div class="creator-foot">
-      <button id="btn-random" class="btn-ghost">🎲 Random</button>
-      <button id="btn-enter">Enter the Forest →</button>
+      <button id="btn-random" class="btn-ghost">🎲 RANDOM</button>
+      <button id="btn-enter" class="pixel-btn small">ENTER ▶</button>
     </div>
   </div>
 </div>
@@ -63,7 +66,10 @@
       <div class="clock-row"><span id="clock">Day 06:00</span><span id="pet-chip" class="hidden">Pet: —</span></div>
     </div>
 
-    <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
+    <div id="top-right">
+      <button class="icon-btn" id="btn-settings" title="Settings">⚙</button>
+      <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
+    </div>
 
     <div id="skillbar">
       <button class="sk" data-i="0"><span class="sk-key">1</span><span class="sk-name">Strike</span><div class="sk-cd" id="cd0"></div></button>
@@ -74,7 +80,6 @@
       <button class="sk sk-util" id="btn-inv-hot"><span class="sk-key">I</span><span class="sk-name">Bag</span></button>
       <button class="sk sk-util" id="btn-craft-hot"><span class="sk-key">C</span><span class="sk-name">Forge</span></button>
       <button class="sk sk-util" id="btn-quest-hot"><span class="sk-key">Q</span><span class="sk-name">Quest</span></button>
-      <button class="sk sk-util" id="btn-move-mode"><span class="sk-key">M</span><span class="sk-name">Tap</span></button>
     </div>
 
     <div id="toast"></div>
@@ -82,7 +87,15 @@
     <div id="interact-prompt" class="hidden"><kbd>F</kbd> <span id="interact-label">Open</span></div>
 
     <div id="touch-ui">
-      <div id="stick"><div id="stick-knob"></div></div>
+      <!-- analog stick -->
+      <div id="stick" class="ctrl-analog"><div id="stick-knob"></div></div>
+      <!-- dpad -->
+      <div id="dpad" class="ctrl-dpad hidden">
+        <button class="dpad-btn up" data-dir="up">▲</button>
+        <button class="dpad-btn left" data-dir="left">◀</button>
+        <button class="dpad-btn right" data-dir="right">▶</button>
+        <button class="dpad-btn down" data-dir="down">▼</button>
+      </div>
       <div id="touch-btns">
         <button id="btn-attack" class="tbtn atk">ATK</button>
         <button id="btn-shield" class="tbtn shd">GRD</button>
@@ -92,27 +105,25 @@
     </div>
   </div>
 
-  <div id="panel-inv" class="panel hidden">
-    <div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div>
-    <div id="inv-grid"></div>
-    <div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div>
+  <div id="panel-inv" class="panel hidden"><div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div><div id="inv-grid"></div><div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div></div>
+  <div id="panel-craft" class="panel hidden"><div class="panel-head"><h2>Forge</h2><button class="panel-close" data-close="craft">×</button></div><div id="craft-list"></div></div>
+  <div id="panel-quest" class="panel hidden"><div class="panel-head"><h2>Quest Log</h2><button class="panel-close" data-close="quest">×</button></div><div id="quest-list"></div></div>
+  <div id="panel-dialog" class="panel hidden"><div class="panel-head"><h2 id="dialog-name">NPC</h2><button class="panel-close" data-close="dialog">×</button></div><p id="dialog-text"></p><div id="dialog-quests"></div></div>
+  <div id="panel-settings" class="panel hidden">
+    <div class="panel-head"><h2>Settings</h2><button class="panel-close" data-close="settings">×</button></div>
+    <div class="set-row"><span>Music</span><input type="range" id="set-music" min="0" max="100" value="35" /></div>
+    <div class="set-row"><span>SFX</span><input type="range" id="set-sfx" min="0" max="100" value="50" /></div>
+    <div class="set-row"><span>Mobile Control</span>
+      <div class="seg"><button id="ctrl-analog-btn" class="seg-btn active">Analog</button><button id="ctrl-dpad-btn" class="seg-btn">D-Pad</button></div>
+    </div>
+    <div class="set-row"><span>Movement</span>
+      <div class="seg"><button id="move-btn-btn" class="seg-btn active">Button</button><button id="move-tap-btn" class="seg-btn">Tap</button></div>
+    </div>
+    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · I bag · C forge · Q quests</div>
   </div>
-  <div id="panel-craft" class="panel hidden">
-    <div class="panel-head"><h2>Forge</h2><button class="panel-close" data-close="craft">×</button></div>
-    <div id="craft-list"></div>
-  </div>
-  <div id="panel-quest" class="panel hidden">
-    <div class="panel-head"><h2>Quest Log</h2><button class="panel-close" data-close="quest">×</button></div>
-    <div id="quest-list"></div>
-  </div>
-  <div id="panel-dialog" class="panel hidden">
-    <div class="panel-head"><h2 id="dialog-name">NPC</h2><button class="panel-close" data-close="dialog">×</button></div>
-    <p id="dialog-text"></p>
-    <div id="dialog-quests"></div>
-  </div>
-  <div id="panel-level" class="panel hidden modal"><h2>Level Up</h2><p id="level-msg"></p><button id="btn-level-ok">Continue</button></div>
-  <div id="panel-pet" class="panel hidden modal"><h2>A wild friend!</h2><img id="pet-img" width="96" height="96" style="image-rendering:pixelated;margin:0 auto;display:block"/><p id="pet-msg"></p><button id="btn-pet-ok">Adopt</button></div>
-  <div id="death-screen" class="panel hidden modal"><h2>Fallen</h2><p>The forest claims another traveler.</p><button id="btn-respawn">Respawn at Camp</button></div>
+  <div id="panel-level" class="panel hidden modal"><h2>Level Up!</h2><p id="level-msg"></p><button id="btn-level-ok" class="pixel-btn small">Continue</button></div>
+  <div id="panel-pet" class="panel hidden modal"><h2>A wild friend!</h2><img id="pet-img" width="96" height="96" style="image-rendering:pixelated;margin:0 auto;display:block"/><p id="pet-msg"></p><button id="btn-pet-ok" class="pixel-btn small">Adopt</button></div>
+  <div id="death-screen" class="panel hidden modal"><h2>Fallen</h2><p>The forest claims another traveler.</p><button id="btn-respawn" class="pixel-btn small">Respawn at Camp</button></div>
 </div>
 
 <script type="module" src="js/main.js"></script>

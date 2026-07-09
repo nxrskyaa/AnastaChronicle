@@ -2,18 +2,20 @@ import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { QUESTS } from "./quests.js";
 
 export class UI {
-  constructor() {
+  constructor(audio) {
     this.game = null;
+    this.audio = audio || null;
     this.panels = {
       inv: document.getElementById("panel-inv"),
       craft: document.getElementById("panel-craft"),
       quest: document.getElementById("panel-quest"),
       dialog: document.getElementById("panel-dialog"),
+      settings: document.getElementById("panel-settings"),
       level: document.getElementById("panel-level"),
       pet: document.getElementById("panel-pet"),
       death: document.getElementById("death-screen"),
     };
-    document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => this.close(b.dataset.close)));
+    document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
     document.getElementById("btn-level-ok")?.addEventListener("click", () => { this.panels.level.classList.add("hidden"); if (this.game) this.game.paused = false; });
     document.getElementById("btn-respawn")?.addEventListener("click", () => this.game?.respawn());
     document.getElementById("btn-inv-hot")?.addEventListener("click", () => this.toggle("inv"));
@@ -31,18 +33,20 @@ export class UI {
   }
   toggle(name) {
     const p = this.panels[name]; if (!p) return;
+    this.audio?.sfx("ui");
     const open = p.classList.contains("hidden"); this.closeAll();
     if (open) { p.classList.remove("hidden"); if (name === "inv") this.renderInv(); if (name === "craft") this.renderCraft(); if (name === "quest") this.renderQuestLog(); if (this.game) this.game.paused = true; }
   }
   close(name) { this.panels[name]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["inv", "craft", "quest", "dialog"]) this.panels[k]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
-  anyOpen() { return ["inv", "craft", "quest", "dialog", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  closeAll() { for (const k of ["inv", "craft", "quest", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
+  anyOpen() { return ["inv", "craft", "quest", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   showLevel(lv) { const el = document.getElementById("level-msg"); if (el) el.textContent = `Level ${lv}! Max HP, stamina and damage increased.`; this.panels.level?.classList.remove("hidden"); if (this.game) this.game.paused = true; }
   showDeath() { this.panels.death?.classList.remove("hidden"); }
   hideDeath() { this.panels.death?.classList.add("hidden"); }
   showPet(id, cb) {
     this._petCb = cb;
+    this.audio?.sfx("pet");
     const im = document.getElementById("pet-img"); if (im) im.src = `assets/tux/pet/${id}.png`;
     const msg = document.getElementById("pet-msg"); if (msg) msg.textContent = `A wild ${id} popped out! It wants to join you.`;
     this.panels.pet?.classList.remove("hidden"); if (this.game) this.game.paused = true;
@@ -74,12 +78,12 @@ export class UI {
     }
     wrap.querySelectorAll("[data-accept]").forEach(b => b.addEventListener("click", () => {
       const q = QUESTS.find(x => x.id === b.dataset.accept);
-      if (game.quests.accept(q)) { this.toast("Quest accepted: " + q.title); this.showDialog(npc, game); }
+      if (game.quests.accept(q)) { this.audio?.sfx("quest"); this.toast("Quest accepted: " + q.title); this.showDialog(npc, game); }
     }));
     wrap.querySelectorAll("[data-turnin]").forEach(b => b.addEventListener("click", () => {
       const q = QUESTS.find(x => x.id === b.dataset.turnin);
       const r = game.quests.complete(q, game.player);
-      if (r) { this.toast(`Quest complete! +${r.gold || 0}g +${r.xp || 0}xp`); this.showDialog(npc, game); this.sync(); }
+      if (r) { this.audio?.sfx("quest"); this.toast(`Quest complete! +${r.gold || 0}g +${r.xp || 0}xp`); this.showDialog(npc, game); this.sync(); }
     }));
     this.panels.dialog?.classList.remove("hidden");
     if (this.game) this.game.paused = true;
