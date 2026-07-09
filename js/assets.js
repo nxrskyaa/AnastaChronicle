@@ -1,26 +1,31 @@
 const PATHS = [];
 
-for (let i = 0; i < 6; i++) {
-  PATHS.push(`world/grass_${i}`, `world/path_${i}`, `world/water_${i}`, `world/torch_${i}`, `world/camp_${i}`);
+for (let i = 0; i < 4; i++) {
+  PATHS.push(
+    `world/grass_${i}`,
+    `world/path_${i}`,
+    `world/water_${i}`,
+    `world/tree_${i}`,
+    `world/torch_${i}`,
+    `world/camp_${i}`
+  );
 }
-for (let i = 0; i < 4; i++) PATHS.push(`world/tree_${i}`);
 for (let i = 0; i < 3; i++) PATHS.push(`world/rock_${i}`);
 PATHS.push("world/chest", "world/chest_open");
 
 for (const d of ["down", "up", "left", "right"]) {
-  for (let f = 0; f < 6; f++) PATHS.push(`player/p_${d}_${f}`);
+  for (let f = 0; f < 4; f++) PATHS.push(`player/p_${d}_${f}`);
   PATHS.push(`player/p_${d}_atk`);
 }
 for (const t of [1, 2]) {
-  for (let f = 0; f < 6; f++) PATHS.push(`enemy/slime_t${t}_${f}`);
+  for (let f = 0; f < 4; f++) PATHS.push(`enemy/slime_t${t}_${f}`);
 }
 for (const id of ["wood", "ore", "gel", "herb", "sword", "axe", "spear", "bow", "dagger"]) {
   PATHS.push(`items/${id}`);
 }
 PATHS.push("ui/heart", "ui/heart_empty");
-for (let f = 0; f < 4; f++) {
-  PATHS.push(`fx/slash_${f}`, `fx/hit_${f}`);
-}
+for (let f = 0; f < 4; f++) PATHS.push(`fx/slash_${f}`, `fx/hit_${f}`);
+for (let f = 0; f < 3; f++) PATHS.push(`fx/dust_${f}`);
 
 const cache = new Map();
 

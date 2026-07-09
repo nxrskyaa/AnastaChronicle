@@ -4,95 +4,133 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Anasta Chronicle</title>
-  <meta name="description" content="Anasta Chronicle — pixel art 2.5D top-down adventure" />
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="boot">
     <div class="boot-card">
-      <div class="boot-glow"></div>
-      <p class="boot-kicker">PIXEL · 2.5D · FOREST</p>
+      <p class="boot-kicker">CHRONICLE OF THE WILDS</p>
       <h1>ANASTA</h1>
-      <p class="boot-sub">Chronicle of the Wilds</p>
-      <div id="boot-status">Loading sprites…</div>
-      <button id="btn-start" disabled>Enter the Forest</button>
+      <p class="boot-sub">Pixel · 2.5D · Survive the forest</p>
+      <div id="boot-status">Loading…</div>
+      <button id="btn-start" disabled>Enter Forest</button>
       <div class="boot-keys">
-        <span><kbd>WASD</kbd> Move</span>
-        <span><kbd>LMB</kbd> Attack</span>
-        <span><kbd>Shift</kbd> Shield</span>
-        <span><kbd>Space</kbd> Evade</span>
-        <span><kbd>C</kbd> Craft · <kbd>I</kbd> Bag</span>
+        <span><kbd>WASD</kbd> move</span>
+        <span><kbd>LMB</kbd> attack</span>
+        <span><kbd>Shift</kbd> guard</span>
+        <span><kbd>Space</kbd> dash</span>
+        <span><kbd>C</kbd> forge</span>
+        <span><kbd>I</kbd> bag</span>
       </div>
     </div>
   </div>
 
   <div id="game-wrap" class="hidden">
     <canvas id="game" width="400" height="225"></canvas>
+
     <div id="hud">
+      <!-- Top left status -->
+      <div id="status-card">
+        <div class="status-row">
+          <span class="status-name" id="player-name">Traveler</span>
+          <span class="status-lvl" id="xp-text">LV 1</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">HP</span>
+          <div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div>
+          <span class="bar-val" id="hp-text">50</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">SP</span>
+          <div class="bar sp"><div class="bar-fill" id="stamina-fill"></div></div>
+          <span class="bar-val" id="stamina-text">100</span>
+        </div>
+        <div class="bar-row xp-row">
+          <div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div>
+        </div>
+        <div class="quest-line" id="quest-chip">Slay slimes · Forge a blade</div>
+      </div>
+
+      <!-- Minimap -->
       <div id="minimap-wrap">
-        <canvas id="minimap" width="120" height="120"></canvas>
-        <div class="mm-label">Anasta Wilds</div>
+        <canvas id="minimap" width="112" height="112"></canvas>
       </div>
-      <div id="top-left">
-        <div id="player-name">Traveler</div>
-        <div id="quest-chip">Slay slimes · Forge a blade</div>
+
+      <!-- Bottom skill bar -->
+      <div id="skillbar">
+        <button type="button" class="sk" data-i="0" title="Power Strike">
+          <span class="sk-key">1</span>
+          <span class="sk-name">Strike</span>
+          <div class="sk-cd" id="cd0"></div>
+        </button>
+        <button type="button" class="sk" data-i="1" title="Herb">
+          <span class="sk-key">2</span>
+          <span class="sk-name">Herb</span>
+          <div class="sk-cd" id="cd1"></div>
+        </button>
+        <button type="button" class="sk" data-i="2" title="Whirl">
+          <span class="sk-key">3</span>
+          <span class="sk-name">Whirl</span>
+          <div class="sk-cd" id="cd2"></div>
+        </button>
+        <button type="button" class="sk" data-i="3" title="Wind">
+          <span class="sk-key">4</span>
+          <span class="sk-name">Wind</span>
+          <div class="sk-cd" id="cd3"></div>
+        </button>
+        <div class="sk-div"></div>
+        <button type="button" class="sk sk-util" id="btn-inv-hot">
+          <span class="sk-key">I</span>
+          <span class="sk-name">Bag</span>
+        </button>
+        <button type="button" class="sk sk-util" id="btn-craft-hot">
+          <span class="sk-key">C</span>
+          <span class="sk-name">Forge</span>
+        </button>
       </div>
-      <div id="hud-bottom">
-        <div class="orb-stack">
-          <div class="orb orb-hp"><div class="orb-fill" id="hp-fill"></div><span id="hp-text">50</span></div>
-        </div>
-        <div class="center-bar">
-          <div id="hearts"></div>
-          <div id="action-bar">
-            <button type="button" class="slot" data-i="0"><span class="key">1</span><div class="slot-icon">⚔</div><div class="cd" id="cd0"></div></button>
-            <button type="button" class="slot" data-i="1"><span class="key">2</span><div class="slot-icon">☘</div><div class="cd" id="cd1"></div></button>
-            <button type="button" class="slot" data-i="2"><span class="key">3</span><div class="slot-icon">🌀</div><div class="cd" id="cd2"></div></button>
-            <button type="button" class="slot" data-i="3"><span class="key">4</span><div class="slot-icon">💨</div><div class="cd" id="cd3"></div></button>
-          </div>
-          <div id="xp-bar"><div id="xp-fill"></div><span id="xp-text">Lv 1</span></div>
-        </div>
-        <div class="orb-stack">
-          <div class="orb orb-stamina"><div class="orb-fill" id="stamina-fill"></div><span id="stamina-text">100</span></div>
-        </div>
-      </div>
+
+      <!-- Side hints (desktop) -->
       <div id="hints">
-        <div><kbd>Shift</kbd> Shield</div>
-        <div><span class="mouse">LMB</span> Attack</div>
-        <div><kbd>Space</kbd> Evade</div>
+        <div><kbd>Shift</kbd> Guard</div>
+        <div><kbd>LMB</kbd> Attack</div>
+        <div><kbd>Space</kbd> Dash</div>
       </div>
+
+      <!-- Mobile controls -->
       <div id="touch-ui">
-        <div id="stick" aria-label="Move"><div id="stick-knob"></div></div>
+        <div id="stick"><div id="stick-knob"></div></div>
         <div id="touch-btns">
           <button type="button" id="btn-attack" class="tbtn atk">ATK</button>
-          <button type="button" id="btn-shield" class="tbtn shd">SHD</button>
-          <button type="button" id="btn-evade" class="tbtn evd">EVD</button>
-          <button type="button" id="btn-craft" class="tbtn">CRAFT</button>
-          <button type="button" id="btn-inv" class="tbtn">BAG</button>
+          <button type="button" id="btn-shield" class="tbtn shd">GRD</button>
+          <button type="button" id="btn-evade" class="tbtn evd">DASH</button>
         </div>
       </div>
+
       <div id="toast"></div>
       <div id="dmg-layer"></div>
-      <div id="interact-prompt" class="hidden">Press <kbd>F</kbd> / tap to open</div>
+      <div id="interact-prompt" class="hidden"><kbd>F</kbd> Open</div>
     </div>
 
     <div id="panel-inv" class="panel hidden">
-      <div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">✕</button></div>
+      <div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div>
       <div id="inv-grid"></div>
-      <div class="panel-foot">Gold <b id="gold-text">0</b> · Equipped <b id="eq-text">—</b></div>
+      <div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div>
     </div>
     <div id="panel-craft" class="panel hidden">
-      <div class="panel-head"><h2>Weapon Forge</h2><button class="panel-close" data-close="craft">✕</button></div>
+      <div class="panel-head"><h2>Forge</h2><button class="panel-close" data-close="craft">×</button></div>
       <div id="craft-list"></div>
     </div>
-    <div id="panel-level" class="panel hidden">
+    <div id="panel-level" class="panel hidden modal">
       <h2>Level Up</h2>
-      <p id="level-msg">Stronger still.</p>
+      <p id="level-msg"></p>
       <button id="btn-level-ok">Continue</button>
     </div>
-    <div id="death-screen" class="panel hidden">
+    <div id="death-screen" class="panel hidden modal">
       <h2>Fallen</h2>
-      <p>The wilds take another traveler…</p>
+      <p>The forest claims another traveler.</p>
       <button id="btn-respawn">Respawn at Camp</button>
     </div>
   </div>

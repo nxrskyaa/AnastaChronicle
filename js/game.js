@@ -64,7 +64,7 @@ export class Game {
     this.varMap = new Uint8Array(MAP_W * MAP_H);
     for (let i = 0; i < this.map.length; i++) {
       this.map[i] = 0;
-      this.varMap[i] = (rng() * 6) | 0;
+      this.varMap[i] = (rng() * 4) | 0;
     }
 
     // path
@@ -174,10 +174,20 @@ export class Game {
       y: sy,
       vx: 0,
       vy: 0,
+      ax: 0,
+      ay: 0,
       dir: "down",
+      faceX: 0,
+      faceY: 1,
       frame: 0,
       frameT: 0,
-      speed: 88,
+      anim: "idle",
+      moving: false,
+      dustT: 0,
+      speed: 92,
+      accel: 520,
+      friction: 780,
+      maxSpeed: 92,
       level: 1,
       xp: 0,
       hp: 50,
@@ -419,7 +429,7 @@ export class Game {
     );
     document.getElementById("btn-craft")?.addEventListener("click", () => this.ui.toggle("craft"));
     document.getElementById("btn-inv")?.addEventListener("click", () => this.ui.toggle("inv"));
-    document.querySelectorAll("#action-bar .slot").forEach((b) =>
+    document.querySelectorAll("#skillbar .sk[data-i]").forEach((b) =>
       b.addEventListener("click", () => this.useSkill(Number(b.dataset.i)))
     );
   }
@@ -456,59 +466,122 @@ export class Game {
       if (p.stamina <= 0) p.shield = false;
     } else p.stamina = Math.min(p.maxStamina, p.stamina + 22 * dt);
 
-    // evade toward mouse
+    // ===== MOVEMENT (accel + friction — weighty Stardew-like) =====
+    // dash
     if ((this.keys.Space || this.keys.KeyE) && p.evadeCd <= 0 && p.stamina >= 16) {
-      p.evadeT = 0.18;
-      p.evadeCd = 0.8;
+      p.evadeT = 0.16;
+      p.evadeCd = 0.75;
       p.stamina -= 16;
-      p.invuln = 0.18;
+      p.invuln = 0.16;
       const ang = Math.atan2(this.mouse.wy - p.y, this.mouse.wx - p.x);
-      p.vx = Math.cos(ang) * 220;
-      p.vy = Math.sin(ang) * 220;
+      p.vx = Math.cos(ang) * 240;
+      p.vy = Math.sin(ang) * 240;
+      p.anim = "dash";
+      for (let i = 0; i < 5; i++) {
+        this.particles.push({
+          x: p.x + (Math.random() - 0.5) * 8,
+          y: p.y + 2,
+          vx: -Math.cos(ang) * 30 + (Math.random() - 0.5) * 20,
+          vy: -Math.sin(ang) * 20 + (Math.random() - 0.5) * 20,
+          life: 0.25,
+          color: "#c8b090",
+        });
+      }
     }
 
-    let mx = 0,
-      my = 0;
-    if (this.keys.KeyW || this.keys.ArrowUp) my -= 1;
-    if (this.keys.KeyS || this.keys.ArrowDown) my += 1;
-    if (this.keys.KeyA || this.keys.ArrowLeft) mx -= 1;
-    if (this.keys.KeyD || this.keys.ArrowRight) mx += 1;
+    let ix = 0, iy = 0;
+    if (this.keys.KeyW || this.keys.ArrowUp) iy -= 1;
+    if (this.keys.KeyS || this.keys.ArrowDown) iy += 1;
+    if (this.keys.KeyA || this.keys.ArrowLeft) ix -= 1;
+    if (this.keys.KeyD || this.keys.ArrowRight) ix += 1;
     if (this.stick.active) {
-      mx += this.stick.x;
-      my += this.stick.y;
+      ix += this.stick.x;
+      iy += this.stick.y;
     }
-    if (Math.abs(mx) > 0.05 || Math.abs(my) > 0.05) {
-      const len = Math.hypot(mx, my) || 1;
-      mx /= len;
-      my /= len;
-      const slow = p.shield ? 0.55 : 1;
-      if (p.evadeT <= 0) {
-        p.vx = mx * p.speed * slow;
-        p.vy = my * p.speed * slow;
+    const inputLen = Math.hypot(ix, iy);
+    if (inputLen > 1) { ix /= inputLen; iy /= inputLen; }
+    else if (inputLen > 0.05) { ix /= inputLen; iy /= inputLen; }
+    else { ix = 0; iy = 0; }
+
+    const guarding = p.shield;
+    const maxSp = p.maxSpeed * (guarding ? 0.52 : 1) * (p.attackT > 0 ? 0.35 : 1);
+    const acc = p.accel * (guarding ? 0.7 : 1);
+
+    if (p.evadeT <= 0) {
+      if (inputLen > 0.05) {
+        // accelerate toward input
+        p.vx += ix * acc * dt;
+        p.vy += iy * acc * dt;
+        // clamp
+        const sp = Math.hypot(p.vx, p.vy);
+        if (sp > maxSp) {
+          p.vx = (p.vx / sp) * maxSp;
+          p.vy = (p.vy / sp) * maxSp;
+        }
+        p.moving = true;
+        p.anim = p.attackT > 0 ? "attack" : "walk";
+        // facing from movement (sticky until clear input)
+        if (Math.abs(ix) > Math.abs(iy)) {
+          p.dir = ix < 0 ? "left" : "right";
+          p.faceX = ix < 0 ? -1 : 1; p.faceY = 0;
+        } else {
+          p.dir = iy < 0 ? "up" : "down";
+          p.faceX = 0; p.faceY = iy < 0 ? -1 : 1;
+        }
+        // walk anim — speed-scaled frame rate
+        const spd = Math.hypot(p.vx, p.vy);
+        p.frameT += dt * (0.7 + spd / maxSp);
+        if (p.frameT > 0.11) {
+          p.frameT = 0;
+          p.frame = (p.frame + 1) % 4;
+        }
+        // footstep dust
+        p.dustT = (p.dustT || 0) - dt;
+        if (p.dustT <= 0 && spd > 40) {
+          p.dustT = 0.14;
+          this.particles.push({
+            x: p.x + (Math.random() - 0.5) * 6,
+            y: p.y + 2,
+            vx: (Math.random() - 0.5) * 12,
+            vy: -8 - Math.random() * 10,
+            life: 0.28,
+            color: "#b8a070",
+            dust: true,
+          });
+        }
+      } else {
+        // friction stop
+        const sp = Math.hypot(p.vx, p.vy);
+        if (sp > 0.5) {
+          const fr = Math.min(sp, p.friction * dt);
+          p.vx -= (p.vx / sp) * fr;
+          p.vy -= (p.vy / sp) * fr;
+        } else {
+          p.vx = 0; p.vy = 0;
+        }
+        p.moving = false;
+        if (p.attackT <= 0 && p.evadeT <= 0) {
+          p.anim = "idle";
+          // soft idle breathe — swap 0/1 slowly
+          p.frame = Math.floor(this.t * 1.6) % 2;
+        }
       }
-      if (Math.abs(mx) > Math.abs(my)) p.dir = mx < 0 ? "left" : "right";
-      else p.dir = my < 0 ? "up" : "down";
-      p.frameT += dt;
-      if (p.frameT > 0.09) {
-        p.frameT = 0;
-        p.frame = (p.frame + 1) % 6;
-      }
-    } else if (p.evadeT <= 0) {
-      p.vx *= 0.8;
-      p.vy *= 0.8;
-      if (Math.hypot(p.vx, p.vy) < 4) {
-        p.vx = p.vy = 0;
-        // idle breathe: oscillate 0-1 slowly
-        p.frame = Math.floor(this.t * 2) % 2 === 0 ? 0 : 1;
-      }
+    } else {
+      // during dash, bleed speed
+      p.vx *= 0.92;
+      p.vy *= 0.92;
     }
 
-    // face mouse when attacking
+    // face mouse while attacking / holding attack
     if (p.attackT > 0 || this.mouse.down) {
       const dx = this.mouse.wx - p.x;
       const dy = this.mouse.wy - p.y;
-      if (Math.abs(dx) > Math.abs(dy)) p.dir = dx < 0 ? "left" : "right";
-      else p.dir = dy < 0 ? "up" : "down";
+      if (Math.abs(dx) > Math.abs(dy)) {
+        p.dir = dx < 0 ? "left" : "right";
+      } else {
+        p.dir = dy < 0 ? "up" : "down";
+      }
+      if (p.attackT > 0) p.anim = "attack";
     }
 
     this._move(p, p.vx * dt, p.vy * dt, 5);
@@ -528,11 +601,13 @@ export class Game {
     this._updateDrops(dt);
     this._updateFx(dt);
 
-    // camera
-    const tx = p.x - VIEW_W / 2;
-    const ty = p.y - VIEW_H / 2 - 12;
-    this.cam.x += (tx - this.cam.x) * Math.min(1, 8 * dt);
-    this.cam.y += (ty - this.cam.y) * Math.min(1, 8 * dt);
+    // camera — smooth + slight look-ahead
+    const look = 18;
+    const tx = p.x - VIEW_W / 2 + (p.moving ? p.vx * 0.08 : 0);
+    const ty = p.y - VIEW_H / 2 - 10 + (p.moving ? p.vy * 0.06 : 0);
+    const camLerp = 1 - Math.exp(-7 * dt);
+    this.cam.x += (tx - this.cam.x) * camLerp;
+    this.cam.y += (ty - this.cam.y) * camLerp;
     this.cam.x = Math.max(0, Math.min(MAP_W * TILE - VIEW_W, this.cam.x));
     this.cam.y = Math.max(0, Math.min(MAP_H * TILE - VIEW_H, this.cam.y));
 
@@ -562,10 +637,14 @@ export class Game {
       return;
     }
     p.stamina = Math.max(0, p.stamina - w.cost);
-    p.attackT = 0.22;
+    p.attackT = 0.2;
     p.attackCd = w.speed;
+    p.anim = "attack";
 
     const ang = Math.atan2(this.mouse.wy - p.y, this.mouse.wx - p.x);
+    // short lunge into swing
+    p.vx += Math.cos(ang) * 55;
+    p.vy += Math.sin(ang) * 55;
     this.slashFx.push({
       x: p.x + Math.cos(ang) * 14,
       y: p.y + Math.sin(ang) * 10,
@@ -823,9 +902,9 @@ export class Game {
       e.hurtT = Math.max(0, e.hurtT - dt);
       e.atkCd = Math.max(0, e.atkCd - dt);
       e.frameT = (e.frameT || 0) + dt;
-      if (e.frameT > 0.12) {
+      if (e.frameT > 0.14) {
         e.frameT = 0;
-        e.frame = (e.frame + 1) % 6;
+        e.frame = (e.frame + 1) % 4;
       }
       e.sortY = e.y;
       const dx = p.x - e.x,
@@ -951,17 +1030,17 @@ export class Game {
     const y0 = Math.max(0, (this.cam.y / TILE) | 0);
     const x1 = Math.min(MAP_W - 1, ((this.cam.x + VIEW_W) / TILE) | 0);
     const y1 = Math.min(MAP_H - 1, ((this.cam.y + VIEW_H) / TILE) | 0);
-    const wf = (this.t * 4) | 0;
+    const wf = (this.t * 3) | 0;
 
     for (let ty = y0; ty <= y1; ty++) {
       for (let tx = x0; tx <= x1; tx++) {
         const t = this.map[ty * MAP_W + tx];
         const v = this.varMap[ty * MAP_W + tx];
         let key;
-        if (t === 3) key = `world/water_${wf % 6}`;
-        else if (t === 1) key = `world/path_${v % 6}`;
-        else if (t === 2) key = `world/path_${(v + 1) % 6}`;
-        else key = `world/grass_${v % 6}`;
+        if (t === 3) key = `world/water_${wf % 4}`;
+        else if (t === 1) key = `world/path_${v % 4}`;
+        else if (t === 2) key = `world/path_${(v + 1) % 4}`;
+        else key = `world/grass_${v % 4}`;
         const im = img(key);
         if (im) ctx.drawImage(im, tx * TILE, ty * TILE);
       }
@@ -974,7 +1053,7 @@ export class Game {
       if (tr.hp <= 0) continue;
       list.push({ sortY: tr.y + 22, draw: () => {
         const im = img(`world/tree_${tr.v}`);
-        if (im) ctx.drawImage(im, tr.x - 28, tr.y - 60);
+        if (im) ctx.drawImage(im, Math.round(tr.x - 24), Math.round(tr.y - 56));
       }});
     }
     for (const rk of this.rocks) {
@@ -986,7 +1065,7 @@ export class Game {
     }
     for (const to of this.torches) {
       list.push({ sortY: to.y + 8, draw: () => {
-        const im = img(`world/torch_${((this.t * 10) | 0) % 6}`);
+        const im = img(`world/torch_${((this.t * 8) | 0) % 4}`);
         if (im) ctx.drawImage(im, to.x - 8, to.y - 28);
       }});
     }
@@ -998,7 +1077,7 @@ export class Game {
     }
     // camp
     list.push({ sortY: this.camp.y + 6, draw: () => {
-      const im = img(`world/camp_${((this.t * 8) | 0) % 6}`);
+      const im = img(`world/camp_${((this.t * 7) | 0) % 4}`);
       if (im) ctx.drawImage(im, this.camp.x - 16, this.camp.y - 20);
     }});
 
@@ -1023,7 +1102,7 @@ export class Game {
           ctx.globalAlpha = 0.7;
           ctx.filter = "brightness(2)";
         }
-        ctx.drawImage(im, e.x - 16, e.y - 22);
+        ctx.drawImage(im, Math.round(e.x - 14), Math.round(e.y - 18));
         ctx.filter = "none";
         ctx.globalAlpha = 1;
         // hp bar
@@ -1041,9 +1120,9 @@ export class Game {
     const p = this.player;
     list.push({ sortY: p.y + 4, draw: () => {
       if (p.invuln > 0 && Math.floor(this.t * 16) % 2 === 0) return;
-      const key = p.attackT > 0 ? `player/p_${p.dir}_atk` : `player/p_${p.dir}_${p.frame % 6}`;
+      const key = p.attackT > 0 ? `player/p_${p.dir}_atk` : `player/p_${p.dir}_${p.frame % 4}`;
       const im = img(key);
-      if (im) ctx.drawImage(im, p.x - 20, p.y - 40);
+      if (im) ctx.drawImage(im, Math.round(p.x - 16), Math.round(p.y - 36));
       if (p.shield) {
         ctx.strokeStyle = "rgba(120,180,255,0.65)";
         ctx.lineWidth = 2;
