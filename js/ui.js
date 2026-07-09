@@ -66,7 +66,7 @@ export class UI {
     setW("stamina-fill", p.stamina/p.maxStamina*100);
     setW("xp-fill", p.xp/xpFor(p.level)*100);
     const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-    set("hp-text", Math.ceil(p.hp)); set("stamina-text", Math.ceil(p.stamina));
+    set("hp-text", Math.max(0, Math.ceil(p.hp))); set("stamina-text", Math.ceil(p.stamina));
     set("xp-text", "LV "+p.level); set("gold-text", p.gold);
     set("eq-text", ITEMS[p.equipped]?.name || "—");
     const maxCd=[4,6,7,5];
