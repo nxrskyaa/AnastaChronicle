@@ -37,96 +37,147 @@ function shade(hex, f) {
 function px(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
 
 // Draw one body frame. phase: walk bob index; atk: 0..1 swing progress (or null)
+// Top-down 3/4 RPG proportions: distinct head, shouldered torso, two legs.
 function drawBody(ctx, look, dir, frame, atkPhase) {
-  const O = "#26222a";
-  const sk = look.skin, sk2 = shade(look.skin, 0.85), sk3 = shade(look.skin, 0.7);
-  const hr = look.hair, hr2 = shade(look.hair, 1.2), hr3 = shade(look.hair, 0.75);
-  const sh = look.shirt, sh2 = shade(look.shirt, 0.82), sh3 = shade(look.shirt, 0.68);
-  const pn = look.pants, pn2 = shade(look.pants, 0.8);
-  const bt = look.boots, bt2 = shade(look.boots, 0.75);
-
-  const bob = atkPhase != null ? 0 : [0, 1, 0, -1][frame % 4];
-  const legA = atkPhase != null ? 0 : [0, 3, 0, -3][frame % 4];
-  const armSw = atkPhase != null ? 0 : [0, 2, 0, -2][frame % 4];
-  const by = bob;
-
-  // shadow
-  ctx.fillStyle = "rgba(20,18,22,0.28)";
-  ctx.beginPath(); ctx.ellipse(16, 37, 8, 2.5, 0, 0, 7); ctx.fill();
-
-  // ---- legs ----
-  if (dir === "down" || dir === "up") {
-    px(ctx, 11, 27 + by + Math.max(0, legA >> 1), 4, 8, pn);
-    px(ctx, 11, 27 + by, 4, 2, pn2);
-    px(ctx, 10, 34 + by + Math.max(0, legA >> 1), 5, 3, bt);
-    px(ctx, 10, 36 + by + Math.max(0, legA >> 1), 5, 1, bt2);
-    px(ctx, 17, 27 + by + Math.max(0, -legA >> 1), 4, 8, pn);
-    px(ctx, 17, 27 + by, 4, 2, pn2);
-    px(ctx, 17, 34 + by + Math.max(0, -legA >> 1), 5, 3, bt);
-    px(ctx, 17, 36 + by + Math.max(0, -legA >> 1), 5, 1, bt2);
-  } else {
-    const off = dir === "right" ? legA : -legA;
-    px(ctx, 14, 27 + by, 4, 8, pn);
-    px(ctx, 14 + off, 29 + by, 4, 6, pn2);
-    px(ctx, 13 + off, 34 + by, 6, 3, bt);
-    px(ctx, 13 + off, 36 + by, 6, 1, bt2);
-  }
-
-  // ---- torso ----
-  ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(16, 21 + by, 8, 8, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = sh2; ctx.beginPath(); ctx.ellipse(16, 20 + by, 7, 6, 0, 0, 7); ctx.fill();
-  px(ctx, 14, 17 + by, 8, 7, sh);
-  px(ctx, 15, 18 + by, 6, 5, sh2);
-  px(ctx, 12, 25 + by, 12, 2, shade(look.pants, 0.9)); // belt
-
-  // ---- arms ----
-  const armY = 17 + by;
-  if (dir === "down") {
-    px(ctx, 8, armY + armSw, 3, 7, sh3); px(ctx, 8, armY + 6 + armSw, 3, 2, sk);
-    px(ctx, 22, armY - armSw, 3, 7, sh3); px(ctx, 22, armY + 6 - armSw, 3, 2, sk);
-  } else if (dir === "up") {
-    px(ctx, 8, armY, 3, 7, sh3); px(ctx, 22, armY, 3, 7, sh3);
-  } else if (dir === "left") {
-    px(ctx, 9, armY + armSw, 3, 7, sh3); px(ctx, 8, armY + 6 + armSw, 3, 2, sk);
-  } else {
-    px(ctx, 21, armY - armSw, 3, 7, sh3); px(ctx, 23, armY + 6 - armSw, 3, 2, sk);
-  }
-
-  // ---- head ----
-  const hy = 10 + by;
-  ctx.fillStyle = sk; ctx.beginPath(); ctx.ellipse(16, hy, 6, 6, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = sk2; ctx.beginPath(); ctx.ellipse(16, hy + 1, 5, 4, 0, 0, 7); ctx.fill();
-
-  // hair by style
-  const st = look.style;
+  const O = "#211d26";
+  const sk = look.skin, sk2 = shade(look.skin, 0.86), sk3 = shade(look.skin, 0.72);
+  const hr = look.hair, hr2 = shade(look.hair, 1.22), hr3 = shade(look.hair, 0.72);
+  const sh = look.shirt, sh2 = shade(look.shirt, 0.8), sh3 = shade(look.shirt, 0.64);
+  const pn = look.pants, pn2 = shade(look.pants, 0.78), pn3 = shade(look.pants, 0.62);
+  const bt = look.boots, bt2 = shade(look.boots, 0.72);
   const eyeCol = look.eyes || "#26222a";
+  const st = look.style;
+
+  const walking = atkPhase == null;
+  const bob = walking ? [0, -1, 0, -1][frame % 4] : 0;      // subtle vertical bob
+  const step = walking ? [0, 1, 0, -1][frame % 4] : 0;       // leg stride
+  const by = bob;
+  const cx = 16;
+
+  // ground shadow
+  ctx.fillStyle = "rgba(18,16,20,0.30)";
+  ctx.beginPath(); ctx.ellipse(cx, 37, 7, 2.2, 0, 0, 7); ctx.fill();
+
+  // ================= LEGS (distinct, with stride) =================
+  const legTop = 27 + by, legLen = 7;
+  if (dir === "left" || dir === "right") {
+    const front = dir === "right" ? step : -step;
+    const back = -front;
+    // back leg
+    px(ctx, cx - 2, legTop, 3, legLen + back, pn2);
+    px(ctx, cx - 3, legTop + legLen + back, 5, 2, bt2);
+    // front leg
+    px(ctx, cx - 1, legTop, 3, legLen + front, pn);
+    px(ctx, cx - 2, legTop + legLen + front, 5, 2, bt);
+  } else {
+    const lOff = step, rOff = -step;
+    // left leg
+    px(ctx, cx - 4, legTop, 3, legLen + Math.max(0, lOff), pn);
+    px(ctx, cx - 4, legTop, 3, 2, pn2);
+    px(ctx, cx - 5, legTop + legLen + Math.max(0, lOff), 5, 2, bt);
+    px(ctx, cx - 5, legTop + legLen + 1 + Math.max(0, lOff), 5, 1, bt2);
+    // right leg
+    px(ctx, cx + 1, legTop, 3, legLen + Math.max(0, rOff), pn);
+    px(ctx, cx + 1, legTop, 3, 2, pn2);
+    px(ctx, cx, legTop + legLen + Math.max(0, rOff), 5, 2, bt);
+    px(ctx, cx, legTop + legLen + 1 + Math.max(0, rOff), 5, 1, bt2);
+  }
+
+  // ================= TORSO (trapezoid, shoulders wider than waist) =========
+  const tTop = 16 + by, tBot = 27 + by;
+  // shirt body as a shouldered trapezoid, NOT a circle
+  ctx.fillStyle = sh;
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, tTop + 1);     // left shoulder
+  ctx.lineTo(cx + 6, tTop + 1);     // right shoulder
+  ctx.lineTo(cx + 4, tBot);         // right waist
+  ctx.lineTo(cx - 4, tBot);         // left waist
+  ctx.closePath(); ctx.fill();
+  // shading down the left side + center highlight
+  ctx.fillStyle = sh2;
+  ctx.beginPath(); ctx.moveTo(cx - 6, tTop + 1); ctx.lineTo(cx - 2, tTop + 1); ctx.lineTo(cx - 1, tBot); ctx.lineTo(cx - 4, tBot); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = sh3;
+  px(ctx, cx - 6, tTop + 1, 12, 1, sh3);      // collar line shade
+  // belt
+  px(ctx, cx - 4, tBot - 1, 8, 2, pn3);
+  px(ctx, cx - 1, tBot - 1, 2, 2, shade(look.boots, 1.1)); // buckle
+
+  // ================= ARMS (at the sides, swing while walking) ==============
+  const armSw = walking ? [0, 1, 0, -1][frame % 4] : 0;
+  if (dir === "down" || dir === "up") {
+    // left arm
+    px(ctx, cx - 8, tTop + 1 + armSw, 2, 8, sh2);
+    if (dir === "down") px(ctx, cx - 8, tTop + 8 + armSw, 2, 2, sk);
+    // right arm
+    px(ctx, cx + 6, tTop + 1 - armSw, 2, 8, sh2);
+    if (dir === "down") px(ctx, cx + 6, tTop + 8 - armSw, 2, 2, sk);
+  } else if (dir === "left") {
+    px(ctx, cx - 5, tTop + 2 + armSw, 2, 8, sh2);
+    px(ctx, cx - 5, tTop + 9 + armSw, 2, 2, sk);
+  } else {
+    px(ctx, cx + 3, tTop + 2 - armSw, 2, 8, sh2);
+    px(ctx, cx + 3, tTop + 9 - armSw, 2, 2, sk);
+  }
+
+  // ================= HEAD (defined, slightly large but not a blob) =========
+  const hy = 10 + by;
+  // neck
+  px(ctx, cx - 1, tTop - 2, 2, 3, sk2);
+  // head shape: rounded square, taller than wide feels more human
+  ctx.fillStyle = sk;
+  roundRect(ctx, cx - 5, hy - 5, 10, 11, 3); ctx.fill();
+  // cheek shading (right side away from light)
+  ctx.fillStyle = sk2; roundRect(ctx, cx + 1, hy - 3, 4, 8, 2); ctx.fill();
+  ctx.fillStyle = sk3; px(ctx, cx - 5, hy + 4, 10, 1, sk3); // jaw shade
+
+  // ---- hair by style ----
   if (st !== "bald") {
-    if (dir !== "up") {
-      ctx.fillStyle = hr; ctx.beginPath(); ctx.ellipse(16, hy - 3, 6, 4, 0, 0, 7); ctx.fill();
-      px(ctx, 11, hy - 2, 10, 3, hr2);
-      if (st === "spiky") { for (let i = 0; i < 5; i++) px(ctx, 11 + i * 2.2, hy - 6, 2, 3, hr); }
-      if (st === "mohawk") { px(ctx, 15, hy - 8, 2, 6, hr); px(ctx, 15, hy - 8, 2, 2, hr2); }
-      if (st === "long") { px(ctx, 10, hy, 2, 9, hr); px(ctx, 20, hy, 2, 9, hr); }
-      if (st === "ponytail") { px(ctx, 20, hy - 2, 3, 3, hr); px(ctx, 21, hy + 1, 2, 7, hr); }
-      px(ctx, 10, hy, 2, 4, hr); px(ctx, 20, hy, 2, 4, hr);
-      for (let x = 12; x < 21; x++) if ((x + frame) % 3) px(ctx, x, hy, 1, 1, hr3);
+    if (dir === "up") {
+      // back of head fully covered
+      ctx.fillStyle = hr; roundRect(ctx, cx - 5, hy - 6, 10, 9, 3); ctx.fill();
+      ctx.fillStyle = hr2; px(ctx, cx - 5, hy - 6, 10, 2, hr2);
+      if (st === "long") { px(ctx, cx - 5, hy, 2, 10, hr); px(ctx, cx + 3, hy, 2, 10, hr); }
+      if (st === "ponytail") { px(ctx, cx - 1, hy + 3, 2, 8, hr); px(ctx, cx - 1, hy + 9, 2, 2, hr2); }
+      if (st === "mohawk") { px(ctx, cx - 1, hy - 7, 2, 8, hr2); }
     } else {
-      ctx.fillStyle = hr; ctx.beginPath(); ctx.ellipse(16, hy - 2, 6, 5, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = hr2; ctx.beginPath(); ctx.ellipse(16, hy, 5, 3, 0, 0, 7); ctx.fill();
-      if (st === "long") { px(ctx, 10, hy, 2, 9, hr); px(ctx, 20, hy, 2, 9, hr); }
-      if (st === "ponytail") { px(ctx, 15, hy + 3, 2, 7, hr); }
-      if (st === "mohawk") { px(ctx, 15, hy - 4, 2, 6, hr); }
+      // top + sides fringe
+      ctx.fillStyle = hr; roundRect(ctx, cx - 6, hy - 6, 12, 6, 3); ctx.fill();
+      px(ctx, cx - 6, hy - 2, 2, 4, hr);      // left sideburn
+      px(ctx, cx + 4, hy - 2, 2, 4, hr);      // right sideburn
+      ctx.fillStyle = hr2; px(ctx, cx - 5, hy - 6, 10, 2, hr2);  // top highlight
+      // fringe strands over forehead
+      ctx.fillStyle = hr3;
+      for (let x = cx - 4; x < cx + 5; x += 2) px(ctx, x, hy - 1, 1, 2, hr3);
+      if (st === "spiky") { for (let i = 0; i < 5; i++) { px(ctx, cx - 5 + i * 2.4, hy - 9, 2, 4, hr); px(ctx, cx - 5 + i * 2.4, hy - 9, 1, 2, hr2); } }
+      if (st === "mohawk") { px(ctx, cx - 1, hy - 10, 3, 6, hr); px(ctx, cx - 1, hy - 10, 3, 2, hr2); }
+      if (st === "long") { px(ctx, cx - 7, hy - 2, 2, 12, hr); px(ctx, cx + 5, hy - 2, 2, 12, hr); px(ctx, cx - 7, hy + 8, 2, 2, hr3); px(ctx, cx + 5, hy + 8, 2, 2, hr3); }
+      if (st === "ponytail") { px(ctx, cx + 5, hy - 3, 3, 3, hr); px(ctx, cx + 6, hy, 2, 8, hr); }
     }
   }
 
-  // face
+  // ---- face ----
   if (dir === "down") {
-    px(ctx, 13, hy, 2, 2, eyeCol); px(ctx, 18, hy, 2, 2, eyeCol);
-    px(ctx, 13, hy - 1, 1, 1, "#fff"); px(ctx, 18, hy - 1, 1, 1, "#fff");
-    px(ctx, 12, hy + 2, 1, 1, sk3); px(ctx, 20, hy + 2, 1, 1, sk3);
-    px(ctx, 15, hy + 3, 3, 1, sk3);
-  } else if (dir === "left") { px(ctx, 12, hy, 2, 2, eyeCol); px(ctx, 12, hy - 1, 1, 1, "#fff"); }
-  else if (dir === "right") { px(ctx, 19, hy, 2, 2, eyeCol); px(ctx, 19, hy - 1, 1, 1, "#fff"); }
+    px(ctx, cx - 3, hy + 1, 2, 2, "#fff"); px(ctx, cx + 1, hy + 1, 2, 2, "#fff");
+    px(ctx, cx - 3, hy + 1, 1, 2, eyeCol); px(ctx, cx + 2, hy + 1, 1, 2, eyeCol);
+    px(ctx, cx - 4, hy + 3, 1, 1, "#e89aa0"); px(ctx, cx + 3, hy + 3, 1, 1, "#e89aa0"); // cheeks
+    px(ctx, cx - 1, hy + 4, 2, 1, sk3);      // mouth
+  } else if (dir === "left") {
+    px(ctx, cx - 4, hy + 1, 2, 2, "#fff"); px(ctx, cx - 4, hy + 1, 1, 2, eyeCol);
+    px(ctx, cx - 5, hy + 3, 1, 1, "#e89aa0");
+  } else if (dir === "right") {
+    px(ctx, cx + 2, hy + 1, 2, 2, "#fff"); px(ctx, cx + 3, hy + 1, 1, 2, eyeCol);
+    px(ctx, cx + 4, hy + 3, 1, 1, "#e89aa0");
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)

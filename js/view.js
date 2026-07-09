@@ -6,12 +6,15 @@ export const view = { w: 420, h: 236, scale: 3 };
 export function computeView(canvas) {
   const sw = Math.max(1, window.innerWidth);
   const sh = Math.max(1, window.innerHeight);
-  // choose a pixel scale so we get a comfortable zoom (~250px of game height)
-  let scale = Math.round(sh / 250);
+  const portrait = sh > sw;
+  // Aim for MORE visible world on phones (less zoom). Portrait phones get a
+  // taller game-space target so the camera pulls back; desktop stays crisp.
+  const targetH = portrait ? 400 : 300;
+  let scale = Math.round(sh / targetH);
   scale = Math.max(2, Math.min(5, scale));
-  // internal resolution = display / scale  -> aspect ratio matches display exactly
-  let w = Math.round(sw / scale);
-  let h = Math.round(sh / scale);
+  // internal resolution = display / scale -> aspect matches display exactly (no stretch)
+  const w = Math.round(sw / scale);
+  const h = Math.round(sh / scale);
   view.scale = scale;
   view.w = w;
   view.h = h;

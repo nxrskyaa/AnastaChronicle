@@ -58,6 +58,16 @@ Game.prototype.update = function (dt) {
     if (!fx && !fy) { p.vx = 0; p.vy = 300; }
   }
 
+  // fishing freezes movement/combat; F reels (handled via interact)
+  if (this.fishing) {
+    this.updateFishing(dt);
+    p.vx = 0; p.vy = 0; p.moving = false;
+    // any movement input cancels the cast
+    if (this.keys.KeyW || this.keys.KeyS || this.keys.KeyA || this.keys.KeyD || (this.stick && this.stick.active)) {
+      this.fishing = null;
+    }
+  }
+
   let ix = 0, iy = 0;
   if (this.moveMode === "tap" && this.moveTarget) {
     const dx = this.moveTarget.x - p.x, dy = this.moveTarget.y - p.y, d = Math.hypot(dx, dy);
@@ -285,17 +295,72 @@ Game.prototype.updateInteract = function () {
       if (Math.hypot(c.x - p.x, c.y - p.y) < 30) { target = c; kind = "chest"; label = c.pet ? "Open (?)" : "Open Chest"; break; }
     }
   }
+  // water's edge -> fishing prompt (a water tile within reach in front/around)
+  if (!target && !this.fishing) {
+    const T = 24, MW = 110;
+    const near = [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, 1], [1, -1], [-1, 1]];
+    const ptx = (p.x / T) | 0, pty = (p.y / T) | 0;
+    for (const [dx, dy] of near) {
+      const tx = ptx + dx, ty = pty + dy;
+      if (tx < 0 || ty < 0 || tx >= MW || ty >= 110) continue;
+      if (this.map[ty * MW + tx] === 2) { target = { x: (tx + 0.5) * T, y: (ty + 0.5) * T }; kind = "fish"; label = "Cast Line"; break; }
+    }
+  }
   this._interactTarget = target; this._interactKind = kind;
-  this.ui.setInteract(!!target, label);
+  this.ui.setInteract(!!target || !!this.fishing, this.fishing ? (this.fishing.state === "bite" ? "REEL! (F)" : "Fishing…") : label);
   // mobile QoL: auto-open a chest you walk right on top of
   if (kind === "chest" && target && !target.opened && Math.hypot(target.x - p.x, target.y - p.y) < 18) {
     this.interact();
   }
 };
 
+// Fishing mini-game: cast -> wait (random) -> bite window -> reel (F) to catch.
+Game.prototype.startFishing = function (spot) {
+  const p = this.player;
+  p.dir = spot.y < p.y ? "up" : spot.y > p.y ? "down" : (spot.x < p.x ? "left" : "right");
+  this.fishing = { state: "cast", t: 0, wait: 1.2 + Math.random() * 2.8, spot, bobX: spot.x, bobY: spot.y };
+  this.audio.sfx("ui");
+  this.ui.toast("Line cast! Wait for a bite…");
+};
+Game.prototype.updateFishing = function (dt) {
+  const f = this.fishing; if (!f) return;
+  f.t += dt;
+  if (f.state === "cast") {
+    if (f.t >= f.wait) { f.state = "bite"; f.t = 0; f.window = 1.1; this.audio.sfx("quest"); this.ui.toast("A bite! Press F to reel!"); this.shake = Math.max(this.shake, 3); }
+  } else if (f.state === "bite") {
+    if (f.t >= f.window) { // missed
+      this.fishing = null; this.ui.toast("The fish got away…"); this.audio.sfx("hurt");
+    }
+  }
+};
+Game.prototype.reelFish = function () {
+  const f = this.fishing; if (!f) return;
+  if (f.state === "bite") {
+    // caught!
+    this.fishing = null;
+    this.quests.fishCount++;
+    const p = this.player;
+    const fishTypes = ["Minnow", "Bass", "Trout", "Carp", "Golden Fish"];
+    const rare = Math.random() < 0.15;
+    const fish = rare ? "Golden Fish" : fishTypes[(Math.random() * 4) | 0];
+    const gold = rare ? 40 : 6 + ((Math.random() * 10) | 0);
+    p.gold += gold;
+    p.inv.fish = (p.inv.fish || 0) + 1;
+    this.audio.sfx("level");
+    for (let i = 0; i < 12; i++) this.particles.push({ x: f.bobX, y: f.bobY, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 40, life: 0.7, color: rare ? "rgba(240,216,120,0.95)" : "rgba(150,220,255,0.9)" });
+    this.ui.toast(`Caught a ${fish}! +${gold}g`);
+    this.ui.sync && this.ui.sync();
+  } else if (f.state === "cast") {
+    this.fishing = null; this.ui.toast("Reeled in early.");
+  }
+};
+
 Game.prototype.interact = function () {
+  // fishing takes priority: reel if a line is out
+  if (this.fishing) { this.reelFish(); return; }
   const t = this._interactTarget, kind = this._interactKind;
   if (!t) return;
+  if (kind === "fish") { this.startFishing(t); return; }
   if (kind === "npc") { this.ui.showDialog(t, this); return; }
   if (kind === "chest" && !t.opened) {
     t.opened = true; t.openT = 0;

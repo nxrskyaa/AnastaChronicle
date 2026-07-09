@@ -55,14 +55,8 @@ export class UI {
 
   showDialog(npc, game) {
     this.closeAll();
-    document.getElementById("dialog-name").textContent = npc.name;
-    const lines = {
-      Warden: "The wilds grow restless. Cull the creatures and I'll reward you.",
-      Alchemist: "I need reagents for my brews. Slime gel, specifically.",
-      Smith: "Bring me ore and I'll forge you something worth swinging.",
-      Explorer: "Chests dot these woods. Crack a few open for me, will you?",
-    };
-    document.getElementById("dialog-text").textContent = lines[npc.name] || "Well met, traveler.";
+    document.getElementById("dialog-name").textContent = npc.role ? `${npc.name} · ${npc.role}` : npc.name;
+    document.getElementById("dialog-text").textContent = npc.line || "Well met, traveler.";
     const wrap = document.getElementById("dialog-quests"); wrap.innerHTML = "";
     const list = game.quests.forGiver(npc.name, game.player.inv);
     for (const it of list) {

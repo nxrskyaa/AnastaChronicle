@@ -188,6 +188,25 @@ Game.prototype.render = function () {
   ctx.globalAlpha = 1;
 
   this.renderFX(ctx, camx, camy);
+  // fishing line + bobber
+  if (this.fishing) {
+    const f = this.fishing, p = this.player;
+    const px = Math.round(p.x - camx), py = Math.round(p.y - camy - 20);
+    const bx = Math.round(f.bobX - camx), by = Math.round(f.bobY - camy);
+    ctx.strokeStyle = "rgba(240,240,240,0.7)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(bx, by); ctx.stroke();
+    const bounce = f.state === "bite" ? Math.sin(this.t * 30) * 2 : Math.sin(this.t * 3) * 1;
+    // bobber
+    ctx.fillStyle = "#e05050"; ctx.beginPath(); ctx.arc(bx, by + bounce, 2.5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.fillRect(bx - 1, by + bounce, 2, 1);
+    if (f.state === "bite") {
+      // ripple + "!" alert
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(this.t * 20)})`;
+      ctx.beginPath(); ctx.arc(bx, by, 5 + Math.sin(this.t * 12) * 2, 0, 7); ctx.stroke();
+      ctx.fillStyle = "#ffd24a"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("!", bx, by - 8); ctx.textAlign = "left";
+    }
+  }
   // ambient critters: butterflies by day, glowing fireflies at night
   const night = this.time > 19 * 60 || this.time < 5 * 60;
   if (this.critters) for (const c of this.critters) {

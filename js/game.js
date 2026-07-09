@@ -79,10 +79,12 @@ export class Game {
         const i = y * MAP_W + x;
         const lake = Math.hypot(x - 80, y - 28) < 13;
         const beach = Math.hypot(x - 80, y - 28) < 16;
+        const pond = Math.hypot(x - 64, y - 50) < 4.2;        // small pond near camp for fishing
+        const pondEdge = Math.hypot(x - 64, y - 50) < 5.4;
         const snow = y < 18 && x < 46;                 // north-west snow biome
         const deepForest = x > 74 && y > 70;           // SE dark forest
-        if (lake) m[i] = 2;
-        else if (beach) m[i] = 3;
+        if (lake || pond) m[i] = 2;
+        else if (beach || pondEdge) m[i] = 3;
         else if (snow) m[i] = 4;
         else if (deepForest) m[i] = 5;
         else m[i] = 0;
@@ -165,7 +167,7 @@ export class Game {
     // NPCs around camp
     for (const def of NPC_DEFS) {
       this.npcs.push({
-        name: def.name, look: def.look,
+        name: def.name, look: def.look, role: def.role, line: def.line,
         x: this.camp.x + def.dx, y: this.camp.y + def.dy,
         dir: "down", frame: 0, frameT: Math.random() * 4, sortY: 0,
         cache: buildCharacter({ ...DEFAULT_LOOK, ...def.look, name: def.name }),

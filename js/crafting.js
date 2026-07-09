@@ -4,6 +4,7 @@ export const ITEMS = {
   ore:    { name: "Ore" },
   gel:    { name: "Slime Gel" },
   herb:   { name: "Herb" },
+  fish:   { name: "Fish" },
   sword:  { name: "Sword", weapon: true },
   axe:    { name: "Axe", weapon: true },
   spear:  { name: "Spear", weapon: true },
