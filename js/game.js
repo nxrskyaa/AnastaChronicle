@@ -175,7 +175,7 @@ export class Game {
 
     // ambient wildlife — butterflies (day) / fireflies (night), passive & harmless
     this.critters = [];
-    for (let k = 0; k < 26; k++) {
+    for (let k = 0; k < 44; k++) {
       const x = rand(6 * T, (MAP_W - 6) * T), y = rand(6 * T, (MAP_H - 6) * T);
       this.critters.push({ x, y, hx: x, hy: y, a: Math.random() * 7, spd: 0.5 + Math.random(), r: 10 + Math.random() * 30, kind: Math.random() < 0.5 ? "fly" : "bird", ph: Math.random() * 7 });
     }

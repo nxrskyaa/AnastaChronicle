@@ -170,18 +170,29 @@ Game.prototype.render = function () {
   // ambient critters: butterflies by day, glowing fireflies at night
   const night = this.time > 19 * 60 || this.time < 5 * 60;
   if (this.critters) for (const c of this.critters) {
-    const sx = c.x - camx, sy = c.y - camy - 10;
+    const sx = Math.round(c.x - camx), sy = Math.round(c.y - camy - 12);
     if (sx < -8 || sx > view.w + 8 || sy < -8 || sy > view.h + 8) continue;
     if (night) {
-      const glow = 0.5 + 0.5 * Math.sin(c.ph);
-      ctx.fillStyle = `rgba(200,255,140,${glow})`; ctx.fillRect(sx, sy, 2, 2);
-      ctx.fillStyle = `rgba(160,255,100,${glow * 0.3})`; ctx.fillRect(sx - 1, sy - 1, 4, 4);
+      const glow = 0.4 + 0.6 * Math.sin(c.ph);
+      ctx.fillStyle = `rgba(160,255,100,${glow * 0.25})`; ctx.beginPath(); ctx.arc(sx, sy, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = `rgba(220,255,160,${glow})`; ctx.fillRect(sx, sy, 2, 2);
     } else {
-      const wing = Math.sin(c.ph) > 0 ? 2 : 1;
-      const col = c.kind === "bird" ? "#5a6a80" : "#f0a0d0";
-      ctx.fillStyle = col;
-      ctx.fillRect(sx - wing, sy, wing, 1); ctx.fillRect(sx + 1, sy, wing, 1);
-      ctx.fillRect(sx, sy, 1, 1);
+      const flap = Math.sin(c.ph) > 0;
+      if (c.kind === "bird") {
+        // little "m" shaped bird
+        ctx.strokeStyle = "#48566e"; ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(sx - 3, sy); ctx.quadraticCurveTo(sx - 1, sy - (flap ? 3 : 1), sx, sy);
+        ctx.quadraticCurveTo(sx + 1, sy - (flap ? 3 : 1), sx + 3, sy); ctx.stroke();
+      } else {
+        // butterfly: body + 2 wings that flap
+        const wy = flap ? 2 : 3, wx = flap ? 3 : 2;
+        const col = ["#f0a0d0", "#f0c860", "#a0c0f0", "#f08080"][(c.ph | 0) % 4] || "#f0a0d0";
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.ellipse(sx - 2, sy, wx, wy, 0.5, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(sx + 2, sy, wx, wy, -0.5, 0, 7); ctx.fill();
+        ctx.fillStyle = "#3a2a3a"; ctx.fillRect(sx, sy - 2, 1, 4);
+      }
     }
   }
   this.renderDayNight(ctx);

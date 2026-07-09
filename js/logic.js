@@ -32,10 +32,10 @@ Game.prototype.update = function (dt) {
   if (this.weatherT <= 0) {
     const roll = Math.random();
     const snowBiome = this.tileAt(p.x, p.y) === 4;
-    if (roll < 0.5) this.weather = "clear";
-    else if (roll < 0.78) this.weather = snowBiome ? "snow" : "rain";
+    if (roll < 0.68) this.weather = "clear";
+    else if (roll < 0.86) this.weather = snowBiome ? "snow" : "rain";
     else this.weather = "snow";
-    this.weatherT = 25 + Math.random() * 30;
+    this.weatherT = 35 + Math.random() * 40;
     if (this.weather !== "clear") this.ui.toast(this.weather === "rain" ? "It starts to rain…" : "Snow begins to fall…");
   }
 
