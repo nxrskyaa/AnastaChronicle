@@ -68,38 +68,45 @@ class Audio {
     }
   }
 
-  // ---- procedural music: simple looped chord + arpeggio ----
+  // ---- procedural music: slow, soft, relaxing ambient pads + gentle arps ----
   startMusic(mood = "explore") {
     if (!this.ctx || this._track === mood) return;
     this.stopMusic();
     this._track = mood;
-    const scales = {
-      explore: [220, 246.94, 293.66, 329.63, 392, 440],   // A minor pentatonic-ish, calm
-      title:   [261.63, 329.63, 392, 523.25, 659.25],     // C major bright
+    // soft major pentatonic — calm, never dissonant
+    const scale = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33];
+    const chords = [ // gentle I–vi–IV–V feel with low roots
+      [130.81, 196.0, 261.63],
+      [110.0, 164.81, 220.0],
+      [174.61, 220.0, 261.63],
+      [196.0, 246.94, 293.66],
+    ];
+    let bar = 0, step = 0;
+    const beat = 60 / 60; // 60bpm — slow
+    const soft = (freq, dur, type, vol, target) => {
+      const t = this.ctx.currentTime;
+      const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+      const filt = this.ctx.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 1400;
+      o.type = type; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + dur * 0.25);   // slow attack
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);        // slow release
+      o.connect(filt); filt.connect(g); g.connect(target); o.start(t); o.stop(t + dur + 0.1);
     };
-    const scale = scales[mood] || scales.explore;
-    let step = 0;
-    const bpm = mood === "title" ? 96 : 76;
-    const beat = 60 / bpm;
-    const bass = [110, 110, 146.83, 130.81];
     this._musicTimer = setInterval(() => {
       if (!this.musicOn) return;
-      const t = this.ctx.currentTime;
-      // bass note every 2 steps
-      if (step % 2 === 0) {
-        const bf = bass[(step / 2) % bass.length];
-        const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
-        o.type = "triangle"; o.frequency.value = bf;
-        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + beat * 1.6);
-        o.connect(g); g.connect(this.musicGain); o.start(t); o.stop(t + beat * 1.8);
+      const chord = chords[bar % chords.length];
+      // sustained pad on downbeat
+      if (step % 4 === 0) {
+        for (const f of chord) soft(f, beat * 4.2, "sine", 0.16, this.musicGain);
+        bar++;
       }
-      // melody note
-      const mf = scale[(step * 3 + (step % 5)) % scale.length] * (step % 8 < 4 ? 1 : 2);
-      const o2 = this.ctx.createOscillator(); const g2 = this.ctx.createGain();
-      o2.type = "square"; o2.frequency.value = mf;
-      g2.gain.setValueAtTime(0, t); g2.gain.linearRampToValueAtTime(0.14, t + 0.02); g2.gain.exponentialRampToValueAtTime(0.001, t + beat * 0.9);
-      o2.connect(g2); g2.connect(this.musicGain); o2.start(t); o2.stop(t + beat);
-      step = (step + 1) % 64;
+      // sparse gentle melody (sine bell), not every step
+      if (Math.random() < 0.55) {
+        const mf = scale[(Math.random() * scale.length) | 0];
+        soft(mf, beat * 1.6, "triangle", 0.09, this.musicGain);
+      }
+      step++;
     }, beat * 1000);
   }
   stopMusic() { if (this._musicTimer) { clearInterval(this._musicTimer); this._musicTimer = null; } this._track = null; }

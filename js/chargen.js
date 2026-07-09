@@ -34,16 +34,6 @@ function shade(hex, f) {
   return `rgb(${r},${g},${b})`;
 }
 
-// palette for equipped weapon overlays (drawn separately, animated by swing phase)
-const WEAP_COLORS = {
-  sword:  { blade: "#d7dce8", edge: "#9aa2b4", hilt: "#9a6a34", len: 15, w: 3 },
-  axe:    { blade: "#cfd4e0", edge: "#8f97aa", hilt: "#6f4a26", len: 12, w: 6 },
-  spear:  { blade: "#dfe4ee", edge: "#aab0c0", hilt: "#7a5228", len: 22, w: 2 },
-  dagger: { blade: "#e2e6f0", edge: "#a6adbe", hilt: "#8a5a2e", len: 9,  w: 3 },
-  bow:    { blade: "#8a5a2e", edge: "#6f4a26", hilt: "#caa24a", len: 14, w: 2 },
-  fist:   null,
-};
-
 function px(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
 
 // Draw one body frame. phase: walk bob index; atk: 0..1 swing progress (or null)
@@ -141,38 +131,55 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
 
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)
 function drawWeapon(ctx, weapon, dir, atkPhase) {
-  const w = WEAP_COLORS[weapon];
-  if (!w) return;
-  // hand anchor per dir
+  if (weapon === "fist") return;
   let hx, hy, baseAng;
-  if (dir === "down")  { hx = 24; hy = 22; baseAng = Math.PI * 0.5; }
-  else if (dir === "up")    { hx = 9;  hy = 20; baseAng = -Math.PI * 0.5; }
-  else if (dir === "left")  { hx = 9;  hy = 22; baseAng = Math.PI; }
+  if (dir === "down") { hx = 24; hy = 22; baseAng = Math.PI * 0.5; }
+  else if (dir === "up") { hx = 9; hy = 20; baseAng = -Math.PI * 0.5; }
+  else if (dir === "left") { hx = 9; hy = 22; baseAng = Math.PI; }
   else { hx = 23; hy = 22; baseAng = 0; }
-
-  // swing: sweep from -0.9rad to +0.9rad across the attack
-  const sweep = atkPhase != null ? (-0.9 + 1.8 * atkPhase) : -0.5;
+  const sweep = atkPhase != null ? (-1.0 + 2.0 * atkPhase) : -0.55;
   const ang = baseAng + sweep;
   ctx.save();
   ctx.translate(hx, hy);
   ctx.rotate(ang);
-  // hilt
-  ctx.fillStyle = w.hilt; ctx.fillRect(-w.w / 2, 0, w.w, 4);
-  // blade
-  ctx.fillStyle = w.blade; ctx.fillRect(-w.w / 2, -w.len, w.w, w.len);
-  ctx.fillStyle = w.edge; ctx.fillRect(-w.w / 2, -w.len, 1, w.len);
-  if (weapon === "axe") { ctx.fillStyle = w.blade; ctx.fillRect(-w.w, -w.len, w.w * 2, 5); }
-  if (weapon === "spear") { ctx.fillStyle = w.edge; ctx.beginPath(); ctx.moveTo(0, -w.len - 3); ctx.lineTo(-2, -w.len); ctx.lineTo(2, -w.len); ctx.fill(); }
+  const O = "#2a2630";
+
+  if (weapon === "sword") {
+    // crossguard sword
+    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-1.5, 0, 3, 5);       // grip
+    ctx.fillStyle = "#e8c96a"; ctx.fillRect(-1.5, 4, 3, 2);        // pommel
+    ctx.fillStyle = "#c9a23e"; ctx.fillRect(-4, -1, 8, 2);         // crossguard
+    ctx.fillStyle = "#dfe4ee"; ctx.fillRect(-2, -16, 4, 15);       // blade
+    ctx.fillStyle = "#f4f8ff"; ctx.fillRect(-2, -16, 1.5, 15);     // edge highlight
+    ctx.fillStyle = "#aab0c0"; ctx.beginPath(); ctx.moveTo(-2, -16); ctx.lineTo(2, -16); ctx.lineTo(0, -19); ctx.fill(); // tip
+  } else if (weapon === "axe") {
+    ctx.fillStyle = "#6a4324"; ctx.fillRect(-1.5, -14, 3, 20);     // handle
+    ctx.fillStyle = "#c9cdd8"; ctx.beginPath();                    // head
+    ctx.moveTo(1, -14); ctx.quadraticCurveTo(11, -13, 9, -4); ctx.lineTo(1, -6); ctx.fill();
+    ctx.fillStyle = "#9aa0ae"; ctx.beginPath(); ctx.moveTo(1, -12); ctx.quadraticCurveTo(8, -11, 7, -6); ctx.lineTo(1, -7); ctx.fill();
+  } else if (weapon === "spear") {
+    ctx.fillStyle = "#7a5228"; ctx.fillRect(-1, -20, 2, 26);       // shaft
+    ctx.fillStyle = "#dfe4ee"; ctx.beginPath();                    // head
+    ctx.moveTo(0, -26); ctx.lineTo(-3, -19); ctx.lineTo(3, -19); ctx.fill();
+    ctx.fillStyle = "#c9a23e"; ctx.fillRect(-2, -19, 4, 2);
+  } else if (weapon === "dagger") {
+    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-1.5, 0, 3, 4);
+    ctx.fillStyle = "#c9a23e"; ctx.fillRect(-3, -1, 6, 1.5);
+    ctx.fillStyle = "#e2e6f0"; ctx.beginPath(); ctx.moveTo(-2, -1); ctx.lineTo(2, -1); ctx.lineTo(0, -10); ctx.fill();
+  } else if (weapon === "bow") {
+    ctx.strokeStyle = "#8a5a2e"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 12, -1.1, 1.1); ctx.stroke();   // bow curve
+    ctx.strokeStyle = "#e8e2d0"; ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.moveTo(Math.cos(-1.1) * 12, Math.sin(-1.1) * 12); ctx.lineTo(Math.cos(1.1) * 12, Math.sin(1.1) * 12); ctx.stroke();
+    if (atkPhase != null && atkPhase < 0.6) { ctx.fillStyle = "#7a5228"; ctx.fillRect(-1, -1, 12, 2); ctx.fillStyle = "#dfe4ee"; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(8, -2); ctx.lineTo(8, 2); ctx.fill(); }
+  }
   ctx.restore();
 
-  // motion trail during swing
-  if (atkPhase != null && atkPhase > 0.15 && atkPhase < 0.85) {
-    ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = "#eaf2ff"; ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(hx, hy, w.len, baseAng - 0.9, ang);
-    ctx.stroke();
+  if (atkPhase != null && atkPhase > 0.12 && atkPhase < 0.88 && weapon !== "bow") {
+    ctx.save(); ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = "#eaf2ff"; ctx.lineWidth = 2.5;
+    const reach = weapon === "spear" ? 22 : weapon === "dagger" ? 10 : 16;
+    ctx.beginPath(); ctx.arc(hx, hy, reach, baseAng - 1.0, ang); ctx.stroke();
     ctx.restore();
   }
 }

@@ -176,7 +176,7 @@ Game.prototype.doAttack = function () {
     if ((fx || fy) && dot < 0.2) continue;
     const crit = Math.random() < 0.2;
     const hit = Math.round(dmg * (crit ? 1.8 : 1));
-    e.hp -= hit; e.hurt = 0.2;
+    e.hp -= hit; e.hurt = 0.2; e.angry = 6; e.state = "chase";
     e.x += (dx / d) * 8; e.y += (dy / d) * 8;
     this.spawnHit(e.x, e.y - e.h * 0.4);
     this.addFloater(e.x, e.y - e.h, hit, crit);
@@ -211,14 +211,47 @@ Game.prototype.updateEnemies = function (dt) {
     e.hurt = Math.max(0, e.hurt - dt);
     e.atkCd = Math.max(0, e.atkCd - dt);
     e.bob += dt * 4;
+    e.angry = Math.max(0, e.angry - dt);
+    // idle bounce frame
+    e.frameT += dt; if (e.frameT > 0.28) { e.frameT = 0; e.frame = (e.frame + 1) % 4; }
+
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy);
-    if (d < 220 && d > 20) { const sp = e.speed * dt; this.moveEntity(e, (dx / d) * sp, (dy / d) * sp, 8); }
-    e.sortY = e.y;
-    if (d < 22 && e.atkCd <= 0) {
-      e.atkCd = 1;
-      if (p.invuln <= 0 && !p.shield) { p.hp -= e.dmg; p.invuln = 0.5; this.addFloater(p.x, p.y - 36, e.dmg, false, true); this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 5); }
-      else if (p.shield) p.stamina = Math.max(0, p.stamina - 6);
+    const AGGRO = 78;          // small aggro radius — must get close
+    const LEASH = 260;         // give up if player runs
+
+    // state machine: passive wander unless provoked or player very close
+    if (e.angry > 0 && d < LEASH) {
+      e.state = "chase";
+    } else if (d < AGGRO && e.angry <= 0 && Math.random() < 0.02) {
+      // only *some* monsters notice you nearby, occasionally
+      e.state = "chase"; e.angry = 3;
+    } else if (e.state === "chase" && (d > LEASH || e.angry <= 0)) {
+      e.state = "wander";
     }
+
+    if (e.state === "chase") {
+      const sp = e.speed * dt;
+      this.moveEntity(e, (dx / d) * sp, (dy / d) * sp, 8);
+      // attack only when adjacent
+      if (d < 20 && e.atkCd <= 0) {
+        e.atkCd = 1.4;
+        if (p.invuln <= 0 && !p.shield) { p.hp -= e.dmg; p.invuln = 0.6; this.addFloater(p.x, p.y - 36, e.dmg, false, true); this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 4); }
+        else if (p.shield) p.stamina = Math.max(0, p.stamina - 5);
+      }
+    } else {
+      // gentle wander around home anchor
+      e.wanderT -= dt;
+      if (e.wanderT <= 0) {
+        e.wanderT = 1.5 + Math.random() * 2.5;
+        if (Math.random() < 0.5) { e.wdx = 0; e.wdy = 0; }        // pause
+        else { const a = Math.random() * 7; e.wdx = Math.cos(a); e.wdy = Math.sin(a); }
+      }
+      // stay near home
+      const hdx = e.hx - e.x, hdy = e.hy - e.y, hd = Math.hypot(hdx, hdy);
+      if (hd > 90) { e.wdx = hdx / hd; e.wdy = hdy / hd; }
+      if (e.wdx || e.wdy) { const sp = e.speed * 0.45 * dt; this.moveEntity(e, e.wdx * sp, e.wdy * sp, 8); }
+    }
+    e.sortY = e.y;
   }
 };
 

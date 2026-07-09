@@ -4,6 +4,7 @@ import { buildCharacter, buildWeapon, DEFAULT_LOOK } from "./chargen.js";
 import { QuestLog, NPC_DEFS } from "./quests.js";
 import { buildVillage } from "./buildings.js";
 import { audio } from "./audio.js";
+import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
 
 const T = 24;
 const MAP_W = 110, MAP_H = 110;
@@ -47,6 +48,8 @@ export class Game {
     this.audio = audio;
     this.village = buildVillage();
     this.buildings = [];
+    this.monCache = buildMonsters();
+    this.pets = [];   // pet monster ids come from MON_IDS now
 
     this.look = look || { ...DEFAULT_LOOK };
     this.charCache = buildCharacter(this.look);
@@ -175,16 +178,17 @@ export class Game {
     let x, y, tries = 0;
     do {
       x = rand(4 * T, (MAP_W - 4) * T); y = rand(4 * T, (MAP_H - 4) * T); tries++;
-    } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 9 * T) && tries < 30);
-    const tier = Math.random() < 0.65 ? 1 : Math.random() < 0.7 ? 2 : 3;
-    const id = MONSTERS[(Math.random() * MONSTERS.length) | 0];
-    const im = img(`mon/${id}`);
+    } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 12 * T) && tries < 30);
+    const tier = Math.random() < 0.7 ? 1 : Math.random() < 0.75 ? 2 : 3;
+    const id = MON_IDS[(Math.random() * MON_IDS.length) | 0];
     this.enemies.push({
-      id, x, y, sortY: y, tier,
-      hp: 14 + tier * 12, maxHp: 14 + tier * 12,
-      dmg: 4 + tier * 3, speed: 24 + tier * 10,
+      id, x, y, sortY: y, tier, hx: x, hy: y,       // hx/hy = home anchor for wander
+      hp: 12 + tier * 10, maxHp: 12 + tier * 10,
+      dmg: 3 + tier * 2, speed: 18 + tier * 6,
       xp: 6 + tier * 8, gold: tier * 2,
-      bob: Math.random() * 6, atkCd: 0, hurt: 0, dead: false, h: im ? im.height : 40,
+      bob: Math.random() * 6, frame: 0, frameT: Math.random(),
+      atkCd: 0, hurt: 0, dead: false, h: monHeight(),
+      state: "wander", angry: 0, wanderT: Math.random() * 2, wdx: 0, wdy: 0,
     });
   }
 
@@ -192,7 +196,7 @@ export class Game {
     let x, y, tries = 0;
     do { x = rand(5 * T, (MAP_W - 5) * T); y = rand(5 * T, (MAP_H - 5) * T); tries++; }
     while (this.tileAt(x, y) === 2 && tries < 30);
-    const pet = Math.random() < 0.3 ? PET_IDS[(Math.random() * PET_IDS.length) | 0] : null;
+    const pet = Math.random() < 0.35 ? MON_IDS[(Math.random() * MON_IDS.length) | 0] : null;
     this.chests.push({ x, y, sortY: y, opened: false, openT: 0, pet });
   }
 

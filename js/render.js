@@ -35,14 +35,19 @@ Game.prototype.render = function () {
     }
   }
 
-  // camp fire
+  // camp fire — layered flame + rising embers
   const csx = this.camp.x - camx, csy = this.camp.y - camy;
   if (csx > -40 && csx < VIEW_W + 40) {
-    const flick = 6 + Math.sin(this.t * 8) * 2;
+    const fl = 6 + Math.sin(this.t * 8) * 2, fl2 = Math.sin(this.t * 13) * 1.5;
     ctx.fillStyle = "rgba(60,40,25,0.5)"; ctx.beginPath(); ctx.ellipse(csx, csy, 18, 8, 0, 0, 7); ctx.fill();
     for (let a = 0; a < 6; a++) { const an = a / 6 * 7; ctx.fillStyle = "#7a5230"; ctx.fillRect(csx + Math.cos(an) * 12 - 2, csy + Math.sin(an) * 5 - 1, 4, 3); }
-    ctx.fillStyle = "#e8963c"; ctx.beginPath(); ctx.ellipse(csx, csy - 3, flick * 0.5, flick, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#f5d060"; ctx.beginPath(); ctx.ellipse(csx, csy - 4, flick * 0.3, flick * 0.6, 0, 0, 7); ctx.fill();
+    // outer flame
+    ctx.fillStyle = "#c8481e"; ctx.beginPath(); ctx.ellipse(csx + fl2, csy - 4, fl * 0.7, fl * 1.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#f08828"; ctx.beginPath(); ctx.ellipse(csx, csy - 5, fl * 0.5, fl * 1.2, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#f8d048"; ctx.beginPath(); ctx.ellipse(csx - fl2 * 0.5, csy - 6, fl * 0.3, fl * 0.7, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff0c0"; ctx.beginPath(); ctx.ellipse(csx, csy - 6, fl * 0.15, fl * 0.4, 0, 0, 7); ctx.fill();
+    // rising embers
+    for (let i = 0; i < 3; i++) { const ey = (this.t * 20 + i * 9) % 24; ctx.fillStyle = `rgba(255,${170 + i * 20},80,${1 - ey / 24})`; ctx.fillRect(csx + Math.sin(this.t * 3 + i) * 5, csy - 6 - ey, 1.5, 1.5); }
   }
 
   // flowers (flat, under everything)
@@ -103,18 +108,19 @@ Game.prototype.render = function () {
       ctx.fillStyle = "#e8ecf2"; ctx.fillText(o.name, sx, sy - 39); ctx.textAlign = "left";
     }
     else if (d.k === "enemy") {
-      const im = img(`mon/${o.id}`); const bob = Math.sin(o.bob) * 2;
+      const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
+      const bob = Math.sin(o.bob) * 2;
       if (im) {
         ctx.drawImage(im, sx - im.width / 2, sy - im.height + bob);
-        if (o.hurt > 0) { ctx.globalAlpha = o.hurt * 3; ctx.globalCompositeOperation = "source-atop"; }
+        if (o.state === "chase" && o.angry > 0) { ctx.fillStyle = "#ff5a5a"; ctx.font = "bold 11px sans-serif"; ctx.fillText("!", sx - 2, sy - im.height + bob - 2); }
         if (o.hp < o.maxHp) {
           ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24, 3);
           ctx.fillStyle = "#e05050"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24 * (o.hp / o.maxHp), 3);
         }
-        if (o.hurt > 0) { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; }
+        if (o.hurt > 0) { ctx.save(); ctx.globalAlpha = o.hurt * 3; ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "rgba(255,120,120,0.7)"; ctx.fillRect(sx - im.width / 2, sy - im.height + bob, im.width, im.height); ctx.restore(); }
       }
     }
-    else if (d.k === "pet") { const im = img(`pet/${o.id}`); const bob = Math.sin(o.bob) * 2; if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + bob); }
+    else if (d.k === "pet") { const im = this.monCache[o.id] ? this.monCache[o.id][(Math.floor(this.t * 4)) % 4] : null; const bob = Math.sin(o.bob) * 2; if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height * 0.7 + bob, im.width * 0.7, im.height * 0.7); }
     else if (d.k === "player") {
       const dir = p.dir;
       let body, weap;
@@ -165,17 +171,26 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       }
       ctx.globalAlpha = 1;
     } else if (f.kind === "whirl") {
-      ctx.save(); ctx.translate(sx, sy - 14); ctx.rotate(pr * 12);
-      ctx.strokeStyle = `rgba(230,240,255,${1 - pr})`; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(0, 0, 20 + pr * 30, 0, 5); ctx.stroke();
-      ctx.strokeStyle = `rgba(160,200,255,${(1 - pr) * 0.6})`; ctx.beginPath(); ctx.arc(0, 0, 12 + pr * 24, 1, 6); ctx.stroke();
+      // layered fiery whirlwind
+      ctx.save(); ctx.translate(sx, sy - 14); ctx.rotate(pr * 14);
+      const cols = ["rgba(255,220,120,A)", "rgba(255,150,60,A)", "rgba(255,90,40,A)"];
+      for (let ring = 0; ring < 3; ring++) {
+        ctx.strokeStyle = cols[ring].replace("A", String((1 - pr) * (0.9 - ring * 0.2)));
+        ctx.lineWidth = 4 - ring;
+        ctx.beginPath(); ctx.arc(0, 0, 14 + ring * 8 + pr * 26, ring, ring + 5); ctx.stroke();
+      }
       ctx.restore();
+      // embers flung out
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 7 + pr * 8; const rr = 20 + pr * 34; ctx.fillStyle = `rgba(255,${150 + i * 12},60,${1 - pr})`; ctx.fillRect(sx + Math.cos(a) * rr, sy - 14 + Math.sin(a) * rr, 2.5, 2.5); }
     } else if (f.kind === "slashbig") {
       const ox = f.dir === "left" ? -18 : f.dir === "right" ? 18 : 0;
       const oy = f.dir === "up" ? -20 : f.dir === "down" ? 6 : -8;
       ctx.save(); ctx.translate(sx + ox, sy - 16 + oy);
-      ctx.strokeStyle = `rgba(255,240,180,${1 - pr})`; ctx.lineWidth = 4 - pr * 3;
-      ctx.beginPath(); ctx.arc(0, 0, 18 + pr * 16, -1, 1.8); ctx.stroke();
+      // fiery double-arc
+      ctx.strokeStyle = `rgba(255,240,180,${1 - pr})`; ctx.lineWidth = 5 - pr * 4;
+      ctx.beginPath(); ctx.arc(0, 0, 16 + pr * 18, -1, 1.9); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,140,60,${(1 - pr) * 0.8})`; ctx.lineWidth = 3 - pr * 2;
+      ctx.beginPath(); ctx.arc(0, 0, 12 + pr * 16, -0.8, 1.7); ctx.stroke();
       ctx.restore();
     } else if (f.kind === "levelring") {
       ctx.strokeStyle = `rgba(240,216,120,${1 - pr})`; ctx.lineWidth = 3;

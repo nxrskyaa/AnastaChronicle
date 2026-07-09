@@ -47,8 +47,9 @@ export class UI {
   showPet(id, cb) {
     this._petCb = cb;
     this.audio?.sfx("pet");
-    const im = document.getElementById("pet-img"); if (im) im.src = `assets/tux/pet/${id}.png`;
-    const msg = document.getElementById("pet-msg"); if (msg) msg.textContent = `A wild ${id} popped out! It wants to join you.`;
+    const im = document.getElementById("pet-img");
+    if (im && this.game && this.game.monCache[id]) { im.src = this.game.monCache[id][0].toDataURL(); }
+    const msg = document.getElementById("pet-msg"); if (msg) msg.textContent = `A wild ${id} appeared! It wants to join you.`;
     this.panels.pet?.classList.remove("hidden"); if (this.game) this.game.paused = true;
   }
 
