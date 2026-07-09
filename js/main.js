@@ -1,54 +1,37 @@
 import { loadAll } from "./assets.js";
 import { Game } from "./game.js";
+import "./logic.js";   // attaches update/combat to Game.prototype
+import "./render.js";  // attaches render to Game.prototype
 import { UI } from "./ui.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
-const btnStart = document.getElementById("btn-start");
-const wrap = document.getElementById("game-wrap");
-const canvas = document.getElementById("game");
+const btn = document.getElementById("btn-start");
 
-function showFatal(msg) {
-  console.error(msg);
-  boot.classList.remove("hidden");
-  wrap.classList.add("hidden");
-  bootStatus.innerHTML = `<span style="color:#ff8a90">ERROR:</span> ${msg}`;
-  btnStart.disabled = false;
-  btnStart.textContent = "Retry";
-}
-
-async function main() {
+async function preload() {
   try {
-    bootStatus.textContent = "Loading pixel sprites…";
-    await loadAll((d, t) => {
-      bootStatus.textContent = `Loading sprites ${d}/${t}`;
-    });
-    bootStatus.textContent = "Ready — tap Enter";
-    btnStart.disabled = false;
-
-    const ui = new UI();
-    btnStart.addEventListener("click", () => {
-      try {
-        boot.classList.add("hidden");
-        wrap.classList.remove("hidden");
-        const game = new Game(canvas, ui);
-        window.__ANASTA__ = game;
-        ui.bind(game);
-        game.start();
-        window.focus();
-        ui.toast("WASD / stick · ATK to fight");
-      } catch (e) {
-        showFatal(e?.message || String(e));
-      }
-    });
+    await loadAll((done, total) => { bootStatus.textContent = `Loading… ${done}/${total}`; });
+    bootStatus.textContent = "Ready";
+    btn.disabled = false;
   } catch (e) {
-    showFatal("Load failed: " + (e?.message || e));
+    bootStatus.textContent = "Load error: " + e.message;
+    console.error(e);
   }
 }
 
-window.addEventListener("error", (ev) => showFatal(ev.message || "Unknown error"));
-window.addEventListener("unhandledrejection", (ev) =>
-  showFatal(ev.reason?.message || String(ev.reason || "Promise error"))
-);
+btn.addEventListener("click", () => {
+  boot.classList.add("hidden");
+  document.getElementById("game-wrap").classList.remove("hidden");
+  try {
+    const ui = new UI();
+    const game = new Game(document.getElementById("game"), ui);
+    ui.bind(game);
+    window.__ANASTA__ = game;
+    game.start();
+  } catch (e) {
+    console.error(e);
+    alert("Game failed to start: " + e.message);
+  }
+});
 
-main();
+preload();
