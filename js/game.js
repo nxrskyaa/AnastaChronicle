@@ -5,10 +5,10 @@ import { QuestLog, NPC_DEFS } from "./quests.js";
 import { buildVillage } from "./buildings.js";
 import { audio } from "./audio.js";
 import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
+import { view, computeView } from "./view.js";
 
 const T = 24;
 const MAP_W = 110, MAP_H = 110;
-const VIEW_W = 420, VIEW_H = 236;
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -172,6 +172,19 @@ export class Game {
 
     for (let k = 0; k < 46; k++) this.spawnEnemy();
     for (let k = 0; k < 16; k++) this.spawnChest();
+
+    // ambient wildlife — butterflies (day) / fireflies (night), passive & harmless
+    this.critters = [];
+    for (let k = 0; k < 26; k++) {
+      const x = rand(6 * T, (MAP_W - 6) * T), y = rand(6 * T, (MAP_H - 6) * T);
+      this.critters.push({ x, y, hx: x, hy: y, a: Math.random() * 7, spd: 0.5 + Math.random(), r: 10 + Math.random() * 30, kind: Math.random() < 0.5 ? "fly" : "bird", ph: Math.random() * 7 });
+    }
+    // decorative grass tufts that sway
+    this.tufts = [];
+    for (let k = 0; k < 240; k++) {
+      const tx = (rand(2, MAP_W - 2) | 0), ty = (rand(2, MAP_H - 2) | 0);
+      if (this.map[ty * MAP_W + tx] === 0) this.tufts.push({ x: tx * T + rand(0, T), y: ty * T + rand(0, T), ph: Math.random() * 7 });
+    }
   }
 
   spawnEnemy() {
@@ -221,14 +234,14 @@ export class Game {
     const rect = () => this.canvas.getBoundingClientRect();
     this.canvas.addEventListener("mousemove", (e) => {
       const r = rect();
-      this.mouse.x = (e.clientX - r.left) * (VIEW_W / r.width);
-      this.mouse.y = (e.clientY - r.top) * (VIEW_H / r.height);
+      this.mouse.x = (e.clientX - r.left) * (view.w / r.width);
+      this.mouse.y = (e.clientY - r.top) * (view.h / r.height);
     });
     this.canvas.addEventListener("mousedown", (e) => {
       if (this.moveMode === "tap") {
         const r = rect();
-        const mx = (e.clientX - r.left) * (VIEW_W / r.width);
-        const my = (e.clientY - r.top) * (VIEW_H / r.height);
+        const mx = (e.clientX - r.left) * (view.w / r.width);
+        const my = (e.clientY - r.top) * (view.h / r.height);
         this.moveTarget = { x: mx + this.cam.x, y: my + this.cam.y };
       } else this.mouse.down = true;
     });
@@ -274,11 +287,22 @@ export class Game {
     hold("btn-evade", () => this.keys.Space = true, () => this.keys.Space = false);
     hold("btn-interact", () => this.interact(), null);
     this.canvas.addEventListener("touchstart", (e) => {
-      if (this.moveMode !== "tap") return;
       const r = this.canvas.getBoundingClientRect();
-      const mx = (e.touches[0].clientX - r.left) * (VIEW_W / r.width);
-      const my = (e.touches[0].clientY - r.top) * (VIEW_H / r.height);
-      this.moveTarget = { x: mx + this.cam.x, y: my + this.cam.y };
+      const mx = (e.touches[0].clientX - r.left) * (view.w / r.width);
+      const my = (e.touches[0].clientY - r.top) * (view.h / r.height);
+      const wx = mx + this.cam.x, wy = my + this.cam.y;
+      // tapping directly on/near a chest or NPC interacts with it (any control mode)
+      let hit = null;
+      for (const c of this.chests) { if (!c.opened && Math.hypot(c.x - wx, c.y - wy) < 26) { hit = { t: c, k: "chest" }; break; } }
+      if (!hit) for (const n of this.npcs) { if (Math.hypot(n.x - wx, n.y - wy) < 26) { hit = { t: n, k: "npc" }; break; } }
+      if (hit) {
+        // if player close enough, interact immediately; else walk toward it
+        const p = this.player, near = Math.hypot(hit.t.x - p.x, hit.t.y - p.y) < 40;
+        if (near) { this._interactTarget = hit.t; this._interactKind = hit.k; this.interact(); }
+        else { this.moveTarget = { x: hit.t.x, y: hit.t.y }; this.ui.toast("Approaching…"); }
+        return;
+      }
+      if (this.moveMode === "tap") this.moveTarget = { x: wx, y: wy };
     }, { passive: true });
   }
 

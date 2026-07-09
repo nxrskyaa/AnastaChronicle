@@ -5,6 +5,7 @@ import "./render.js";
 import { UI } from "./ui.js";
 import { buildCharacter, PRESETS, HAIRSTYLES, DEFAULT_LOOK } from "./chargen.js";
 import { audio } from "./audio.js";
+import { computeView } from "./view.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -92,13 +93,17 @@ function startGame() {
   creator.classList.add("hidden");
   document.getElementById("game-wrap").classList.remove("hidden");
   audio.init(); audio.resume(); audio.startMusic("explore");
+  const canvas = document.getElementById("game");
+  computeView(canvas);   // size internal resolution to the device now
   try {
     const ui = new UI(audio);
-    game = new Game(document.getElementById("game"), ui, look);
+    game = new Game(canvas, ui, look);
     ui.bind(game);
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
     window.__ANASTA__ = game;
     wireSettings();
+    // recompute internal resolution on rotate/resize so it stays fullscreen
+    addEventListener("resize", () => computeView(canvas));
     game.start();
   } catch (e) { console.error(e); alert("Start failed: " + e.message); }
 }

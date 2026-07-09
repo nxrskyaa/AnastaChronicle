@@ -1,20 +1,21 @@
 import { Game } from "./game.js";
 import { img } from "./assets.js";
+import { view } from "./view.js";
 
-const T = 24, MAP_W = 110, MAP_H = 110, VIEW_W = 420, VIEW_H = 236;
+const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 Game.prototype.render = function () {
   const ctx = this.ctx, p = this.player;
   ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+  ctx.clearRect(0, 0, view.w, view.h);
   // screen shake offset
   const shk = this.shake > 0 ? this.shake : 0;
   const shx = shk ? (Math.random() - 0.5) * shk : 0;
   const shy = shk ? (Math.random() - 0.5) * shk : 0;
   const camx = Math.round(this.cam.x + shx), camy = Math.round(this.cam.y + shy);
   const x0 = Math.max(0, (camx / T) | 0), y0 = Math.max(0, (camy / T) | 0);
-  const x1 = Math.min(MAP_W, x0 + (VIEW_W / T) + 2), y1 = Math.min(MAP_H, y0 + (VIEW_H / T) + 2);
+  const x1 = Math.min(MAP_W, x0 + (view.w / T) + 2), y1 = Math.min(MAP_H, y0 + (view.h / T) + 2);
 
   const wf = (this.t * 3) | 0;
   for (let y = y0; y < y1; y++) {
@@ -37,7 +38,7 @@ Game.prototype.render = function () {
 
   // camp fire — layered flame + rising embers
   const csx = this.camp.x - camx, csy = this.camp.y - camy;
-  if (csx > -40 && csx < VIEW_W + 40) {
+  if (csx > -40 && csx < view.w + 40) {
     const fl = 6 + Math.sin(this.t * 8) * 2, fl2 = Math.sin(this.t * 13) * 1.5;
     ctx.fillStyle = "rgba(60,40,25,0.5)"; ctx.beginPath(); ctx.ellipse(csx, csy, 18, 8, 0, 0, 7); ctx.fill();
     for (let a = 0; a < 6; a++) { const an = a / 6 * 7; ctx.fillStyle = "#7a5230"; ctx.fillRect(csx + Math.cos(an) * 12 - 2, csy + Math.sin(an) * 5 - 1, 4, 3); }
@@ -54,15 +55,28 @@ Game.prototype.render = function () {
   const FCOL = [["#f2d0dc", "#e88aa8"], ["#dfe8ff", "#7aa0e0"], ["#fff0c0", "#f0c040"]];
   for (const fl of this.flowers) {
     const sx = fl.x - camx, sy = fl.y - camy;
-    if (sx < -8 || sx > VIEW_W + 8) continue;
+    if (sx < -8 || sx > view.w + 8) continue;
     const c = FCOL[fl.k];
     ctx.fillStyle = "#4a8040"; ctx.fillRect(sx, sy, 1, 3);
     ctx.fillStyle = c[0]; ctx.fillRect(sx - 1, sy - 2, 3, 3);
     ctx.fillStyle = c[1]; ctx.fillRect(sx, sy - 1, 1, 1);
   }
 
+  // swaying grass tufts (flat detail)
+  if (this.tufts) for (const tf of this.tufts) {
+    const sx = tf.x - camx, sy = tf.y - camy;
+    if (sx < -6 || sx > view.w + 6 || sy < -6 || sy > view.h + 6) continue;
+    const sway = Math.sin(this.t * 1.5 + tf.ph) * 1.2;
+    ctx.strokeStyle = "#4f9a44"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy); ctx.lineTo(sx + sway, sy - 4);
+    ctx.moveTo(sx - 1, sy); ctx.lineTo(sx - 1 + sway, sy - 3);
+    ctx.moveTo(sx + 1, sy); ctx.lineTo(sx + 1 + sway, sy - 3);
+    ctx.stroke();
+  }
+
   const draw = [];
-  const inv = (wx) => { const sx = wx - camx; return sx > -80 && sx < VIEW_W + 80; };
+  const inv = (wx) => { const sx = wx - camx; return sx > -80 && sx < view.w + 80; };
   for (const o of this.buildings) if (inv(o.x)) draw.push({ y: o.sortY, k: "building", o });
   for (const o of this.trees) if (inv(o.x)) draw.push({ y: o.sortY, k: "tree", o });
   for (const o of this.bushes) if (inv(o.x)) draw.push({ y: o.sortY, k: "bush", o });
@@ -153,6 +167,23 @@ Game.prototype.render = function () {
   ctx.globalAlpha = 1;
 
   this.renderFX(ctx, camx, camy);
+  // ambient critters: butterflies by day, glowing fireflies at night
+  const night = this.time > 19 * 60 || this.time < 5 * 60;
+  if (this.critters) for (const c of this.critters) {
+    const sx = c.x - camx, sy = c.y - camy - 10;
+    if (sx < -8 || sx > view.w + 8 || sy < -8 || sy > view.h + 8) continue;
+    if (night) {
+      const glow = 0.5 + 0.5 * Math.sin(c.ph);
+      ctx.fillStyle = `rgba(200,255,140,${glow})`; ctx.fillRect(sx, sy, 2, 2);
+      ctx.fillStyle = `rgba(160,255,100,${glow * 0.3})`; ctx.fillRect(sx - 1, sy - 1, 4, 4);
+    } else {
+      const wing = Math.sin(c.ph) > 0 ? 2 : 1;
+      const col = c.kind === "bird" ? "#5a6a80" : "#f0a0d0";
+      ctx.fillStyle = col;
+      ctx.fillRect(sx - wing, sy, wing, 1); ctx.fillRect(sx + 1, sy, wing, 1);
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+  }
   this.renderDayNight(ctx);
   this.renderWeather(ctx);
   this.renderMinimap();
@@ -219,7 +250,7 @@ Game.prototype.renderDayNight = function (ctx) {
   if (dark > 0.01) {
     const night = t > 19 * 60 || t < 5 * 60;
     ctx.fillStyle = night ? `rgba(18,24,58,${dark})` : `rgba(60,40,70,${dark * 0.8})`;
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillRect(0, 0, view.w, view.h);
     const glow = (wx, wy, r, col) => { const g = ctx.createRadialGradient(wx, wy, 4, wx, wy, r); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(wx, wy, r, 0, 7); ctx.fill(); };
     ctx.globalCompositeOperation = "lighter";
     glow(this.camp.x - this.cam.x, this.camp.y - this.cam.y, 95, `rgba(255,180,80,${dark * 0.5})`);
@@ -235,11 +266,11 @@ Game.prototype.renderWeather = function (ctx) {
     ctx.beginPath();
     for (const d of this.weatherP) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 3, d.y + 8); }
     ctx.stroke();
-    ctx.fillStyle = "rgba(40,55,80,0.12)"; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = "rgba(40,55,80,0.12)"; ctx.fillRect(0, 0, view.w, view.h);
   } else if (this.weather === "snow") {
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     for (const d of this.weatherP) ctx.fillRect(d.x, d.y, 2, 2);
-    ctx.fillStyle = "rgba(220,230,245,0.1)"; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = "rgba(220,230,245,0.1)"; ctx.fillRect(0, 0, view.w, view.h);
   }
 };
 
@@ -259,5 +290,5 @@ Game.prototype.renderMinimap = function () {
   m.fillStyle = "#6fbaf0"; for (const n of this.npcs) m.fillRect(n.x / T * sc - 1, n.y / T * sc - 1, 2, 2);
   m.fillStyle = "#e05050"; for (const e of this.enemies) if (!e.dead) m.fillRect(e.x / T * sc - 1, e.y / T * sc - 1, 2, 2);
   m.fillStyle = "#6ed9a8"; m.fillRect(this.player.x / T * sc - 2, this.player.y / T * sc - 2, 4, 4);
-  m.strokeStyle = "rgba(255,255,255,0.4)"; m.strokeRect(this.cam.x / T * sc, this.cam.y / T * sc, VIEW_W / T * sc, VIEW_H / T * sc);
+  m.strokeStyle = "rgba(255,255,255,0.4)"; m.strokeRect(this.cam.x / T * sc, this.cam.y / T * sc, view.w / T * sc, view.h / T * sc);
 };

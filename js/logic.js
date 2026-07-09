@@ -1,8 +1,9 @@
 import { Game } from "./game.js";
 import { img, MONSTERS } from "./assets.js";
 import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
+import { view } from "./view.js";
 
-const T = 24, MAP_W = 110, MAP_H = 110, VIEW_W = 420, VIEW_H = 236;
+const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 const WEAPONS = {
@@ -101,11 +102,11 @@ Game.prototype.update = function (dt) {
   this.moveEntity(p, p.vx * dt, p.vy * dt, 6);
   p.sortY = p.y;
 
-  const tx = p.x - VIEW_W / 2 + (p.moving ? p.vx * 0.06 : 0);
-  const ty = p.y - VIEW_H / 2 + (p.moving ? p.vy * 0.05 : 0);
+  const tx = p.x - view.w / 2 + (p.moving ? p.vx * 0.06 : 0);
+  const ty = p.y - view.h / 2 + (p.moving ? p.vy * 0.05 : 0);
   const cl = 1 - Math.exp(-8 * dt);
-  this.cam.x = clamp(this.cam.x + (tx - this.cam.x) * cl, 0, MAP_W * T - VIEW_W);
-  this.cam.y = clamp(this.cam.y + (ty - this.cam.y) * cl, 0, MAP_H * T - VIEW_H);
+  this.cam.x = clamp(this.cam.x + (tx - this.cam.x) * cl, 0, MAP_W * T - view.w);
+  this.cam.y = clamp(this.cam.y + (ty - this.cam.y) * cl, 0, MAP_H * T - view.h);
 
   // npc idle anim
   for (const n of this.npcs) {
@@ -120,6 +121,14 @@ Game.prototype.update = function (dt) {
 
   for (const pa of this.particles) { pa.x += pa.vx * dt; pa.y += pa.vy * dt; pa.vy += 40 * dt; pa.life -= dt; }
   this.particles = this.particles.filter(pa => pa.life > 0);
+  // ambient critters drift gently around home anchor
+  if (this.critters) for (const c of this.critters) {
+    c.a += (Math.random() - 0.5) * dt * 2;
+    c.x += Math.cos(c.a) * c.spd; c.y += Math.sin(c.a) * c.spd;
+    const dx = c.hx - c.x, dy = c.hy - c.y;
+    if (Math.hypot(dx, dy) > 70) { c.a = Math.atan2(dy, dx); }
+    c.ph += dt * 8;
+  }
   this.updateWeather(dt);
 
   // chest open animation timer
@@ -135,7 +144,7 @@ Game.prototype.updateWeather = function (dt) {
   const target = this.weather === "rain" ? 160 : 110;
   while (this.weatherP.length < target) {
     this.weatherP.push({
-      x: Math.random() * (VIEW_W + 40) - 20, y: Math.random() * VIEW_H,
+      x: Math.random() * (view.w + 40) - 20, y: Math.random() * view.h,
       vy: this.weather === "rain" ? 340 + Math.random() * 120 : 40 + Math.random() * 30,
       vx: this.weather === "rain" ? -60 : Math.sin(Math.random() * 6) * 20,
       sway: Math.random() * 6,
@@ -144,7 +153,7 @@ Game.prototype.updateWeather = function (dt) {
   for (const d of this.weatherP) {
     d.y += d.vy * dt; d.x += d.vx * dt;
     if (this.weather === "snow") { d.sway += dt * 3; d.x += Math.sin(d.sway) * 0.4; }
-    if (d.y > VIEW_H) { d.y = -6; d.x = Math.random() * (VIEW_W + 40) - 20; }
+    if (d.y > view.h) { d.y = -6; d.x = Math.random() * (view.w + 40) - 20; }
   }
 };
 
@@ -278,6 +287,10 @@ Game.prototype.updateInteract = function () {
   }
   this._interactTarget = target; this._interactKind = kind;
   this.ui.setInteract(!!target, label);
+  // mobile QoL: auto-open a chest you walk right on top of
+  if (kind === "chest" && target && !target.opened && Math.hypot(target.x - p.x, target.y - p.y) < 18) {
+    this.interact();
+  }
 };
 
 Game.prototype.interact = function () {
@@ -334,8 +347,8 @@ Game.prototype.respawn = function () {
 
 Game.prototype.spawnHit = function (x, y) { this._hits = this._hits || []; this._hits.push({ x, y, t: 0 }); };
 Game.prototype.addFloater = function (x, y, val, crit, dmgToPlayer, heal) {
-  const sx = (x - this.cam.x) * (this.canvas.clientWidth / VIEW_W);
-  const sy = (y - this.cam.y) * (this.canvas.clientHeight / VIEW_H);
+  const sx = (x - this.cam.x) * (this.canvas.clientWidth / view.w);
+  const sy = (y - this.cam.y) * (this.canvas.clientHeight / view.h);
   this.ui.dmg(sx, sy, heal ? "+" + val : String(val), crit, heal);
 };
 Game.prototype.updateClock = function () {
