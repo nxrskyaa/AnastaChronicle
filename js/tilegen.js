@@ -107,10 +107,9 @@ function snowTile(variant) {
 function edgeOverlay(dirMask, kind) {
   const cv = C(); const ctx = cv.getContext("2d");
   const gEdge = PAL.grassLo, gTop = PAL.grass[0], gHi = PAL.grassHi;
-  // depth of fringe
-  const D = 7;
-  // draw a lumpy grass band on each active edge
-  const lump = (i, span) => 2 + Math.round(Math.sin(i * 1.7) * 1.5 + Math.cos(i * 0.9) * 1.5);
+  // depth of fringe (deeper = more visible)
+  const D = 10;
+  const lump = (i) => 3 + Math.round(Math.sin(i * 1.7) * 2.2 + Math.cos(i * 0.9) * 1.8);
   if (dirMask & 1) { // north edge -> grass above spilling down
     for (let x = 0; x < TS; x++) { const h = D - lump(x); ctx.fillStyle = gTop; ctx.fillRect(x, 0, 1, h); ctx.fillStyle = gEdge; ctx.fillRect(x, h - 1, 1, 1); }
     for (let x = 1; x < TS; x += 4) { ctx.fillStyle = gHi; ctx.fillRect(x, 0, 1, 2); }
@@ -130,7 +129,19 @@ function edgeOverlay(dirMask, kind) {
   return cv;
 }
 
-const cache = { grass: [], forest: [], dirt: [], sand: [], water: [], snow: [], edge: [] };
+const cache = { grass: [], forest: [], dirt: [], sand: [], water: [], snow: [], edge: [], foam: [] };
+
+// foam shoreline: light rim on the water tile toward land. mask 1=N 2=E 4=S 8=W
+function foamOverlay(dirMask) {
+  const cv = C(); const ctx = cv.getContext("2d");
+  const foam = "rgba(200,240,250,0.85)", foam2 = "rgba(255,255,255,0.7)";
+  const wob = (i) => Math.round(Math.sin(i * 2.1) * 1.2);
+  if (dirMask & 1) { for (let x = 0; x < TS; x++) { ctx.fillStyle = foam; ctx.fillRect(x, 0, 1, 2 + wob(x)); ctx.fillStyle = foam2; ctx.fillRect(x, 0, 1, 1); } }
+  if (dirMask & 4) { for (let x = 0; x < TS; x++) { const h = 2 + wob(x + 3); ctx.fillStyle = foam; ctx.fillRect(x, TS - h, 1, h); ctx.fillStyle = foam2; ctx.fillRect(x, TS - 1, 1, 1); } }
+  if (dirMask & 8) { for (let y = 0; y < TS; y++) { ctx.fillStyle = foam; ctx.fillRect(0, y, 2 + wob(y), 1); ctx.fillStyle = foam2; ctx.fillRect(0, y, 1, 1); } }
+  if (dirMask & 2) { for (let y = 0; y < TS; y++) { const w = 2 + wob(y + 3); ctx.fillStyle = foam; ctx.fillRect(TS - w, y, w, 1); ctx.fillStyle = foam2; ctx.fillRect(TS - 1, y, 1, 1); } }
+  return cv;
+}
 
 export function buildTiles() {
   for (let v = 0; v < 4; v++) {
@@ -144,6 +155,8 @@ export function buildTiles() {
   // grass fringe overlays keyed by neighbor-mask (drawn on non-grass tiles)
   cache.edge = [];
   for (let m = 0; m < 16; m++) cache.edge.push(edgeOverlay(m));
+  cache.foam = [];
+  for (let m = 0; m < 16; m++) cache.foam.push(foamOverlay(m));
   return cache;
 }
 
@@ -153,5 +166,8 @@ export function tile(kind, i) {
 }
 export function grassFringe(mask) {
   return cache.edge ? cache.edge[mask & 15] : null;
+}
+export function waterFoam(mask) {
+  return cache.foam ? cache.foam[mask & 15] : null;
 }
 export const TILE_SIZE = TS;

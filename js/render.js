@@ -1,7 +1,7 @@
 import { Game } from "./game.js";
 import { img } from "./assets.js";
 import { view } from "./view.js";
-import { tile as gtile, grassFringe } from "./tilegen.js";
+import { tile as gtile, grassFringe, waterFoam } from "./tilegen.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -43,6 +43,16 @@ Game.prototype.render = function () {
         if (gAt(x, y + 1)) mask |= 4;
         if (gAt(x - 1, y)) mask |= 8;
         if (mask) { const e = grassFringe(mask); if (e) ctx.drawImage(e, sx, sy, T, T); }
+      }
+      // foam shoreline on water tiles bordering land
+      if (t === 2) {
+        const land = (xx, yy) => (xx < 0 || yy < 0 || xx >= MAP_W || yy >= MAP_H) ? false : map[yy * MAP_W + xx] !== 2;
+        let fm = 0;
+        if (land(x, y - 1)) fm |= 1;
+        if (land(x + 1, y)) fm |= 2;
+        if (land(x, y + 1)) fm |= 4;
+        if (land(x - 1, y)) fm |= 8;
+        if (fm) { const f = waterFoam(fm); if (f) ctx.drawImage(f, sx, sy, T, T); }
       }
     }
   }
