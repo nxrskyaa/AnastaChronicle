@@ -1,9 +1,11 @@
 import { Game } from "./game.js";
 import { img } from "./assets.js";
 import { view } from "./view.js";
+import { tile as gtile, grassFringe } from "./tilegen.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const isGrass = (t) => t === 0 || t === 5;   // grass & forest count as grassy for fringe
 
 Game.prototype.render = function () {
   const ctx = this.ctx, p = this.player;
@@ -18,21 +20,30 @@ Game.prototype.render = function () {
   const x1 = Math.min(MAP_W, x0 + (view.w / T) + 2), y1 = Math.min(MAP_H, y0 + (view.h / T) + 2);
 
   const wf = (this.t * 3) | 0;
+  const map = this.map;
+  const gAt = (x, y) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) ? true : isGrass(map[y * MAP_W + x]);
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
-      const i = y * MAP_W + x, t = this.map[i], v = this.vmap[i];
-      let key, fb;
-      if (t === 2) { key = `tiles/water_${wf % 4}`; fb = "#4a8fb0"; }
-      else if (t === 1) { key = `tiles/path_${v % 4}`; fb = "#a8825a"; }
-      else if (t === 3) { key = `tiles/sand_${v % 4}`; fb = "#e8dcc0"; }
-      else if (t === 4) { key = `tiles/grass_${v % 4}`; fb = "#dfe8ee"; }
-      else { key = `tiles/grass_${v % 4}`; fb = "#5aa050"; }
+      const i = y * MAP_W + x, t = map[i], v = this.vmap[i];
       const sx = x * T - camx, sy = y * T - camy;
-      const im = img(key);
-      if (im) ctx.drawImage(im, sx, sy, T, T); else { ctx.fillStyle = fb; ctx.fillRect(sx, sy, T, T); }
-      // snow biome tint over grass tiles
-      if (t === 4) { ctx.fillStyle = "rgba(230,238,245,0.55)"; ctx.fillRect(sx, sy, T, T); }
-      if (t === 5) { ctx.fillStyle = "rgba(20,40,25,0.22)"; ctx.fillRect(sx, sy, T, T); }
+      let im;
+      if (t === 2) im = gtile("water", wf % 4);
+      else if (t === 1) im = gtile("dirt", v);
+      else if (t === 3) im = gtile("sand", v);
+      else if (t === 4) im = gtile("snow", v);
+      else if (t === 5) im = gtile("forest", v);
+      else im = gtile("grass", v);
+      if (im) ctx.drawImage(im, sx, sy, T, T);
+      else { ctx.fillStyle = "#5aa050"; ctx.fillRect(sx, sy, T, T); }
+      // grass fringe spilling onto non-grassy tiles from grassy neighbors
+      if (!isGrass(t)) {
+        let mask = 0;
+        if (gAt(x, y - 1)) mask |= 1;
+        if (gAt(x + 1, y)) mask |= 2;
+        if (gAt(x, y + 1)) mask |= 4;
+        if (gAt(x - 1, y)) mask |= 8;
+        if (mask) { const e = grassFringe(mask); if (e) ctx.drawImage(e, sx, sy, T, T); }
+      }
     }
   }
 

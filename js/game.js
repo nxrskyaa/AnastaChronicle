@@ -6,6 +6,7 @@ import { buildVillage } from "./buildings.js";
 import { audio } from "./audio.js";
 import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
 import { view, computeView } from "./view.js";
+import { buildTiles } from "./tilegen.js";
 
 const T = 24;
 const MAP_W = 110, MAP_H = 110;
@@ -49,6 +50,7 @@ export class Game {
     this.village = buildVillage();
     this.buildings = [];
     this.monCache = buildMonsters();
+    buildTiles();
     this.pets = [];   // pet monster ids come from MON_IDS now
 
     this.look = look || { ...DEFAULT_LOOK };
