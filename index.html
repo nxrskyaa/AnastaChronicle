@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Anasta Chronicle</title>
-  <meta name="description" content="Anasta Chronicle — 2.5D top-down adventure" />
+  <meta name="description" content="Anasta Chronicle — pixel art 2.5D top-down adventure" />
   <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -12,35 +12,32 @@
   <div id="boot">
     <div class="boot-card">
       <div class="boot-glow"></div>
-      <p class="boot-kicker">CHRONICLE OF THE WILDS</p>
+      <p class="boot-kicker">PIXEL · 2.5D · FOREST</p>
       <h1>ANASTA</h1>
-      <p class="boot-sub">2.5D · Top-down · Craft · Level · Survive</p>
-      <div id="boot-status">Loading…</div>
+      <p class="boot-sub">Chronicle of the Wilds</p>
+      <div id="boot-status">Loading sprites…</div>
       <button id="btn-start" disabled>Enter the Forest</button>
       <div class="boot-keys">
         <span><kbd>WASD</kbd> Move</span>
-        <span><kbd>LMB</kbd> / tap ground Move · enemy Attack</span>
+        <span><kbd>LMB</kbd> Attack</span>
         <span><kbd>Shift</kbd> Shield</span>
         <span><kbd>Space</kbd> Evade</span>
-        <span><kbd>C</kbd> Craft</span>
-        <span><kbd>I</kbd> Bag</span>
+        <span><kbd>C</kbd> Craft · <kbd>I</kbd> Bag</span>
       </div>
     </div>
   </div>
 
   <div id="game-wrap" class="hidden">
-    <canvas id="game"></canvas>
+    <canvas id="game" width="480" height="270"></canvas>
     <div id="hud">
       <div id="minimap-wrap">
-        <canvas id="minimap" width="148" height="148"></canvas>
+        <canvas id="minimap" width="120" height="120"></canvas>
         <div class="mm-label">Anasta Wilds</div>
       </div>
-
       <div id="top-left">
         <div id="player-name">Traveler</div>
         <div id="quest-chip">Slay slimes · Forge a blade</div>
       </div>
-
       <div id="hud-bottom">
         <div class="orb-stack">
           <div class="orb orb-hp"><div class="orb-fill" id="hp-fill"></div><span id="hp-text">50</span></div>
@@ -59,18 +56,13 @@
           <div class="orb orb-stamina"><div class="orb-fill" id="stamina-fill"></div><span id="stamina-text">100</span></div>
         </div>
       </div>
-
       <div id="hints">
         <div><kbd>Shift</kbd> Shield</div>
         <div><span class="mouse">LMB</span> Attack</div>
         <div><kbd>Space</kbd> Evade</div>
       </div>
-
-      <!-- Mobile / always-available controls -->
       <div id="touch-ui">
-        <div id="stick" aria-label="Move">
-          <div id="stick-knob"></div>
-        </div>
+        <div id="stick" aria-label="Move"><div id="stick-knob"></div></div>
         <div id="touch-btns">
           <button type="button" id="btn-attack" class="tbtn atk">ATK</button>
           <button type="button" id="btn-shield" class="tbtn shd">SHD</button>
@@ -79,7 +71,6 @@
           <button type="button" id="btn-inv" class="tbtn">BAG</button>
         </div>
       </div>
-
       <div id="toast"></div>
       <div id="dmg-layer"></div>
       <div id="interact-prompt" class="hidden">Press <kbd>F</kbd> / tap to open</div>
@@ -90,18 +81,15 @@
       <div id="inv-grid"></div>
       <div class="panel-foot">Gold <b id="gold-text">0</b> · Equipped <b id="eq-text">—</b></div>
     </div>
-
     <div id="panel-craft" class="panel hidden">
       <div class="panel-head"><h2>Weapon Forge</h2><button class="panel-close" data-close="craft">✕</button></div>
       <div id="craft-list"></div>
     </div>
-
     <div id="panel-level" class="panel hidden">
       <h2>Level Up</h2>
       <p id="level-msg">Stronger still.</p>
       <button id="btn-level-ok">Continue</button>
     </div>
-
     <div id="death-screen" class="panel hidden">
       <h2>Fallen</h2>
       <p>The wilds take another traveler…</p>

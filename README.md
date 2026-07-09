@@ -1,47 +1,24 @@
 # Anasta Chronicle
 
-2.5D top-down action adventure in the Forest of Anasta.
-
-Inspired by classic action-MMO forest combat: attack / shield / evade, action bar, minimap, slimes, crafting and leveling.
+**Pixel art 2.5D** top-down forest adventure.
 
 ## Play
+https://anasta-chronicle.vercel.app
 
-**Live:** https://anasta-chronicle.vercel.app
+## Features
+- Pixel sprites (player 4-dir, tall trees, slime, tiles)
+- Depth-sorted 2.5D draw order
+- Combat · shield · evade · skills
+- Leveling · crafting · inventory · minimap
+- Touch joystick for mobile
 
-## Stack
-- **Three.js** (CDN, no build)
-- Procedural low-poly + flat-shaded “pixel 2.5D” world
-- Vanilla HUD
-
-## Systems
-- WASD + click-to-move
-- Combat: LMB attack · Shift shield · Space evade
-- Skills 1–4
-- XP / leveling
-- Gather timber, ore, herbs, slime gel
-- Weapon forge (blade, axe, spear, bow)
-- Chests, loot drops, minimap
+## Controls
+WASD · LMB attack · Shift shield · Space evade · C craft · I bag · 1–4 skills
 
 ## Local
 ```bash
 python3 -m http.server 5173
-# open http://localhost:5173
 ```
 
-## Vercel
-Static deploy — `vercel.json` sets `framework: null`.
-
-## Controls
-| Input | Action |
-|-------|--------|
-| WASD / click | Move |
-| LMB | Attack (on enemy) / move |
-| Shift | Shield |
-| Space | Evade |
-| F | Chest / forage |
-| C | Craft |
-| I | Inventory |
-| 1–4 | Skills |
-
-## License
-MIT · nxrskyaa
+## Stack
+Vanilla JS + Canvas 2D · no build · Vercel static

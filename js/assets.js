@@ -1,50 +1,50 @@
-const MANIFEST = [
-  // tiles
-  "tiles/grass_0", "tiles/grass_1", "tiles/grass_2", "tiles/grass_3",
-  "tiles/dirt", "tiles/path",
-  "tiles/water_0", "tiles/water_1", "tiles/water_2", "tiles/water_3",
-  "tiles/shadow",
-  // sprites
-  "sprites/tree_0", "sprites/tree_1", "sprites/tree_2",
-  "sprites/torch_0", "sprites/torch_1", "sprites/torch_2", "sprites/torch_3",
-  "sprites/player_down_0", "sprites/player_down_1", "sprites/player_down_2", "sprites/player_down_3", "sprites/player_down_atk",
-  "sprites/player_up_0", "sprites/player_up_1", "sprites/player_up_2", "sprites/player_up_3", "sprites/player_up_atk",
-  "sprites/player_left_0", "sprites/player_left_1", "sprites/player_left_2", "sprites/player_left_3", "sprites/player_left_atk",
-  "sprites/player_right_0", "sprites/player_right_1", "sprites/player_right_2", "sprites/player_right_3", "sprites/player_right_atk",
-  "sprites/slime_0", "sprites/slime_1", "sprites/slime_2", "sprites/slime_3", "sprites/slime_hurt",
-  "sprites/puff_0", "sprites/puff_1", "sprites/puff_2", "sprites/puff_3",
-  "sprites/chest", "sprites/chest_open", "sprites/rock",
-  // items
-  "items/wood", "items/gel", "items/ore", "items/herb",
-  "items/sword", "items/axe", "items/spear", "items/bow", "items/dagger",
-  // ui
-  "ui/heart", "ui/heart_empty", "ui/orb_mana", "ui/orb_stamina", "ui/logo_mark",
-];
+const PATHS = [];
 
-export const images = {};
+// tiles
+for (let i = 0; i < 4; i++) {
+  PATHS.push(`world/grass_${i}`, `world/path_${i}`, `world/water_${i}`, `world/tree_${i}`, `world/torch_${i}`, `world/camp_${i}`);
+}
+for (let i = 0; i < 3; i++) PATHS.push(`world/rock_${i}`);
+PATHS.push("world/chest", "world/chest_open");
+
+// player
+for (const d of ["down", "up", "left", "right"]) {
+  for (let f = 0; f < 4; f++) PATHS.push(`player/p_${d}_${f}`);
+}
+// enemy
+for (const t of [1, 2]) {
+  for (let f = 0; f < 4; f++) PATHS.push(`enemy/slime_t${t}_${f}`);
+}
+// items
+for (const id of ["wood", "ore", "gel", "herb", "sword", "axe", "spear", "bow", "dagger"]) {
+  PATHS.push(`items/${id}`);
+}
+PATHS.push("ui/heart", "ui/heart_empty", "fx/shadow", "fx/slash_0", "fx/slash_1", "fx/slash_2");
+
+const cache = new Map();
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("fail " + src));
+    img.src = src;
+  });
+}
 
 export async function loadAll(onProgress) {
   let done = 0;
-  const total = MANIFEST.length;
   await Promise.all(
-    MANIFEST.map(
-      (key) =>
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => {
-            images[key] = img;
-            done++;
-            onProgress?.(done, total, key);
-            resolve();
-          };
-          img.onerror = () => reject(new Error("Failed asset: " + key));
-          img.src = `assets/${key}.png`;
-        })
-    )
+    PATHS.map(async (p) => {
+      const img = await loadImage(`assets/px/${p}.png`);
+      cache.set(p, img);
+      done++;
+      onProgress?.(done, PATHS.length);
+    })
   );
-  return images;
+  return cache;
 }
 
 export function img(key) {
-  return images[key];
+  return cache.get(key);
 }

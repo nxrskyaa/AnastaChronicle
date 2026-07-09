@@ -1,20 +1,14 @@
-import * as THREE from "../vendor/three.module.js";
+import { img } from "./assets.js";
 import { ITEMS, RECIPES, canCraft, doCraft, xpFor, applyLevel } from "./crafting.js";
-import {
-  createPalette,
-  createPlayerMesh,
-  createPineTree,
-  createSlimeMesh,
-  createTorchMesh,
-  createRockMesh,
-  createChestMesh,
-  createCampfire,
-  createHpBar,
-  createGrassTuft,
-} from "./meshes.js";
 
-const WORLD = 90;
-const MAP_N = 90;
+const TILE = 16;
+const MAP_W = 64;
+const MAP_H = 64;
+const SCALE = 3; // internal pixels → CSS via canvas resize
+
+// internal resolution (pixel perfect)
+const VIEW_W = 480;
+const VIEW_H = 270;
 
 function mulberry32(a) {
   return function () {
@@ -26,376 +20,164 @@ function mulberry32(a) {
 }
 
 export class Game {
-  constructor(canvas, ui, tex) {
+  constructor(canvas, ui) {
     this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
     this.ui = ui;
-    this.tex = tex;
     this.paused = false;
     this.t = 0;
     this.keys = {};
-    this.mouse = { x: 0, y: 0, down: false };
+    this.mouse = { x: VIEW_W / 2, y: VIEW_H / 2, down: false, wx: 0, wy: 0 };
+    this.stick = { x: 0, y: 0, active: false };
+    this.cam = { x: 0, y: 0 };
     this.projectiles = [];
     this.drops = [];
-    this.stick = { x: 0, y: 0, active: false };
+    this.slashFx = [];
+    this.particles = [];
 
     this.rng = mulberry32(0x414e4153);
-    this._initThree();
-    this.mat = createPalette(this.isMobile, this.tex);
-    this._buildWorld();
+    this._fitCanvas();
+    this._genWorld();
     this._initPlayer();
-    this._clearPlayableSpace();
-    this._spawnSlimes(24);
+    this._clearSpawn();
+    this._spawnSlimes(22);
     this._bind();
     this._bindTouch();
     this.ui.sync();
+    window.addEventListener("resize", () => this._fitCanvas());
   }
 
-  _initThree() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const isMobile = /Mobi|Android|iPhone|iPad|Telegram/i.test(navigator.userAgent) || w < 900;
-    this.isMobile = isMobile;
-
-    let renderer;
-    try {
-      renderer = new THREE.WebGLRenderer({
-        canvas: this.canvas,
-        antialias: !isMobile,
-        powerPreference: isMobile ? "low-power" : "high-performance",
-        alpha: false,
-        failIfMajorPerformanceCaveat: false,
-      });
-    } catch (e) {
-      throw new Error("WebGL unavailable: " + (e?.message || e));
-    }
-    this.renderer = renderer;
-    if (!this.renderer.getContext()) throw new Error("WebGL context failed");
-
-    this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.35 : 1.75));
-    this.renderer.shadowMap.enabled = !isMobile;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    if (THREE.SRGBColorSpace) this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    // muted overcast sky like reference
-    this.renderer.setClearColor(0x7a9088, 1);
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
-
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x7a9088);
-    this.scene.fog = new THREE.FogExp2(0x7e948a, 0.014);
-
-    // higher top-down camera (ref angle)
-    this.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 220);
-    this.camera.position.set(0, 28, 10);
-    this.camera.lookAt(0, 0, 0);
-
-    // soft forest light
-    const hemi = new THREE.HemisphereLight(0xe8f4ec, 0x3a4a32, 1.15);
-    this.scene.add(hemi);
-
-    // ambient fill so toon materials read well
-    this.scene.add(new THREE.AmbientLight(0xb8c8c0, 0.35));
-
-    this.sun = new THREE.DirectionalLight(0xfff2dc, 1.55);
-    this.sun.position.set(22, 36, 12);
-    this.sun.castShadow = !isMobile;
-    if (!isMobile) {
-      this.sun.shadow.mapSize.set(1536, 1536);
-      this.sun.shadow.camera.left = -45;
-      this.sun.shadow.camera.right = 45;
-      this.sun.shadow.camera.top = 45;
-      this.sun.shadow.camera.bottom = -45;
-      this.sun.shadow.bias = -0.0005;
-    }
-    this.scene.add(this.sun);
-    this.scene.add(this.sun.target);
-
-    // fill light cool
-    const fill = new THREE.DirectionalLight(0xa8c8c0, 0.35);
-    fill.position.set(-16, 18, -10);
-    this.scene.add(fill);
-
-    this.raycaster = new THREE.Raycaster();
-    this.pointer = new THREE.Vector2();
-    this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    this._hit = new THREE.Vector3();
-    this.moveTarget = null;
-
-    // soft green ground cursor (ref)
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.4, 0.58, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x6ad8a0,
-        transparent: true,
-        opacity: 0.9,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.08;
-    this.cursor = ring;
-    this.scene.add(ring);
-
-    const inner = new THREE.Mesh(
-      new THREE.RingGeometry(0.12, 0.2, 16),
-      new THREE.MeshBasicMaterial({ color: 0xb8ffe0, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })
-    );
-    inner.rotation.x = -Math.PI / 2;
-    ring.add(inner);
-
-    this.slash = new THREE.Mesh(
-      new THREE.TorusGeometry(1.25, 0.07, 6, 24, Math.PI * 1.15),
-      new THREE.MeshBasicMaterial({ color: 0xfff0c0, transparent: true, opacity: 0 })
-    );
-    this.slash.rotation.x = Math.PI / 2;
-    this.scene.add(this.slash);
-
-    window.addEventListener("resize", () => this._onResize());
+  _fitCanvas() {
+    // keep internal 480x270, scale with nearest neighbor via CSS
+    this.canvas.width = VIEW_W;
+    this.canvas.height = VIEW_H;
+    this.canvas.style.width = "100%";
+    this.canvas.style.height = "100%";
+    this.canvas.style.imageRendering = "pixelated";
+    this.canvas.style.objectFit = "contain";
+    this.canvas.style.background = "#1a2820";
   }
 
-  _onResize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h, false);
-  }
-
-  _buildWorld() {
-    this.map = new Uint8Array(MAP_N * MAP_N);
+  _genWorld() {
     const rng = this.rng;
-    for (let i = 0; i < this.map.length; i++) this.map[i] = 0;
+    this.map = new Uint8Array(MAP_W * MAP_H); // 0 grass 1 path 2 dirt edge 3 water
+    this.varMap = new Uint8Array(MAP_W * MAP_H);
+    for (let i = 0; i < this.map.length; i++) {
+      this.map[i] = 0;
+      this.varMap[i] = (rng() * 4) | 0;
+    }
 
-    // winding dirt path
-    let px = 10;
-    let pz = MAP_N >> 1;
-    this.spawn = {
-      x: (px / MAP_N - 0.5) * WORLD + 1.5,
-      z: (pz / MAP_N - 0.5) * WORLD,
-    };
-    for (let s = 0; s < 280; s++) {
-      for (let oz = -2; oz <= 2; oz++)
-        for (let ox = -2; ox <= 2; ox++) {
-          const x = px + ox;
-          const z = pz + oz;
-          if (x < 0 || z < 0 || x >= MAP_N || z >= MAP_N) continue;
-          const edge = Math.abs(ox) === 2 || Math.abs(oz) === 2;
-          this.map[z * MAP_N + x] = edge ? 2 : 1;
+    // path
+    let px = 6,
+      py = (MAP_H / 2) | 0;
+    this.spawnTX = px + 2;
+    this.spawnTY = py;
+    for (let s = 0; s < 180; s++) {
+      for (let oy = -1; oy <= 1; oy++)
+        for (let ox = -1; ox <= 1; ox++) {
+          const x = px + ox,
+            y = py + oy;
+          if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+          this.map[y * MAP_W + x] = ox === 0 && oy === 0 ? 1 : 2;
         }
       const r = rng();
       if (r < 0.55) px++;
-      else if (r < 0.72) pz++;
-      else if (r < 0.89) pz--;
+      else if (r < 0.72) py++;
+      else if (r < 0.89) py--;
       else px++;
-      px = Math.max(3, Math.min(MAP_N - 4, px));
-      pz = Math.max(3, Math.min(MAP_N - 4, pz));
+      px = Math.max(2, Math.min(MAP_W - 3, px));
+      py = Math.max(2, Math.min(MAP_H - 3, py));
     }
-
-    // camp clearing
-    for (let z = (MAP_N >> 1) - 4; z <= (MAP_N >> 1) + 4; z++)
-      for (let x = 7; x <= 16; x++) this.map[z * MAP_N + x] = 1;
+    // camp
+    for (let y = py - 3; y <= py + 3; y++)
+      for (let x = 4; x <= 11; x++) {
+        if (x >= 0 && y >= 0 && x < MAP_W && y < MAP_H) this.map[y * MAP_W + x] = 1;
+      }
+    this.spawnTX = 7;
+    this.spawnTY = py;
 
     // ponds
-    for (let n = 0; n < 7; n++) {
-      const cx = 10 + Math.floor(rng() * (MAP_N - 20));
-      const cz = 10 + Math.floor(rng() * (MAP_N - 20));
-      const rr = 3 + Math.floor(rng() * 4);
-      for (let z = cz - rr; z <= cz + rr; z++)
+    for (let n = 0; n < 6; n++) {
+      const cx = 6 + ((rng() * (MAP_W - 12)) | 0);
+      const cy = 6 + ((rng() * (MAP_H - 12)) | 0);
+      const rr = 2 + ((rng() * 3) | 0);
+      for (let y = cy - rr; y <= cy + rr; y++)
         for (let x = cx - rr; x <= cx + rr; x++) {
-          if (x < 1 || z < 1 || x >= MAP_N - 1 || z >= MAP_N - 1) continue;
-          const d = (x - cx) ** 2 + (z - cz) ** 2;
-          if (d <= rr * rr && this.map[z * MAP_N + x] !== 1) this.map[z * MAP_N + x] = 3;
+          if (x < 1 || y < 1 || x >= MAP_W - 1 || y >= MAP_H - 1) continue;
+          if ((x - cx) ** 2 + (y - cy) ** 2 <= rr * rr && this.map[y * MAP_W + x] !== 1)
+            this.map[y * MAP_W + x] = 3;
         }
     }
-
-    // === textured multi-layer ground ===
-    // base grass
-    // flat grass plane (no displacement grid)
-    const grassGeo = new THREE.PlaneGeometry(WORLD, WORLD, 1, 1);
-    grassGeo.rotateX(-Math.PI / 2);
-    const grassMesh = new THREE.Mesh(grassGeo, this.mat.grass);
-    grassMesh.receiveShadow = !this.isMobile;
-    this.scene.add(grassMesh);
-    this.ground = grassMesh;
-
-    // path overlay via InstancedMesh (fast)
-    const pathCells = [];
-    for (let z = 0; z < MAP_N; z++)
-      for (let x = 0; x < MAP_N; x++) {
-        const t = this.map[z * MAP_N + x];
-        if (t === 1 || t === 2) pathCells.push([x, z, t]);
-      }
-    const cell = WORLD / MAP_N;
-    const pathGeo = new THREE.PlaneGeometry(cell * 1.08, cell * 1.08);
-    pathGeo.rotateX(-Math.PI / 2);
-    const pathIM = new THREE.InstancedMesh(pathGeo, this.mat.path, pathCells.length);
-    pathIM.receiveShadow = !this.isMobile;
-    const dummy = new THREE.Object3D();
-    pathCells.forEach(([x, z, t], i) => {
-      dummy.position.set((x / MAP_N - 0.5) * WORLD + cell * 0.5, t === 1 ? 0.06 : 0.04, (z / MAP_N - 0.5) * WORLD + cell * 0.5);
-      dummy.updateMatrix();
-      pathIM.setMatrixAt(i, dummy.matrix);
-    });
-    pathIM.instanceMatrix.needsUpdate = true;
-    this.scene.add(pathIM);
-
-    // underlay
-    const under = new THREE.Mesh(
-      new THREE.PlaneGeometry(WORLD * 4, WORLD * 4),
-      new THREE.MeshStandardMaterial({ color: 0x3d5a42, roughness: 1, flatShading: true })
-    );
-    under.rotation.x = -Math.PI / 2;
-    under.position.y = -0.5;
-    this.scene.add(under);
-
-    // water
-    this.waters = [];
-    this.waterMat = this.mat.water;
-    for (let z = 0; z < MAP_N; z++)
-      for (let x = 0; x < MAP_N; x++) {
-        if (this.map[z * MAP_N + x] !== 3 || (x + z) % 3) continue;
-        const m = new THREE.Mesh(new THREE.CircleGeometry(1.45, 16), this.waterMat);
-        m.rotation.x = -Math.PI / 2;
-        m.position.set((x / MAP_N - 0.5) * WORLD, 0.05, (z / MAP_N - 0.5) * WORLD);
-        this.scene.add(m);
-        this.waters.push(m);
-      }
 
     // props
     this.trees = [];
     this.rocks = [];
-    this.chests = [];
     this.torches = [];
-
-    const treeChance = this.isMobile ? 0.04 : 0.065;
-    for (let z = 2; z < MAP_N - 2; z++) {
-      for (let x = 2; x < MAP_N - 2; x++) {
-        const t = this.map[z * MAP_N + x];
+    this.chests = [];
+    for (let y = 2; y < MAP_H - 2; y++) {
+      for (let x = 2; x < MAP_W - 2; x++) {
+        const t = this.map[y * MAP_W + x];
         if (t === 1 || t === 3) continue;
         const r = rng();
-        const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.35;
-        const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5) * 0.35;
-
-        if (r < treeChance) {
-          const mesh = createPineTree(this.mat, rng, !this.isMobile);
-          mesh.position.set(wx, 0, wz);
-          this.scene.add(mesh);
-          const s = mesh.scale.x;
-          this.trees.push({ mesh, x: wx, z: wz, hp: 3, r: 0.42 * s });
-        } else if (r < treeChance + 0.012) {
-          const mesh = createRockMesh(this.mat, rng, !this.isMobile);
-          mesh.position.set(wx, 0, wz);
-          this.scene.add(mesh);
-          this.rocks.push({ mesh, x: wx, z: wz, hp: 2, r: 0.4 });
+        const wx = x * TILE + 8;
+        const wy = y * TILE + 8;
+        if (r < 0.07) {
+          this.trees.push({
+            x: wx,
+            y: wy,
+            hp: 3,
+            v: (rng() * 4) | 0,
+            sortY: wy + 20,
+          });
+        } else if (r < 0.085) {
+          this.rocks.push({ x: wx, y: wy, hp: 2, v: (rng() * 3) | 0, sortY: wy + 4 });
         }
       }
     }
-
-    // grass tufts detail
-    this.tufts = [];
-    const tuftN = this.isMobile ? 80 : 180;
-    for (let i = 0; i < tuftN; i++) {
-      const x = 2 + Math.floor(rng() * (MAP_N - 4));
-      const z = 2 + Math.floor(rng() * (MAP_N - 4));
-      if (this.map[z * MAP_N + x] !== 0) continue;
-      const wx = (x / MAP_N - 0.5) * WORLD + (rng() - 0.5);
-      const wz = (z / MAP_N - 0.5) * WORLD + (rng() - 0.5);
-      const mesh = createGrassTuft(this.mat, rng);
-      mesh.position.set(wx, 0, wz);
-      this.scene.add(mesh);
-      this.tufts.push(mesh);
-    }
-
-    // path torches
-    for (let z = 0; z < MAP_N; z++)
-      for (let x = 0; x < MAP_N; x++) {
-        if (this.map[z * MAP_N + x] !== 1 || rng() > 0.018) continue;
-        const wx = (x / MAP_N - 0.5) * WORLD + (rng() > 0.5 ? 1.1 : -1.1);
-        const wz = (z / MAP_N - 0.5) * WORLD;
-        const withLight = this.torches.length < (this.isMobile ? 3 : 7);
-        const mesh = createTorchMesh(this.mat, withLight, this.isMobile);
-        mesh.position.set(wx, 0, wz);
-        this.scene.add(mesh);
+    // torches on path
+    for (let y = 0; y < MAP_H; y++)
+      for (let x = 0; x < MAP_W; x++) {
+        if (this.map[y * MAP_W + x] !== 1 || rng() > 0.04) continue;
         this.torches.push({
-          mesh,
-          flame: mesh.userData.flame,
-          core: mesh.userData.core,
-          light: mesh.userData.light,
+          x: x * TILE + 8 + (rng() > 0.5 ? 10 : -10),
+          y: y * TILE + 8,
+          sortY: y * TILE + 16,
         });
       }
-
     // chests
-    for (let i = 0; i < 7; i++) {
-      for (let tries = 0; tries < 50; tries++) {
-        const x = 5 + Math.floor(rng() * (MAP_N - 10));
-        const z = 5 + Math.floor(rng() * (MAP_N - 10));
-        if (this.map[z * MAP_N + x] !== 0) continue;
-        const wx = (x / MAP_N - 0.5) * WORLD;
-        const wz = (z / MAP_N - 0.5) * WORLD;
-        const mesh = createChestMesh(this.mat, !this.isMobile);
-        mesh.position.set(wx, 0, wz);
-        mesh.rotation.y = rng() * Math.PI * 2;
-        this.scene.add(mesh);
+    for (let i = 0; i < 6; i++) {
+      for (let tries = 0; tries < 40; tries++) {
+        const x = 3 + ((rng() * (MAP_W - 6)) | 0);
+        const y = 3 + ((rng() * (MAP_H - 6)) | 0);
+        if (this.map[y * MAP_W + x] !== 0) continue;
         this.chests.push({
-          mesh,
-          lid: mesh.userData.lid,
-          x: wx,
-          z: wz,
+          x: x * TILE + 8,
+          y: y * TILE + 8,
           open: false,
+          sortY: y * TILE + 12,
         });
         break;
       }
     }
-
-    // campfire
-    const camp = createCampfire(this.mat, this.isMobile);
-    camp.position.set(this.spawn.x, 0, this.spawn.z);
-    this.scene.add(camp);
-    this.campFire = camp.userData.fire;
-    this.campCore = camp.userData.core;
-
-    // floating dust / leaf particles
-    const pCount = this.isMobile ? 40 : 90;
-    const pGeo = new THREE.BufferGeometry();
-    const pPos = new Float32Array(pCount * 3);
-    for (let i = 0; i < pCount; i++) {
-      pPos[i * 3] = (rng() - 0.5) * WORLD * 0.8;
-      pPos[i * 3 + 1] = 1 + rng() * 8;
-      pPos[i * 3 + 2] = (rng() - 0.5) * WORLD * 0.8;
-    }
-    pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
-    this.particles = new THREE.Points(
-      pGeo,
-      new THREE.PointsMaterial({
-        color: 0xc8e8b0,
-        size: 0.12,
-        transparent: true,
-        opacity: 0.55,
-        depthWrite: false,
-      })
-    );
-    this.scene.add(this.particles);
-    this._pCount = pCount;
+    this.camp = {
+      x: this.spawnTX * TILE + 8,
+      y: this.spawnTY * TILE + 8,
+      sortY: this.spawnTY * TILE + 14,
+    };
   }
 
   _initPlayer() {
-    const mesh = createPlayerMesh(this.mat, !this.isMobile);
-    mesh.scale.setScalar(1.85);
-    mesh.position.set(this.spawn.x, 0, this.spawn.z);
-    this.scene.add(mesh);
-    this.playerMesh = mesh;
-    this.playerWeapon = mesh.userData.weapon;
-
+    const sx = this.spawnTX * TILE + 8;
+    const sy = this.spawnTY * TILE + 8;
     this.player = {
-      x: this.spawn.x,
-      z: this.spawn.z,
-      y: 0,
+      x: sx,
+      y: sy,
       vx: 0,
-      vz: 0,
-      yaw: 0,
-      speed: 9.5,
+      vy: 0,
+      dir: "down",
+      frame: 0,
+      frameT: 0,
+      speed: 78,
       level: 1,
       xp: 0,
       hp: 50,
@@ -414,109 +196,83 @@ export class Game {
       invuln: 0,
       dead: false,
       skillCd: [0, 0, 0, 0],
+      sortY: sy,
     };
     applyLevel(this.player);
     this.player.hp = this.player.maxHp;
     this.player.stamina = this.player.maxStamina;
-    // snap camera to player immediately (avoid side-horizon view from world origin)
-    this.camera.position.set(this.player.x + 0.05, 26, this.player.z + 9);
-    this.camera.lookAt(this.player.x, 0.8, this.player.z);
-    this.sun.position.set(this.player.x + 22, 36, this.player.z + 12);
-    this.sun.target.position.set(this.player.x, 0, this.player.z);
-    this.sun.target.updateMatrixWorld();
+    this.cam.x = sx - VIEW_W / 2;
+    this.cam.y = sy - VIEW_H / 2;
   }
 
-  _clearPlayableSpace() {
-    const sx = this.spawn.x;
-    const sz = this.spawn.z;
-    const keepTree = (tr) => {
-      if (this.tileAt(tr.x, tr.z) === 1 || this.tileAt(tr.x, tr.z) === 2) return false;
-      if (Math.hypot(tr.x - sx, tr.z - sz) < 7) return false;
-      for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
-        if (this.tileAt(tr.x + Math.cos(a) * 0.9, tr.z + Math.sin(a) * 0.9) === 1) return false;
-      }
+  _clearSpawn() {
+    const sx = this.player.x,
+      sy = this.player.y;
+    this.trees = this.trees.filter((tr) => {
+      if (Math.hypot(tr.x - sx, tr.y - sy) < 56) return false;
+      // near path
+      const tx = (tr.x / TILE) | 0,
+        ty = (tr.y / TILE) | 0;
+      if (this.map[ty * MAP_W + tx] === 1 || this.map[ty * MAP_W + tx] === 2) return false;
       return true;
-    };
-    for (const tr of [...this.trees]) {
-      if (!keepTree(tr)) {
-        this.scene.remove(tr.mesh);
-        tr.hp = 0;
-      }
-    }
-    this.trees = this.trees.filter((t) => t.hp > 0);
-    for (const rk of [...this.rocks]) {
-      if (Math.hypot(rk.x - sx, rk.z - sz) < 7 || this.tileAt(rk.x, rk.z) === 1) {
-        this.scene.remove(rk.mesh);
-        rk.hp = 0;
-      }
-    }
-    this.rocks = this.rocks.filter((r) => r.hp > 0);
-    this.player.x = sx;
-    this.player.z = sz;
-    this.playerMesh.position.set(sx, 0, sz);
-  }
-
-  _makeSlime(x, z, tier = 1) {
-    const mesh = createSlimeMesh(this.mat, tier, !this.isMobile);
-    mesh.position.set(x, 0, z);
-    this.scene.add(mesh);
-    const bar = createHpBar();
-    bar.position.set(0, 0.95 * (tier > 1 ? 1.25 : 1), 0);
-    mesh.add(bar);
-    return {
-      mesh,
-      bar,
-      barFill: bar.userData.fill,
-      body: mesh.userData.body,
-      x,
-      z,
-      hp: 20 * tier,
-      maxHp: 20 * tier,
-      dmg: 5 * tier,
-      speed: 2.5 + tier * 0.45,
-      tier,
-      xp: 14 * tier,
-      atkCd: 0,
-      hurtT: 0,
-      dead: false,
-      aggro: 12 + tier * 2,
-      bob: Math.random() * Math.PI * 2,
-    };
+    });
+    this.rocks = this.rocks.filter((rk) => Math.hypot(rk.x - sx, rk.y - sy) > 48);
   }
 
   _spawnSlimes(n) {
     this.enemies = [];
     const rng = this.rng;
     for (let i = 0; i < n; i++) {
-      let x, z, ok = false;
-      for (let t = 0; t < 45 && !ok; t++) {
-        x = (rng() - 0.5) * (WORLD - 10);
-        z = (rng() - 0.5) * (WORLD - 10);
-        if (!this.blocked(x, z, 0.5) && Math.hypot(x - this.spawn.x, z - this.spawn.z) > 11) ok = true;
+      let x, y, ok = false;
+      for (let t = 0; t < 40 && !ok; t++) {
+        x = 24 + rng() * (MAP_W * TILE - 48);
+        y = 24 + rng() * (MAP_H * TILE - 48);
+        if (!this.blocked(x, y, 6) && Math.hypot(x - this.player.x, y - this.player.y) > 100) ok = true;
       }
       if (!ok) continue;
-      this.enemies.push(this._makeSlime(x, z, rng() < 0.18 ? 2 : 1));
+      const tier = rng() < 0.18 ? 2 : 1;
+      this.enemies.push(this._makeSlime(x, y, tier));
     }
   }
 
-  tileAt(x, z) {
-    const mx = Math.floor((x / WORLD + 0.5) * MAP_N);
-    const mz = Math.floor((z / WORLD + 0.5) * MAP_N);
-    if (mx < 0 || mz < 0 || mx >= MAP_N || mz >= MAP_N) return 3;
-    return this.map[mz * MAP_N + mx];
+  _makeSlime(x, y, tier = 1) {
+    return {
+      x,
+      y,
+      hp: 18 * tier,
+      maxHp: 18 * tier,
+      dmg: 5 * tier,
+      speed: 28 + tier * 8,
+      tier,
+      xp: 12 * tier,
+      atkCd: 0,
+      hurtT: 0,
+      dead: false,
+      aggro: 90 + tier * 20,
+      frame: 0,
+      frameT: 0,
+      sortY: y,
+    };
   }
 
-  blocked(x, z, r = 0.4) {
-    if (this.tileAt(x, z) === 3) return true;
-    if (this.tileAt(x + r, z) === 3 || this.tileAt(x - r, z) === 3) return true;
-    if (this.tileAt(x, z + r) === 3 || this.tileAt(x, z - r) === 3) return true;
-    for (const tr of this.trees || []) {
+  tileAt(px, py) {
+    const tx = (px / TILE) | 0;
+    const ty = (py / TILE) | 0;
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 3;
+    return this.map[ty * MAP_W + tx];
+  }
+
+  blocked(x, y, r = 5) {
+    if (this.tileAt(x, y) === 3) return true;
+    if (this.tileAt(x + r, y) === 3 || this.tileAt(x - r, y) === 3) return true;
+    if (this.tileAt(x, y + r) === 3 || this.tileAt(x, y - r) === 3) return true;
+    for (const tr of this.trees) {
       if (tr.hp <= 0) continue;
-      if (Math.hypot(x - tr.x, z - tr.z) < tr.r + r * 0.5) return true;
+      if (Math.hypot(x - tr.x, y - (tr.y + 8)) < 8 + r * 0.3) return true;
     }
-    for (const rk of this.rocks || []) {
+    for (const rk of this.rocks) {
       if (rk.hp <= 0) continue;
-      if (Math.hypot(x - rk.x, z - rk.z) < rk.r + r * 0.4) return true;
+      if (Math.hypot(x - rk.x, y - rk.y) < 7 + r * 0.2) return true;
     }
     return false;
   }
@@ -539,24 +295,25 @@ export class Game {
     });
 
     const c = this.canvas;
-    c.addEventListener("mousemove", (e) => this._mouse(e));
+    const toWorld = (e) => {
+      const rect = c.getBoundingClientRect();
+      // letterbox-aware mapping
+      const scale = Math.min(rect.width / VIEW_W, rect.height / VIEW_H);
+      const ox = rect.left + (rect.width - VIEW_W * scale) / 2;
+      const oy = rect.top + (rect.height - VIEW_H * scale) / 2;
+      const sx = (e.clientX - ox) / scale;
+      const sy = (e.clientY - oy) / scale;
+      this.mouse.x = sx;
+      this.mouse.y = sy;
+      this.mouse.wx = sx + this.cam.x;
+      this.mouse.wy = sy + this.cam.y;
+    };
+    c.addEventListener("mousemove", (e) => toWorld(e));
     c.addEventListener("mousedown", (e) => {
-      this._mouse(e);
+      toWorld(e);
       if (e.button === 0) {
         this.mouse.down = true;
-        let nearEnemy = false;
-        for (const en of this.enemies) {
-          if (en.dead) continue;
-          if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.25) {
-            nearEnemy = true;
-            break;
-          }
-        }
-        if (nearEnemy || e.shiftKey) this.tryAttack();
-        else {
-          this.moveTarget = this._hit.clone();
-          this.moveTarget.y = 0;
-        }
+        this.tryAttack();
       }
     });
     c.addEventListener("mouseup", (e) => {
@@ -567,22 +324,10 @@ export class Game {
       "touchstart",
       (e) => {
         if (!e.touches[0]) return;
+        // only if not on stick
         e.preventDefault();
-        const t = e.touches[0];
-        this._mouse({ clientX: t.clientX, clientY: t.clientY, button: 0, shiftKey: false });
-        let nearEnemy = false;
-        for (const en of this.enemies) {
-          if (en.dead) continue;
-          if (Math.hypot(en.x - this._hit.x, en.z - this._hit.z) < 1.4) {
-            nearEnemy = true;
-            break;
-          }
-        }
-        if (nearEnemy) this.tryAttack();
-        else {
-          this.moveTarget = this._hit.clone();
-          this.moveTarget.y = 0;
-        }
+        toWorld(e.touches[0]);
+        this.tryAttack();
       },
       { passive: false }
     );
@@ -593,63 +338,57 @@ export class Game {
     const knob = document.getElementById("stick-knob");
     if (stick && knob) {
       const maxR = 40;
-      const setFromEvent = (clientX, clientY) => {
+      const setFrom = (cx, cy) => {
         const rect = stick.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        let dx = clientX - cx;
-        let dy = clientY - cy;
+        const ox = rect.left + rect.width / 2;
+        const oy = rect.top + rect.height / 2;
+        let dx = cx - ox,
+          dy = cy - oy;
         const len = Math.hypot(dx, dy) || 1;
         if (len > maxR) {
           dx = (dx / len) * maxR;
           dy = (dy / len) * maxR;
         }
-        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        knob.style.transform = `translate(${dx}px,${dy}px)`;
         this.stick.active = true;
         this.stick.x = dx / maxR;
         this.stick.y = dy / maxR;
       };
       const end = () => {
         this.stick.active = false;
-        this.stick.x = 0;
-        this.stick.y = 0;
+        this.stick.x = this.stick.y = 0;
         knob.style.transform = "translate(0,0)";
       };
-      const onDown = (e) => {
+      const down = (e) => {
         e.preventDefault();
         const t = e.touches ? e.touches[0] : e;
-        setFromEvent(t.clientX, t.clientY);
+        setFrom(t.clientX, t.clientY);
       };
-      const onMove = (e) => {
+      const move = (e) => {
         if (!this.stick.active) return;
         e.preventDefault();
         const t = e.touches ? e.touches[0] : e;
-        setFromEvent(t.clientX, t.clientY);
+        setFrom(t.clientX, t.clientY);
       };
-      stick.addEventListener("pointerdown", onDown);
-      window.addEventListener("pointermove", onMove);
+      stick.addEventListener("pointerdown", down);
+      window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", end);
-      stick.addEventListener("touchstart", onDown, { passive: false });
-      stick.addEventListener("touchmove", onMove, { passive: false });
+      stick.addEventListener("touchstart", down, { passive: false });
+      stick.addEventListener("touchmove", move, { passive: false });
       stick.addEventListener("touchend", end);
     }
-
     const hold = (id, on, off) => {
       const el = document.getElementById(id);
       if (!el) return;
-      const start = (e) => {
+      el.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         on();
-      };
-      const stop = (e) => {
+      });
+      el.addEventListener("pointerup", (e) => {
         e.preventDefault();
         off();
-      };
-      el.addEventListener("pointerdown", start);
-      el.addEventListener("pointerup", stop);
-      el.addEventListener("pointerleave", stop);
-      el.addEventListener("touchstart", start, { passive: false });
-      el.addEventListener("touchend", stop);
+      });
+      el.addEventListener("pointerleave", () => off());
     };
     hold(
       "btn-attack",
@@ -674,27 +413,15 @@ export class Game {
       "btn-evade",
       () => {
         this.keys.Space = true;
-        setTimeout(() => {
-          this.keys.Space = false;
-        }, 120);
+        setTimeout(() => (this.keys.Space = false), 100);
       },
       () => {}
     );
     document.getElementById("btn-craft")?.addEventListener("click", () => this.ui.toggle("craft"));
     document.getElementById("btn-inv")?.addEventListener("click", () => this.ui.toggle("inv"));
-    document.querySelectorAll("#action-bar .slot").forEach((btn) => {
-      btn.addEventListener("click", () => this.useSkill(Number(btn.dataset.i)));
-    });
-  }
-
-  _mouse(e) {
-    const rect = this.canvas.getBoundingClientRect();
-    this.mouse.x = e.clientX - rect.left;
-    this.mouse.y = e.clientY - rect.top;
-    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-    this.raycaster.ray.intersectPlane(this.groundPlane, this._hit);
+    document.querySelectorAll("#action-bar .slot").forEach((b) =>
+      b.addEventListener("click", () => this.useSkill(Number(b.dataset.i)))
+    );
   }
 
   start() {
@@ -723,153 +450,106 @@ export class Game {
     p.invuln = Math.max(0, p.invuln - dt);
     for (let i = 0; i < 4; i++) p.skillCd[i] = Math.max(0, p.skillCd[i] - dt);
 
-    // torch / fire anim
-    for (const to of this.torches) {
-      const s = 0.85 + Math.sin(this.t * 11 + to.mesh.position.x) * 0.2;
-      if (to.flame) to.flame.scale.set(s, 0.9 + s * 0.2, s);
-      if (to.core) to.core.scale.setScalar(0.9 + Math.sin(this.t * 14) * 0.15);
-      if (to.light) to.light.intensity = 0.75 + Math.sin(this.t * 12 + to.mesh.position.z) * 0.25;
-    }
-    if (this.campFire) {
-      this.campFire.scale.y = 0.9 + Math.sin(this.t * 13) * 0.18;
-      this.campFire.rotation.y += dt * 1.8;
-    }
-    if (this.campCore) this.campCore.scale.setScalar(0.95 + Math.sin(this.t * 16) * 0.12);
-    if (this.waterMat) this.waterMat.opacity = 0.72 + Math.sin(this.t * 1.8) * 0.08;
-    if (this.particles) {
-      const arr = this.particles.geometry.attributes.position.array;
-      for (let i = 0; i < this._pCount; i++) {
-        arr[i * 3 + 1] += Math.sin(this.t + i) * 0.003;
-        arr[i * 3] += Math.sin(this.t * 0.3 + i) * 0.004;
-        if (arr[i * 3 + 1] > 10) arr[i * 3 + 1] = 1;
-      }
-      this.particles.geometry.attributes.position.needsUpdate = true;
-      // follow player roughly
-      this.particles.position.x = p.x * 0.15;
-      this.particles.position.z = p.z * 0.15;
-    }
-
     p.shield = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
     if (p.shield) {
-      p.stamina = Math.max(0, p.stamina - 16 * dt);
+      p.stamina = Math.max(0, p.stamina - 18 * dt);
       if (p.stamina <= 0) p.shield = false;
-    } else p.stamina = Math.min(p.maxStamina, p.stamina + 20 * dt);
+    } else p.stamina = Math.min(p.maxStamina, p.stamina + 22 * dt);
 
-    if ((this.keys.Space || this.keys.KeyE) && p.evadeCd <= 0 && p.stamina >= 18) {
-      p.evadeT = 0.2;
-      p.evadeCd = 0.85;
-      p.stamina -= 18;
-      p.invuln = 0.2;
-      const ang = Math.atan2(this._hit.x - p.x, this._hit.z - p.z);
-      p.vx = Math.sin(ang) * 18;
-      p.vz = Math.cos(ang) * 18;
-      this.moveTarget = null;
+    // evade toward mouse
+    if ((this.keys.Space || this.keys.KeyE) && p.evadeCd <= 0 && p.stamina >= 16) {
+      p.evadeT = 0.18;
+      p.evadeCd = 0.8;
+      p.stamina -= 16;
+      p.invuln = 0.18;
+      const ang = Math.atan2(this.mouse.wy - p.y, this.mouse.wx - p.x);
+      p.vx = Math.cos(ang) * 220;
+      p.vy = Math.sin(ang) * 220;
     }
 
     let mx = 0,
-      mz = 0;
-    if (this.keys.KeyW || this.keys.ArrowUp) mz -= 1;
-    if (this.keys.KeyS || this.keys.ArrowDown) mz += 1;
+      my = 0;
+    if (this.keys.KeyW || this.keys.ArrowUp) my -= 1;
+    if (this.keys.KeyS || this.keys.ArrowDown) my += 1;
     if (this.keys.KeyA || this.keys.ArrowLeft) mx -= 1;
     if (this.keys.KeyD || this.keys.ArrowRight) mx += 1;
-    if (this.stick && this.stick.active) {
+    if (this.stick.active) {
       mx += this.stick.x;
-      mz += this.stick.y;
+      my += this.stick.y;
     }
-    if (Math.abs(mx) > 0.05 || Math.abs(mz) > 0.05) {
-      this.moveTarget = null;
-      const len = Math.hypot(mx, mz) || 1;
+    if (Math.abs(mx) > 0.05 || Math.abs(my) > 0.05) {
+      const len = Math.hypot(mx, my) || 1;
       mx /= len;
-      mz /= len;
+      my /= len;
       const slow = p.shield ? 0.55 : 1;
       if (p.evadeT <= 0) {
         p.vx = mx * p.speed * slow;
-        p.vz = mz * p.speed * slow;
+        p.vy = my * p.speed * slow;
       }
-      p.yaw = Math.atan2(mx, mz);
-    } else if (this.moveTarget && p.evadeT <= 0) {
-      const dx = this.moveTarget.x - p.x;
-      const dz = this.moveTarget.z - p.z;
-      const d = Math.hypot(dx, dz);
-      if (d < 0.25) {
-        this.moveTarget = null;
-        p.vx = p.vz = 0;
-      } else {
-        const slow = p.shield ? 0.55 : 1;
-        p.vx = (dx / d) * p.speed * slow;
-        p.vz = (dz / d) * p.speed * slow;
-        p.yaw = Math.atan2(dx, dz);
+      if (Math.abs(mx) > Math.abs(my)) p.dir = mx < 0 ? "left" : "right";
+      else p.dir = my < 0 ? "up" : "down";
+      p.frameT += dt;
+      if (p.frameT > 0.12) {
+        p.frameT = 0;
+        p.frame = (p.frame + 1) % 4;
       }
     } else if (p.evadeT <= 0) {
-      p.vx *= 0.85;
-      p.vz *= 0.85;
-      if (Math.hypot(p.vx, p.vz) < 0.2) p.vx = p.vz = 0;
+      p.vx *= 0.8;
+      p.vy *= 0.8;
+      if (Math.hypot(p.vx, p.vy) < 4) {
+        p.vx = p.vy = 0;
+        p.frame = 0;
+      }
     }
 
-    this._move(p, p.vx * dt, p.vz * dt, 0.35);
-    this.playerMesh.position.set(p.x, 0, p.z);
-    this.playerMesh.rotation.y = p.yaw;
-
-    // walk cycle
-    const moving = Math.hypot(p.vx, p.vz) > 0.5;
-    const bob = moving ? Math.sin(this.t * 14) : 0;
-    this.playerMesh.position.y = Math.abs(bob) * 0.05;
-    if (this.playerMesh.userData.legL) {
-      this.playerMesh.userData.legL.rotation.x = bob * 0.45;
-      this.playerMesh.userData.legR.rotation.x = -bob * 0.45;
-    }
-    if (this.playerMesh.userData.cloak) {
-      this.playerMesh.userData.cloak.rotation.x = 0.12 + (moving ? Math.abs(bob) * 0.08 : 0);
+    // face mouse when attacking
+    if (p.attackT > 0 || this.mouse.down) {
+      const dx = this.mouse.wx - p.x;
+      const dy = this.mouse.wy - p.y;
+      if (Math.abs(dx) > Math.abs(dy)) p.dir = dx < 0 ? "left" : "right";
+      else p.dir = dy < 0 ? "up" : "down";
     }
 
-    if (p.attackT > 0 && this.playerWeapon) {
-      this.playerWeapon.rotation.x = -0.15 - Math.sin((1 - p.attackT / 0.18) * Math.PI) * 1.3;
-    } else if (this.playerWeapon) {
-      this.playerWeapon.rotation.x = -0.15;
-    }
-
-    const faceAng = Math.atan2(this._hit.x - p.x, this._hit.z - p.z);
-    if (p.attackT > 0 || this.mouse.down) p.yaw = faceAng;
+    this._move(p, p.vx * dt, p.vy * dt, 5);
+    p.sortY = p.y;
 
     if (this.mouse.down && p.attackCd <= 0) this.tryAttack();
 
-    this.cursor.position.set(this._hit.x, 0.08, this._hit.z);
-    this.cursor.rotation.z = this.t * 1.2;
-
-    let nearChest = false;
+    // interact prompt
+    let near = false;
     for (const c of this.chests) {
-      if (!c.open && Math.hypot(c.x - p.x, c.z - p.z) < 1.6) nearChest = true;
+      if (!c.open && Math.hypot(c.x - p.x, c.y - p.y) < 22) near = true;
     }
-    this.ui.setInteract(nearChest);
+    this.ui.setInteract(near);
 
     this._updateEnemies(dt);
     this._updateProjectiles(dt);
     this._updateDrops(dt);
+    this._updateFx(dt);
 
-    // camera follow — higher, softer
-    const camPos = new THREE.Vector3(p.x + 0.05, 26, p.z + 9);
-    this.camera.position.lerp(camPos, 1 - Math.pow(0.00005, dt));
-    this.camera.lookAt(p.x, 0.6, p.z);
-    this.sun.position.set(p.x + 22, 36, p.z + 12);
-    this.sun.target.position.set(p.x, 0, p.z);
-    this.sun.target.updateMatrixWorld();
+    // camera
+    const tx = p.x - VIEW_W / 2;
+    const ty = p.y - VIEW_H / 2 - 12;
+    this.cam.x += (tx - this.cam.x) * Math.min(1, 8 * dt);
+    this.cam.y += (ty - this.cam.y) * Math.min(1, 8 * dt);
+    this.cam.x = Math.max(0, Math.min(MAP_W * TILE - VIEW_W, this.cam.x));
+    this.cam.y = Math.max(0, Math.min(MAP_H * TILE - VIEW_H, this.cam.y));
 
-    if (this.slash.material.opacity > 0) {
-      this.slash.material.opacity = Math.max(0, this.slash.material.opacity - dt * 3);
-    }
+    // mouse world refresh
+    this.mouse.wx = this.mouse.x + this.cam.x;
+    this.mouse.wy = this.mouse.y + this.cam.y;
 
     this.ui.sync();
     this._drawMinimap();
   }
 
-  _move(ent, dx, dz, r) {
+  _move(ent, dx, dy, r) {
     const nx = ent.x + dx;
-    if (!this.blocked(nx, ent.z, r)) ent.x = nx;
-    const nz = ent.z + dz;
-    if (!this.blocked(ent.x, nz, r)) ent.z = nz;
-    const half = WORLD / 2 - 1;
-    ent.x = Math.max(-half, Math.min(half, ent.x));
-    ent.z = Math.max(-half, Math.min(half, ent.z));
+    if (!this.blocked(nx, ent.y, r)) ent.x = nx;
+    const ny = ent.y + dy;
+    if (!this.blocked(ent.x, ny, r)) ent.y = ny;
+    ent.x = Math.max(8, Math.min(MAP_W * TILE - 8, ent.x));
+    ent.y = Math.max(8, Math.min(MAP_H * TILE - 8, ent.y));
   }
 
   tryAttack() {
@@ -881,66 +561,60 @@ export class Game {
       return;
     }
     p.stamina = Math.max(0, p.stamina - w.cost);
-    p.attackT = 0.18;
+    p.attackT = 0.16;
     p.attackCd = w.speed;
-    p.yaw = Math.atan2(this._hit.x - p.x, this._hit.z - p.z);
 
-    this.slash.position.set(p.x + Math.sin(p.yaw) * 1.15, 0.85, p.z + Math.cos(p.yaw) * 1.15);
-    this.slash.rotation.z = -p.yaw;
-    this.slash.material.opacity = 0.95;
+    const ang = Math.atan2(this.mouse.wy - p.y, this.mouse.wx - p.x);
+    this.slashFx.push({
+      x: p.x + Math.cos(ang) * 14,
+      y: p.y + Math.sin(ang) * 10,
+      frame: 0,
+      t: 0,
+      ang,
+    });
 
     const dmg = w.dmg + p.baseDmg;
-
     if (w.ranged) {
-      const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xffe080 })
-      );
-      mesh.position.set(p.x, 1, p.z);
-      this.scene.add(mesh);
       this.projectiles.push({
-        mesh,
         x: p.x,
-        z: p.z,
-        vx: Math.sin(p.yaw) * 18,
-        vz: Math.cos(p.yaw) * 18,
-        life: 1.1,
+        y: p.y - 8,
+        vx: Math.cos(ang) * 160,
+        vy: Math.sin(ang) * 160,
+        life: 1,
         dmg,
       });
       return;
     }
 
+    const range = w.range * TILE * 0.55;
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const dx = e.x - p.x;
-      const dz = e.z - p.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist > w.range + 0.45) continue;
-      const a = Math.atan2(dx, dz);
-      let da = Math.abs(a - p.yaw);
+      const dx = e.x - p.x,
+        dy = e.y - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > range + 8) continue;
+      let da = Math.abs(Math.atan2(dy, dx) - ang);
       while (da > Math.PI) da = Math.abs(da - Math.PI * 2);
-      if (da < 1.05) this.damageEnemy(e, dmg);
+      if (da < 1.1) this.damageEnemy(e, dmg);
     }
-
+    // harvest
     for (const tr of this.trees) {
       if (tr.hp <= 0) continue;
-      if (Math.hypot(tr.x - p.x, tr.z - p.z) < w.range + 0.65) {
+      if (Math.hypot(tr.x - p.x, tr.y - p.y) < range + 10) {
         tr.hp--;
-        this.floatDmg(tr.x, 1.8, tr.z, "-1");
+        this.floatDmg(tr.x, tr.y - 20, "-1");
         if (tr.hp <= 0) {
-          this.scene.remove(tr.mesh);
-          this.addItem("wood", 2 + Math.floor(Math.random() * 3));
+          this.addItem("wood", 2 + ((Math.random() * 3) | 0));
           this.ui.toast("+ Timber");
         }
       }
     }
     for (const rk of this.rocks) {
       if (rk.hp <= 0) continue;
-      if (Math.hypot(rk.x - p.x, rk.z - p.z) < w.range + 0.45) {
+      if (Math.hypot(rk.x - p.x, rk.y - p.y) < range + 6) {
         rk.hp--;
         if (rk.hp <= 0) {
-          this.scene.remove(rk.mesh);
-          this.addItem("ore", 1 + Math.floor(Math.random() * 2));
+          this.addItem("ore", 1 + ((Math.random() * 2) | 0));
           this.ui.toast("+ Iron Ore");
         }
       }
@@ -951,20 +625,16 @@ export class Game {
     const p = this.player;
     for (const c of this.chests) {
       if (c.open) continue;
-      if (Math.hypot(c.x - p.x, c.z - p.z) < 1.7) {
+      if (Math.hypot(c.x - p.x, c.y - p.y) < 22) {
         c.open = true;
-        if (c.lid) {
-          c.lid.rotation.x = -1.15;
-          c.lid.position.z -= 0.1;
-        }
         const loot = [
           ["gel", 2],
           ["ore", 2],
           ["wood", 4],
           ["herb", 2],
-          ["gold", 20],
+          ["gold", 18],
         ];
-        const L = loot[Math.floor(Math.random() * loot.length)];
+        const L = loot[(Math.random() * loot.length) | 0];
         if (L[0] === "gold") {
           p.gold += L[1];
           this.ui.toast(`+${L[1]} gold`);
@@ -987,34 +657,31 @@ export class Game {
       const w = this.weapon();
       for (const e of this.enemies) {
         if (e.dead) continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) < w.range + 1.2)
+        if (Math.hypot(e.x - p.x, e.y - p.y) < w.range * TILE * 0.7 + 16)
           this.damageEnemy(e, Math.floor((w.dmg + p.baseDmg) * 1.85), true);
       }
-      this.slash.material.opacity = 1;
-      this.slash.scale.setScalar(1.45);
       this.ui.toast("Power Strike!");
-      setTimeout(() => this.slash.scale.setScalar(1), 200);
     } else if (i === 1) {
       if ((p.inv.herb || 0) < 1) return this.ui.toast("Need Wild Herb");
       p.inv.herb--;
       p.skillCd[1] = 6;
       const heal = 18 + p.level * 2;
       p.hp = Math.min(p.maxHp, p.hp + heal);
-      this.floatDmg(p.x, 1.6, p.z, `+${heal}`, false, true);
+      this.floatDmg(p.x, p.y - 20, `+${heal}`, false, true);
       this.ui.toast("Herbal Remedy");
     } else if (i === 2) {
       p.skillCd[2] = 7;
-      p.stamina = Math.max(0, p.stamina - 14);
+      p.stamina = Math.max(0, p.stamina - 12);
       for (const e of this.enemies) {
         if (e.dead) continue;
-        if (Math.hypot(e.x - p.x, e.z - p.z) < 3.2)
-          this.damageEnemy(e, 9 + p.baseDmg + Math.floor(this.weapon().dmg * 0.45));
+        if (Math.hypot(e.x - p.x, e.y - p.y) < 42)
+          this.damageEnemy(e, 8 + p.baseDmg + Math.floor(this.weapon().dmg * 0.4));
       }
       this.ui.toast("Whirlwind!");
     } else if (i === 3) {
       p.skillCd[3] = 5;
-      p.stamina = Math.min(p.maxStamina, p.stamina + 32);
-      p.invuln = 0.18;
+      p.stamina = Math.min(p.maxStamina, p.stamina + 30);
+      p.invuln = 0.15;
       this.ui.toast("Second Wind");
     }
     this.ui.sync();
@@ -1024,47 +691,48 @@ export class Game {
     if (e.dead) return;
     let crit = forceCrit;
     if (!crit && Math.random() < 0.12) {
-      dmg = Math.floor(dmg * 1.55);
+      dmg = Math.floor(dmg * 1.5);
       crit = true;
     }
     e.hp -= dmg;
-    e.hurtT = 0.18;
-    if (e.body?.material) e.body.material.emissiveIntensity = 0.55;
-    this.floatDmg(e.x, 1.1, e.z, String(dmg), crit);
+    e.hurtT = 0.15;
+    this.floatDmg(e.x, e.y - 12, String(dmg), crit);
+    // knockback
     const p = this.player;
-    const dx = e.x - p.x;
-    const dz = e.z - p.z;
-    const d = Math.hypot(dx, dz) || 1;
-    e.x += (dx / d) * 0.45;
-    e.z += (dz / d) * 0.45;
-    e.mesh.position.x = e.x;
-    e.mesh.position.z = e.z;
-
-    const ratio = Math.max(0, e.hp / e.maxHp);
-    e.barFill.scale.x = Math.max(0.01, ratio);
-    e.barFill.position.x = -0.45 * (1 - ratio);
-    e.barFill.material.color.setHex(ratio > 0.5 ? 0x60d070 : ratio > 0.25 ? 0xe0a040 : 0xe05058);
-
+    const dx = e.x - p.x,
+      dy = e.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    e.x += (dx / d) * 8;
+    e.y += (dy / d) * 8;
+    // particles
+    for (let i = 0; i < 4; i++) {
+      this.particles.push({
+        x: e.x,
+        y: e.y - 6,
+        vx: (Math.random() - 0.5) * 60,
+        vy: -20 - Math.random() * 40,
+        life: 0.35,
+        color: "#5ef0c0",
+      });
+    }
     if (e.hp <= 0) {
       e.dead = true;
       this.grantXp(e.xp);
-      p.gold += 1 + Math.floor(Math.random() * 4);
-      this.drop(e.x, e.z, "gel", 1 + Math.floor(Math.random() * 2));
-      if (Math.random() < 0.28) this.drop(e.x, e.z, "herb", 1);
-      if (Math.random() < 0.16) this.drop(e.x, e.z, "ore", 1);
-      e.mesh.scale.setScalar(0.01);
+      p.gold += 1 + ((Math.random() * 4) | 0);
+      this.drop(e.x, e.y, "gel", 1 + ((Math.random() * 2) | 0));
+      if (Math.random() < 0.25) this.drop(e.x, e.y, "herb", 1);
+      if (Math.random() < 0.15) this.drop(e.x, e.y, "ore", 1);
       setTimeout(() => {
-        this.scene.remove(e.mesh);
         const rng = Math.random;
-        let x, z;
+        let x, y;
         for (let t = 0; t < 30; t++) {
-          x = (rng() - 0.5) * (WORLD - 10);
-          z = (rng() - 0.5) * (WORLD - 10);
-          if (!this.blocked(x, z, 0.5) && Math.hypot(x - this.player.x, z - this.player.z) > 14) break;
+          x = 24 + rng() * (MAP_W * TILE - 48);
+          y = 24 + rng() * (MAP_H * TILE - 48);
+          if (!this.blocked(x, y, 6) && Math.hypot(x - this.player.x, y - this.player.y) > 120) break;
         }
         const idx = this.enemies.indexOf(e);
-        if (idx >= 0) this.enemies[idx] = this._makeSlime(x, z, Math.random() < 0.18 ? 2 : 1);
-      }, 400);
+        if (idx >= 0) this.enemies[idx] = this._makeSlime(x, y, Math.random() < 0.18 ? 2 : 1);
+      }, 350);
     }
   }
 
@@ -1090,19 +758,8 @@ export class Game {
     this.player.inv[id] = (this.player.inv[id] || 0) + n;
   }
 
-  drop(x, z, id, n) {
-    const mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.22, 0),
-      new THREE.MeshStandardMaterial({
-        color: id === "gel" ? 0x60f0b0 : id === "ore" ? 0x8090a8 : id === "herb" ? 0x50c060 : 0xb08040,
-        flatShading: true,
-        emissive: 0x224422,
-        emissiveIntensity: 0.25,
-      })
-    );
-    mesh.position.set(x, 0.35, z);
-    this.scene.add(mesh);
-    this.drops.push({ mesh, x, z, id, n, t: 0 });
+  drop(x, y, id, n) {
+    this.drops.push({ x, y, id, n, t: 0, sortY: y });
   }
 
   _updateDrops(dt) {
@@ -1110,17 +767,12 @@ export class Game {
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const d = this.drops[i];
       d.t += dt;
-      d.mesh.position.y = 0.35 + Math.sin(this.t * 5 + d.x) * 0.08;
-      d.mesh.rotation.y += dt * 2;
-      if (Math.hypot(d.x - p.x, d.z - p.z) < 1.1) {
+      d.y += Math.sin(this.t * 6 + d.x) * 0.05;
+      if (Math.hypot(d.x - p.x, d.y - p.y) < 14) {
         this.addItem(d.id, d.n);
         this.ui.toast(`+${d.n} ${ITEMS[d.id].name}`);
-        this.scene.remove(d.mesh);
         this.drops.splice(i, 1);
-      } else if (d.t > 40) {
-        this.scene.remove(d.mesh);
-        this.drops.splice(i, 1);
-      }
+      } else if (d.t > 35) this.drops.splice(i, 1);
     }
   }
 
@@ -1128,19 +780,16 @@ export class Game {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];
       pr.x += pr.vx * dt;
-      pr.z += pr.vz * dt;
+      pr.y += pr.vy * dt;
       pr.life -= dt;
-      pr.mesh.position.set(pr.x, 1, pr.z);
-      if (pr.life <= 0 || this.tileAt(pr.x, pr.z) === 3) {
-        this.scene.remove(pr.mesh);
+      if (pr.life <= 0 || this.tileAt(pr.x, pr.y) === 3) {
         this.projectiles.splice(i, 1);
         continue;
       }
       for (const e of this.enemies) {
         if (e.dead) continue;
-        if (Math.hypot(e.x - pr.x, e.z - pr.z) < 0.7) {
+        if (Math.hypot(e.x - pr.x, e.y - pr.y) < 10) {
           this.damageEnemy(e, pr.dmg);
-          this.scene.remove(pr.mesh);
           this.projectiles.splice(i, 1);
           break;
         }
@@ -1148,47 +797,54 @@ export class Game {
     }
   }
 
+  _updateFx(dt) {
+    for (let i = this.slashFx.length - 1; i >= 0; i--) {
+      const s = this.slashFx[i];
+      s.t += dt;
+      s.frame = Math.min(2, (s.t * 12) | 0);
+      if (s.t > 0.22) this.slashFx.splice(i, 1);
+    }
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 80 * dt;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+  }
+
   _updateEnemies(dt) {
     const p = this.player;
     for (const e of this.enemies) {
       if (e.dead) continue;
-      e.bob += dt * 4;
       e.hurtT = Math.max(0, e.hurtT - dt);
       e.atkCd = Math.max(0, e.atkCd - dt);
-      if (e.hurtT <= 0 && e.body?.material) e.body.material.emissiveIntensity = 0.18;
-
-      // jelly squash
-      const sq = 0.7 + Math.sin(e.bob) * 0.1;
-      e.mesh.scale.y = sq;
-      e.mesh.scale.x = 1.05 - (sq - 0.7) * 0.4;
-      e.mesh.scale.z = e.mesh.scale.x;
-      e.mesh.position.y = Math.abs(Math.sin(e.bob)) * 0.05;
-      e.bar.quaternion.copy(this.camera.quaternion);
-
-      const dx = p.x - e.x;
-      const dz = p.z - e.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < e.aggro && dist > 0.9) {
-        const sp = e.speed * dt;
-        const nx = e.x + (dx / dist) * sp;
-        const nz = e.z + (dz / dist) * sp;
-        if (!this.blocked(nx, e.z, 0.35)) e.x = nx;
-        if (!this.blocked(e.x, nz, 0.35)) e.z = nz;
-        e.mesh.position.x = e.x;
-        e.mesh.position.z = e.z;
+      e.frameT = (e.frameT || 0) + dt;
+      if (e.frameT > 0.2) {
+        e.frameT = 0;
+        e.frame = (e.frame + 1) % 4;
       }
-      if (dist < 1.05 && e.atkCd <= 0 && p.evadeT <= 0) {
-        e.atkCd = 1.05;
+      e.sortY = e.y;
+      const dx = p.x - e.x,
+        dy = p.y - e.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < e.aggro && dist > 12) {
+        const sp = e.speed * dt;
+        this._move(e, (dx / dist) * sp, (dy / dist) * sp, 5);
+      }
+      if (dist < 14 && e.atkCd <= 0 && p.evadeT <= 0) {
+        e.atkCd = 1.0;
         let dmg = e.dmg;
         if (p.shield) {
           dmg = Math.floor(dmg * 0.28);
-          p.stamina = Math.max(0, p.stamina - 10);
-          this.floatDmg(p.x, 1.5, p.z, "block");
+          p.stamina = Math.max(0, p.stamina - 8);
+          this.floatDmg(p.x, p.y - 18, "block");
         }
         if (p.invuln <= 0) {
           p.hp -= dmg;
           p.invuln = 0.35;
-          this.floatDmg(p.x, 1.4, p.z, String(dmg));
+          this.floatDmg(p.x, p.y - 16, String(dmg));
           if (p.hp <= 0) {
             p.hp = 0;
             p.dead = true;
@@ -1199,12 +855,15 @@ export class Game {
     }
   }
 
-  floatDmg(x, y, z, text, crit = false, heal = false) {
-    const v = new THREE.Vector3(x, y, z);
-    v.project(this.camera);
-    const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
-    const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
-    this.ui.dmg(sx, sy, text, crit, heal);
+  floatDmg(x, y, text, crit = false, heal = false) {
+    const sx = x - this.cam.x;
+    const sy = y - this.cam.y;
+    // scale to screen CSS pixels approximately
+    const rect = this.canvas.getBoundingClientRect();
+    const scale = Math.min(rect.width / VIEW_W, rect.height / VIEW_H);
+    const ox = rect.left + (rect.width - VIEW_W * scale) / 2;
+    const oy = rect.top + (rect.height - VIEW_H * scale) / 2;
+    this.ui.dmg(ox + sx * scale, oy + sy * scale, text, crit, heal);
   }
 
   craft(id) {
@@ -1230,12 +889,11 @@ export class Game {
   respawn() {
     const p = this.player;
     p.dead = false;
-    p.x = this.spawn.x;
-    p.z = this.spawn.z;
+    p.x = this.spawnTX * TILE + 8;
+    p.y = this.spawnTY * TILE + 8;
     p.hp = p.maxHp;
     p.stamina = p.maxStamina;
-    p.invuln = 1.5;
-    this.playerMesh.position.set(p.x, 0, p.z);
+    p.invuln = 1.2;
     this.ui.hideDeath();
     this.ui.toast("Returned to camp");
   }
@@ -1244,54 +902,205 @@ export class Game {
     const mm = document.getElementById("minimap");
     if (!mm) return;
     const m = mm.getContext("2d");
-    const W = mm.width;
-    const H = mm.height;
-    m.clearRect(0, 0, W, H);
+    const W = mm.width,
+      H = mm.height;
+    m.imageSmoothingEnabled = false;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        const mx = Math.floor((x / W) * MAP_N);
-        const mz = Math.floor((y / H) * MAP_N);
-        const t = this.map[mz * MAP_N + mx];
-        m.fillStyle = t === 3 ? "#4a90a8" : t === 1 ? "#b89860" : t === 2 ? "#7a6038" : "#4a7a52";
+        const tx = ((x / W) * MAP_W) | 0;
+        const ty = ((y / H) * MAP_H) | 0;
+        const t = this.map[ty * MAP_W + tx];
+        m.fillStyle = t === 3 ? "#3a80c0" : t === 1 ? "#c0a060" : t === 2 ? "#8a6a40" : "#3f8a4a";
         m.fillRect(x, y, 1, 1);
       }
     }
     m.fillStyle = "#1e5030";
     for (const tr of this.trees) {
       if (tr.hp <= 0) continue;
-      m.fillRect(((tr.x / WORLD + 0.5) * W) | 0, ((tr.z / WORLD + 0.5) * H) | 0, 1, 1);
+      m.fillRect(((tr.x / (MAP_W * TILE)) * W) | 0, ((tr.y / (MAP_H * TILE)) * H) | 0, 1, 1);
     }
     m.fillStyle = "#60f0b0";
     for (const e of this.enemies) {
       if (e.dead) continue;
-      m.fillRect(((e.x / WORLD + 0.5) * W) | 0, ((e.z / WORLD + 0.5) * H) | 0, 2, 2);
+      m.fillRect(((e.x / (MAP_W * TILE)) * W) | 0, ((e.y / (MAP_H * TILE)) * H) | 0, 2, 2);
     }
-    const px = ((this.player.x / WORLD + 0.5) * W) | 0;
-    const py = ((this.player.z / WORLD + 0.5) * H) | 0;
+    const px = ((this.player.x / (MAP_W * TILE)) * W) | 0;
+    const py = ((this.player.y / (MAP_H * TILE)) * H) | 0;
     m.fillStyle = "#fff";
-    m.fillRect(px - 2, py - 2, 4, 4);
+    m.fillRect(px - 1, py - 1, 3, 3);
     m.fillStyle = "#f0c84a";
-    m.fillRect(px - 1, py - 1, 2, 2);
+    m.fillRect(px, py, 1, 1);
   }
 
   render() {
-    this.playerMesh.visible = !(this.player.invuln > 0 && Math.floor(this.t * 18) % 2 === 0);
-    if (this.player.shield) {
-      if (!this._shieldMesh) {
-        this._shieldMesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.9, 16, 12),
-          new THREE.MeshBasicMaterial({
-            color: 0x80c0ff,
-            transparent: true,
-            opacity: 0.16,
-            wireframe: true,
-          })
-        );
-        this.playerMesh.add(this._shieldMesh);
-      }
-      this._shieldMesh.visible = true;
-    } else if (this._shieldMesh) this._shieldMesh.visible = false;
+    const ctx = this.ctx;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
-    this.renderer.render(this.scene, this.camera);
+    // sky/void border color
+    ctx.fillStyle = "#1a2820";
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    ctx.save();
+    ctx.translate(-Math.floor(this.cam.x), -Math.floor(this.cam.y));
+
+    // tiles in view
+    const x0 = Math.max(0, (this.cam.x / TILE) | 0);
+    const y0 = Math.max(0, (this.cam.y / TILE) | 0);
+    const x1 = Math.min(MAP_W - 1, ((this.cam.x + VIEW_W) / TILE) | 0);
+    const y1 = Math.min(MAP_H - 1, ((this.cam.y + VIEW_H) / TILE) | 0);
+    const wf = (this.t * 4) | 0;
+
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const t = this.map[ty * MAP_W + tx];
+        const v = this.varMap[ty * MAP_W + tx];
+        let key;
+        if (t === 3) key = `world/water_${wf % 4}`;
+        else if (t === 1) key = `world/path_${v}`;
+        else if (t === 2) key = `world/path_${(v + 1) % 4}`;
+        else key = `world/grass_${v}`;
+        const im = img(key);
+        if (im) ctx.drawImage(im, tx * TILE, ty * TILE);
+      }
+    }
+
+    // depth-sorted draw list for 2.5D
+    const list = [];
+
+    for (const tr of this.trees) {
+      if (tr.hp <= 0) continue;
+      list.push({ sortY: tr.y + 22, draw: () => {
+        const im = img(`world/tree_${tr.v}`);
+        if (im) ctx.drawImage(im, tr.x - 24, tr.y - 52);
+      }});
+    }
+    for (const rk of this.rocks) {
+      if (rk.hp <= 0) continue;
+      list.push({ sortY: rk.y + 4, draw: () => {
+        const im = img(`world/rock_${rk.v}`);
+        if (im) ctx.drawImage(im, rk.x - 12, rk.y - 14);
+      }});
+    }
+    for (const to of this.torches) {
+      list.push({ sortY: to.y + 8, draw: () => {
+        const im = img(`world/torch_${((this.t * 8) | 0) % 4}`);
+        if (im) ctx.drawImage(im, to.x - 8, to.y - 28);
+      }});
+    }
+    for (const c of this.chests) {
+      list.push({ sortY: c.y + 6, draw: () => {
+        const im = img(c.open ? "world/chest_open" : "world/chest");
+        if (im) ctx.drawImage(im, c.x - 12, c.y - 14);
+      }});
+    }
+    // camp
+    list.push({ sortY: this.camp.y + 6, draw: () => {
+      const im = img(`world/camp_${((this.t * 6) | 0) % 4}`);
+      if (im) ctx.drawImage(im, this.camp.x - 16, this.camp.y - 20);
+    }});
+
+    // drops
+    for (const d of this.drops) {
+      list.push({ sortY: d.y, draw: () => {
+        const im = img(`items/${d.id}`);
+        if (im) {
+          const bob = Math.sin(this.t * 5 + d.x) * 2;
+          ctx.drawImage(im, d.x - 8, d.y - 8 + bob);
+        }
+      }});
+    }
+
+    // enemies
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      list.push({ sortY: e.y + 4, draw: () => {
+        const im = img(`enemy/slime_t${e.tier}_${e.frame}`);
+        if (!im) return;
+        if (e.hurtT > 0) {
+          ctx.globalAlpha = 0.7;
+          ctx.filter = "brightness(2)";
+        }
+        ctx.drawImage(im, e.x - 14, e.y - 18);
+        ctx.filter = "none";
+        ctx.globalAlpha = 1;
+        // hp bar
+        const ratio = Math.max(0, e.hp / e.maxHp);
+        ctx.fillStyle = "#1a1010";
+        ctx.fillRect(e.x - 10, e.y - 24, 20, 3);
+        ctx.fillStyle = ratio > 0.5 ? "#50d070" : ratio > 0.25 ? "#e0a040" : "#e05050";
+        ctx.fillRect(e.x - 10, e.y - 24, 20 * ratio, 3);
+      }});
+    }
+
+    // player
+    const p = this.player;
+    list.push({ sortY: p.y + 4, draw: () => {
+      if (p.invuln > 0 && Math.floor(this.t * 16) % 2 === 0) return;
+      const im = img(`player/p_${p.dir}_${p.frame}`);
+      if (im) ctx.drawImage(im, p.x - 16, p.y - 32);
+      if (p.shield) {
+        ctx.strokeStyle = "rgba(120,180,255,0.55)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 12, 14, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }});
+
+    // slash fx
+    for (const s of this.slashFx) {
+      list.push({ sortY: s.y + 20, draw: () => {
+        const im = img(`fx/slash_${s.frame}`);
+        if (!im) return;
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.ang);
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(im, -16, -16);
+        ctx.restore();
+      }});
+    }
+
+    list.sort((a, b) => a.sortY - b.sortY);
+    for (const o of list) o.draw();
+
+    // projectiles
+    ctx.fillStyle = "#ffe080";
+    for (const pr of this.projectiles) {
+      ctx.beginPath();
+      ctx.arc(pr.x, pr.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // particles
+    for (const pt of this.particles) {
+      ctx.globalAlpha = Math.max(0, pt.life * 2);
+      ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x | 0, pt.y | 0, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // cursor
+    ctx.strokeStyle = "rgba(100,220,160,0.8)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(this.mouse.wx, this.mouse.wy, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(this.mouse.wx - 7, this.mouse.wy);
+    ctx.lineTo(this.mouse.wx + 7, this.mouse.wy);
+    ctx.moveTo(this.mouse.wx, this.mouse.wy - 7);
+    ctx.lineTo(this.mouse.wx, this.mouse.wy + 7);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // vignette
+    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.3, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.75);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 }
