@@ -1,160 +1,181 @@
-// Rendering: world tiles, entities (depth-sorted), FX, day/night overlay, minimap.
 import { Game } from "./game.js";
 import { img } from "./assets.js";
 
-const T = 24, MAP_W = 96, MAP_H = 96, VIEW_W = 420, VIEW_H = 236;
+const T = 24, MAP_W = 110, MAP_H = 110, VIEW_W = 420, VIEW_H = 236;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 Game.prototype.render = function () {
   const ctx = this.ctx, p = this.player;
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-
   const camx = Math.round(this.cam.x), camy = Math.round(this.cam.y);
   const x0 = Math.max(0, (camx / T) | 0), y0 = Math.max(0, (camy / T) | 0);
   const x1 = Math.min(MAP_W, x0 + (VIEW_W / T) + 2), y1 = Math.min(MAP_H, y0 + (VIEW_H / T) + 2);
 
-  // ground tiles
   const wf = (this.t * 3) | 0;
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
       const i = y * MAP_W + x, t = this.map[i], v = this.vmap[i];
-      let key;
-      if (t === 2) key = `tiles/water_${wf % 4}`;
-      else if (t === 1) key = `tiles/path_${v % 4}`;
-      else if (t === 3) key = `tiles/sand_${v % 4}`;
-      else key = `tiles/grass_${v % 4}`;
-      const im = img(key);
+      let key, fb;
+      if (t === 2) { key = `tiles/water_${wf % 4}`; fb = "#4a8fb0"; }
+      else if (t === 1) { key = `tiles/path_${v % 4}`; fb = "#a8825a"; }
+      else if (t === 3) { key = `tiles/sand_${v % 4}`; fb = "#e8dcc0"; }
+      else if (t === 4) { key = `tiles/grass_${v % 4}`; fb = "#dfe8ee"; }
+      else { key = `tiles/grass_${v % 4}`; fb = "#5aa050"; }
       const sx = x * T - camx, sy = y * T - camy;
-      if (im) ctx.drawImage(im, sx, sy, T, T);
-      else { ctx.fillStyle = t===2?"#4a8fb0":t===1?"#a8825a":t===3?"#e8dcc0":"#5aa050"; ctx.fillRect(sx, sy, T, T); }
+      const im = img(key);
+      if (im) ctx.drawImage(im, sx, sy, T, T); else { ctx.fillStyle = fb; ctx.fillRect(sx, sy, T, T); }
+      // snow biome tint over grass tiles
+      if (t === 4) { ctx.fillStyle = "rgba(230,238,245,0.55)"; ctx.fillRect(sx, sy, T, T); }
+      if (t === 5) { ctx.fillStyle = "rgba(20,40,25,0.22)"; ctx.fillRect(sx, sy, T, T); }
     }
   }
 
-  // camp fire ring at center
+  // camp fire
   const csx = this.camp.x - camx, csy = this.camp.y - camy;
   if (csx > -40 && csx < VIEW_W + 40) {
     const flick = 6 + Math.sin(this.t * 8) * 2;
-    ctx.fillStyle = "rgba(60,40,25,0.6)"; ctx.beginPath(); ctx.ellipse(csx, csy, 16, 8, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#e8963c"; ctx.beginPath(); ctx.ellipse(csx, csy - 2, flick*0.5, flick, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#f5d060"; ctx.beginPath(); ctx.ellipse(csx, csy - 3, flick*0.3, flick*0.6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(60,40,25,0.5)"; ctx.beginPath(); ctx.ellipse(csx, csy, 18, 8, 0, 0, 7); ctx.fill();
+    for (let a = 0; a < 6; a++) { const an = a / 6 * 7; ctx.fillStyle = "#7a5230"; ctx.fillRect(csx + Math.cos(an) * 12 - 2, csy + Math.sin(an) * 5 - 1, 4, 3); }
+    ctx.fillStyle = "#e8963c"; ctx.beginPath(); ctx.ellipse(csx, csy - 3, flick * 0.5, flick, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#f5d060"; ctx.beginPath(); ctx.ellipse(csx, csy - 4, flick * 0.3, flick * 0.6, 0, 0, 7); ctx.fill();
   }
 
-  // depth-sorted sprites: trees, bushes, enemies, player, pet, chests
-  const drawList = [];
-  for (const tr of this.trees) if (this.inView(tr.x, camx)) drawList.push({ y: tr.sortY, kind: "tree", o: tr });
-  for (const b of this.bushes) if (this.inView(b.x, camx)) drawList.push({ y: b.sortY, kind: "bush", o: b });
-  for (const c of this.chests) if (this.inView(c.x, camx)) drawList.push({ y: c.y, kind: "chest", o: c });
-  for (const e of this.enemies) if (!e.dead && this.inView(e.x, camx)) drawList.push({ y: e.sortY, kind: "enemy", o: e });
-  if (this.pet) drawList.push({ y: this.pet.sortY, kind: "pet", o: this.pet });
-  drawList.push({ y: p.sortY, kind: "player", o: p });
-  drawList.sort((a, b) => a.y - b.y);
+  // flowers (flat, under everything)
+  const FCOL = [["#f2d0dc", "#e88aa8"], ["#dfe8ff", "#7aa0e0"], ["#fff0c0", "#f0c040"]];
+  for (const fl of this.flowers) {
+    const sx = fl.x - camx, sy = fl.y - camy;
+    if (sx < -8 || sx > VIEW_W + 8) continue;
+    const c = FCOL[fl.k];
+    ctx.fillStyle = "#4a8040"; ctx.fillRect(sx, sy, 1, 3);
+    ctx.fillStyle = c[0]; ctx.fillRect(sx - 1, sy - 2, 3, 3);
+    ctx.fillStyle = c[1]; ctx.fillRect(sx, sy - 1, 1, 1);
+  }
 
-  for (const d of drawList) {
+  const draw = [];
+  const inv = (wx) => { const sx = wx - camx; return sx > -60 && sx < VIEW_W + 60; };
+  for (const o of this.trees) if (inv(o.x)) draw.push({ y: o.sortY, k: "tree", o });
+  for (const o of this.bushes) if (inv(o.x)) draw.push({ y: o.sortY, k: "bush", o });
+  for (const o of this.rocks) if (inv(o.x)) draw.push({ y: o.sortY, k: "rock", o });
+  for (const o of this.chests) if (inv(o.x)) draw.push({ y: o.y, k: "chest", o });
+  for (const o of this.npcs) if (inv(o.x)) draw.push({ y: o.sortY, k: "npc", o });
+  for (const e of this.enemies) if (!e.dead && inv(e.x)) draw.push({ y: e.sortY, k: "enemy", o: e });
+  if (this.pet) draw.push({ y: this.pet.sortY, k: "pet", o: this.pet });
+  draw.push({ y: p.sortY, k: "player", o: p });
+  draw.sort((a, b) => a.y - b.y);
+
+  for (const d of draw) {
     const o = d.o, sx = Math.round(o.x - camx), sy = Math.round(o.y - camy);
-    if (d.kind === "tree") {
-      const im = img(`tree_${o.v}`);
-      if (im) ctx.drawImage(im, sx - im.width/2, sy - im.height + 6);
-    } else if (d.kind === "bush") {
-      const im = img("bush_0");
-      if (im) ctx.drawImage(im, sx - im.width/2, sy - im.height + 4);
-    } else if (d.kind === "chest") {
-      const im = img(o.opened ? "fx/chest_open" : "fx/chest");
-      if (im) ctx.drawImage(im, sx - 12, sy - 16);
-      if (!o.opened && o.pet) { // sparkle hint
-        ctx.fillStyle = `rgba(255,230,120,${0.5+0.5*Math.sin(this.t*5)})`;
-        ctx.fillRect(sx + 6, sy - 20, 2, 2);
-      }
-    } else if (d.kind === "enemy") {
-      const im = img(`mon/${o.id}`);
-      const bob = Math.sin(o.bob) * 2;
+    if (d.k === "tree") { const im = img(`tree_${o.v}`); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 6); }
+    else if (d.k === "bush") { const im = img("bush_0"); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 4); }
+    else if (d.k === "rock") {
+      ctx.fillStyle = "rgba(20,18,22,0.25)"; ctx.beginPath(); ctx.ellipse(sx, sy, 9, 3, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = o.snow ? "#c8d0d8" : "#8a8f98"; ctx.beginPath(); ctx.ellipse(sx, sy - 3, 8, 6, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = o.snow ? "#e8eef4" : "#a6acb6"; ctx.beginPath(); ctx.ellipse(sx - 2, sy - 5, 4, 3, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#20222a"; ctx.beginPath(); ctx.ellipse(sx, sy - 1, 8, 4, 0, 0, 7); ctx.globalAlpha = 0.3; ctx.fill(); ctx.globalAlpha = 1;
+    }
+    else if (d.k === "chest") {
+      const open = o.opened;
+      const im = img(open ? "fx/chest_open" : "fx/chest");
+      // lid lift animation
+      if (open && o.openT < 1) { ctx.save(); ctx.translate(sx, sy); }
+      if (im) ctx.drawImage(im, sx - 12, sy - 16 - (open ? Math.round(o.openT * 3) : 0));
+      if (open && o.openT < 1) ctx.restore();
+      if (!open && o.pet) { ctx.fillStyle = `rgba(255,230,120,${0.5 + 0.5 * Math.sin(this.t * 5)})`; ctx.fillRect(sx + 6, sy - 20, 2, 2); }
+    }
+    else if (d.k === "npc") {
+      const cv = o.cache.walk["down"][o.frame % 4];
+      // exclamation marker for available quest
+      ctx.drawImage(cv, sx - 16, sy - 36);
+      const hasQuest = this.quests.forGiver(o.name, p.inv).some(x => !x.active && !x.done);
+      const ready = this.quests.forGiver(o.name, p.inv).some(x => x.ready);
+      if (ready) { ctx.fillStyle = "#ffd24a"; ctx.font = "bold 14px sans-serif"; ctx.fillText("?", sx - 3, sy - 40 + Math.sin(this.t * 4) * 2); }
+      else if (hasQuest) { ctx.fillStyle = "#ffe070"; ctx.font = "bold 15px sans-serif"; ctx.fillText("!", sx - 2, sy - 40 + Math.sin(this.t * 4) * 2); }
+      // name tag
+      ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 18, sy - 46, 36, 9);
+      ctx.fillStyle = "#e8ecf2"; ctx.fillText(o.name, sx, sy - 39); ctx.textAlign = "left";
+    }
+    else if (d.k === "enemy") {
+      const im = img(`mon/${o.id}`); const bob = Math.sin(o.bob) * 2;
       if (im) {
-        if (o.hurt > 0) { ctx.save(); ctx.globalAlpha = 0.8; }
-        ctx.drawImage(im, sx - im.width/2, sy - im.height + bob);
-        if (o.hurt > 0) { ctx.globalCompositeOperation = "source-atop"; ctx.fillStyle = "rgba(255,80,80,0.6)"; ctx.fillRect(sx - im.width/2, sy - im.height + bob, im.width, im.height); ctx.globalCompositeOperation = "source-over"; ctx.restore(); }
-        // hp bar
+        ctx.drawImage(im, sx - im.width / 2, sy - im.height + bob);
+        if (o.hurt > 0) { ctx.globalAlpha = o.hurt * 3; ctx.globalCompositeOperation = "source-atop"; }
         if (o.hp < o.maxHp) {
           ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24, 3);
-          ctx.fillStyle = "#e05050"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24 * (o.hp/o.maxHp), 3);
+          ctx.fillStyle = "#e05050"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24 * (o.hp / o.maxHp), 3);
         }
+        if (o.hurt > 0) { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; }
       }
-    } else if (d.kind === "pet") {
-      const im = img(`pet/${o.id}`);
-      const bob = Math.sin(o.bob) * 2;
-      if (im) ctx.drawImage(im, sx - im.width/2, sy - im.height + bob);
-    } else if (d.kind === "player") {
-      const key = p.attackT > 0 ? `player/p_${p.dir}_atk` : `player/p_${p.dir}_${p.frame % 4}`;
-      const im = img(key) || img(`player/p_${p.dir}_0`);
-      if (p.invuln > 0 && Math.floor(this.t*20)%2) ctx.globalAlpha = 0.5;
-      if (im) ctx.drawImage(im, sx - 16, sy - 36);
+    }
+    else if (d.k === "pet") { const im = img(`pet/${o.id}`); const bob = Math.sin(o.bob) * 2; if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + bob); }
+    else if (d.k === "player") {
+      const dir = p.dir;
+      let body, weap;
+      if (p.attackT > 0) {
+        const ph = 1 - p.attackT / p.attackDur;
+        const fi = clamp(Math.floor(ph * 5), 0, 4);
+        body = this.charCache.atk[dir][fi];
+        const wf2 = this.weaponFrames(p.equipped);
+        weap = wf2.atk[dir][fi];
+      } else {
+        body = this.charCache.walk[dir][p.frame % 4];
+        const wf2 = this.weaponFrames(p.equipped);
+        weap = wf2.walk[dir];
+      }
+      if (p.invuln > 0 && Math.floor(this.t * 20) % 2) ctx.globalAlpha = 0.5;
+      // weapon behind body when facing up/left
+      const behind = dir === "up" || dir === "left";
+      if (behind && weap) ctx.drawImage(weap, sx - 16, sy - 36);
+      if (body) ctx.drawImage(body, sx - 16, sy - 36);
+      if (!behind && weap) ctx.drawImage(weap, sx - 16, sy - 36);
       ctx.globalAlpha = 1;
-      // slash arc
-      if (this._slashT > 0) {
-        const sf = 3 - Math.ceil(this._slashT / 0.06);
-        const sl = img(`fx/slash_${clamp(sf,0,3)}`);
-        const ox = p.dir==="left"?-20:p.dir==="right"?20:0, oy = p.dir==="up"?-24:p.dir==="down"?-4:-14;
-        if (sl) ctx.drawImage(sl, sx - 20 + ox, sy - 34 + oy);
-        this._slashT -= 1/60;
-      }
     }
   }
 
-  // hit sparks
   if (this._hits) {
-    for (const h of this._hits) {
-      h.t += 1/60;
-      const f = Math.min(3, (h.t / 0.05) | 0);
-      const im = img(`fx/hit_${f}`);
-      if (im) ctx.drawImage(im, Math.round(h.x - camx) - 8, Math.round(h.y - camy) - 8);
-    }
+    for (const h of this._hits) { h.t += 1 / 60; const f = Math.min(3, (h.t / 0.05) | 0); const im = img(`fx/hit_${f}`); if (im) ctx.drawImage(im, Math.round(h.x - camx) - 8, Math.round(h.y - camy) - 8); }
     this._hits = this._hits.filter(h => h.t < 0.2);
   }
-
-  // particles
-  for (const pa of this.particles) {
-    ctx.fillStyle = pa.color; ctx.globalAlpha = Math.max(0, pa.life * 2);
-    ctx.fillRect(Math.round(pa.x - camx), Math.round(pa.y - camy), 2, 2);
-  }
+  for (const pa of this.particles) { ctx.fillStyle = pa.color; ctx.globalAlpha = Math.max(0, pa.life * 2); ctx.fillRect(Math.round(pa.x - camx), Math.round(pa.y - camy), 2, 2); }
   ctx.globalAlpha = 1;
 
-  // ===== DAY / NIGHT overlay =====
   this.renderDayNight(ctx);
-
+  this.renderWeather(ctx);
   this.renderMinimap();
 };
 
-Game.prototype.inView = function (wx, camx) {
-  const sx = wx - camx; return sx > -60 && sx < VIEW_W + 60;
+Game.prototype.renderDayNight = function (ctx) {
+  const t = this.time; let dark = 0;
+  if (t < 5 * 60) dark = 0.72;
+  else if (t < 7 * 60) dark = 0.72 * (1 - (t - 5 * 60) / (2 * 60));
+  else if (t < 17 * 60) dark = 0;
+  else if (t < 19 * 60) dark = 0.72 * ((t - 17 * 60) / (2 * 60));
+  else dark = 0.72;
+  if (dark > 0.01) {
+    const night = t > 19 * 60 || t < 5 * 60;
+    ctx.fillStyle = night ? `rgba(18,24,58,${dark})` : `rgba(60,40,70,${dark * 0.8})`;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const glow = (wx, wy, r, col) => { const g = ctx.createRadialGradient(wx, wy, 4, wx, wy, r); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(wx, wy, r, 0, 7); ctx.fill(); };
+    ctx.globalCompositeOperation = "lighter";
+    glow(this.camp.x - this.cam.x, this.camp.y - this.cam.y, 95, `rgba(255,180,80,${dark * 0.5})`);
+    glow(this.player.x - this.cam.x, this.player.y - this.cam.y, 72, `rgba(255,210,140,${dark * 0.4})`);
+    ctx.globalCompositeOperation = "source-over";
+  }
 };
 
-Game.prototype.renderDayNight = function (ctx) {
-  const t = this.time; // minutes
-  // brightness: 0 midday .. 1 deep night
-  let dark = 0;
-  if (t < 5*60) dark = 0.7;
-  else if (t < 7*60) dark = 0.7 * (1 - (t - 5*60)/(2*60)); // dawn
-  else if (t < 17*60) dark = 0;
-  else if (t < 19*60) dark = 0.7 * ((t - 17*60)/(2*60)); // dusk
-  else dark = 0.7;
-  if (dark > 0.01) {
-    // color: dusk warm, night blue
-    const night = t > 19*60 || t < 5*60;
-    ctx.fillStyle = night ? `rgba(20,26,60,${dark})` : `rgba(60,40,70,${dark*0.8})`;
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    // campfire glow cutout at night
-    const cx = this.camp.x - this.cam.x, cy = this.camp.y - this.cam.y;
-    const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, 90);
-    g.addColorStop(0, `rgba(255,180,80,${dark*0.5})`);
-    g.addColorStop(1, "rgba(255,180,80,0)");
-    ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 90, 0, 7); ctx.fill();
-    // player torch glow
-    const px = this.player.x - this.cam.x, py = this.player.y - this.cam.y;
-    const g2 = ctx.createRadialGradient(px, py, 4, px, py, 70);
-    g2.addColorStop(0, `rgba(255,210,140,${dark*0.4})`);
-    g2.addColorStop(1, "rgba(255,210,140,0)");
-    ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(px, py, 70, 0, 7); ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
+Game.prototype.renderWeather = function (ctx) {
+  if (this.weather === "clear" && !this.weatherP.length) return;
+  if (this.weather === "rain") {
+    ctx.strokeStyle = "rgba(170,200,230,0.5)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const d of this.weatherP) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 3, d.y + 8); }
+    ctx.stroke();
+    ctx.fillStyle = "rgba(40,55,80,0.12)"; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  } else if (this.weather === "snow") {
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    for (const d of this.weatherP) ctx.fillRect(d.x, d.y, 2, 2);
+    ctx.fillStyle = "rgba(220,230,245,0.1)"; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 };
 
@@ -162,27 +183,17 @@ Game.prototype.renderMinimap = function () {
   const m = this.mctx, S = 120, sc = S / MAP_W;
   m.clearRect(0, 0, S, S);
   m.fillStyle = "#2a3a28"; m.fillRect(0, 0, S, S);
-  // biomes (coarse)
   for (let y = 0; y < MAP_H; y += 2) {
     for (let x = 0; x < MAP_W; x += 2) {
-      const t = this.map[y*MAP_W+x];
-      if (t === 2) m.fillStyle = "#3a6a90";
-      else if (t === 1) m.fillStyle = "#7a5a3a";
-      else if (t === 3) m.fillStyle = "#c8b088";
-      else continue;
-      m.fillRect(x*sc, y*sc, 2*sc, 2*sc);
+      const t = this.map[y * MAP_W + x]; let c = null;
+      if (t === 2) c = "#3a6a90"; else if (t === 1) c = "#7a5a3a"; else if (t === 3) c = "#c8b088"; else if (t === 4) c = "#c8d4e0"; else if (t === 5) c = "#254a2a";
+      if (c) { m.fillStyle = c; m.fillRect(x * sc, y * sc, 2 * sc, 2 * sc); }
     }
   }
-  // camp
-  m.fillStyle = "#f5b040"; m.fillRect(this.camp.x/T*sc-2, this.camp.y/T*sc-2, 4, 4);
-  // chests with pets
-  for (const c of this.chests) if (!c.opened && c.pet) { m.fillStyle = "#ffe070"; m.fillRect(c.x/T*sc-1, c.y/T*sc-1, 2, 2); }
-  // enemies
-  m.fillStyle = "#e05050";
-  for (const e of this.enemies) if (!e.dead) m.fillRect(e.x/T*sc-1, e.y/T*sc-1, 2, 2);
-  // player
-  m.fillStyle = "#6ed9a8"; m.fillRect(this.player.x/T*sc-2, this.player.y/T*sc-2, 4, 4);
-  // viewport box
-  m.strokeStyle = "rgba(255,255,255,0.4)";
-  m.strokeRect(this.cam.x/T*sc, this.cam.y/T*sc, VIEW_W/T*sc, VIEW_H/T*sc);
+  m.fillStyle = "#f5b040"; m.fillRect(this.camp.x / T * sc - 2, this.camp.y / T * sc - 2, 4, 4);
+  m.fillStyle = "#ffe070"; for (const c of this.chests) if (!c.opened && c.pet) m.fillRect(c.x / T * sc - 1, c.y / T * sc - 1, 2, 2);
+  m.fillStyle = "#6fbaf0"; for (const n of this.npcs) m.fillRect(n.x / T * sc - 1, n.y / T * sc - 1, 2, 2);
+  m.fillStyle = "#e05050"; for (const e of this.enemies) if (!e.dead) m.fillRect(e.x / T * sc - 1, e.y / T * sc - 1, 2, 2);
+  m.fillStyle = "#6ed9a8"; m.fillRect(this.player.x / T * sc - 2, this.player.y / T * sc - 2, 4, 4);
+  m.strokeStyle = "rgba(255,255,255,0.4)"; m.strokeRect(this.cam.x / T * sc, this.cam.y / T * sc, VIEW_W / T * sc, VIEW_H / T * sc);
 };

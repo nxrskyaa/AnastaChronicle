@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>Anasta Chronicle</title>
 <link rel="stylesheet" href="css/style.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -15,8 +15,39 @@
     <h1>ANASTA</h1>
     <p class="boot-sub">Explore · Tame · Survive</p>
     <div id="boot-status">Loading…</div>
-    <button id="btn-start" disabled>Enter the Forest</button>
+    <button id="btn-start" disabled>Create Character</button>
     <div class="boot-credit">Creatures & tiles: Tuxemon (CC-BY-SA 4.0)</div>
+  </div>
+</div>
+
+<!-- CHARACTER CREATOR -->
+<div id="creator" class="hidden">
+  <div class="creator-card">
+    <h2>Create Your Traveler</h2>
+    <div class="creator-body">
+      <div class="creator-preview">
+        <canvas id="char-preview" width="128" height="160"></canvas>
+        <div class="preview-rot">
+          <button data-rot="down" class="rot-btn active">↓</button>
+          <button data-rot="left" class="rot-btn">←</button>
+          <button data-rot="right" class="rot-btn">→</button>
+          <button data-rot="up" class="rot-btn">↑</button>
+        </div>
+      </div>
+      <div class="creator-opts">
+        <label class="opt-name">Name<input id="opt-name" maxlength="14" value="Anasta" /></label>
+        <div class="opt-row" data-part="style"><span>Hair Style</span><div class="swatches" id="sw-style"></div></div>
+        <div class="opt-row" data-part="hair"><span>Hair</span><div class="swatches" id="sw-hair"></div></div>
+        <div class="opt-row" data-part="skin"><span>Skin</span><div class="swatches" id="sw-skin"></div></div>
+        <div class="opt-row" data-part="shirt"><span>Shirt</span><div class="swatches" id="sw-shirt"></div></div>
+        <div class="opt-row" data-part="pants"><span>Pants</span><div class="swatches" id="sw-pants"></div></div>
+        <div class="opt-row" data-part="boots"><span>Boots</span><div class="swatches" id="sw-boots"></div></div>
+      </div>
+    </div>
+    <div class="creator-foot">
+      <button id="btn-random" class="btn-ghost">🎲 Random</button>
+      <button id="btn-enter">Enter the Forest →</button>
+    </div>
   </div>
 </div>
 
@@ -25,11 +56,11 @@
 
   <div id="hud">
     <div id="status-card">
-      <div class="status-row"><span class="status-name">Traveler</span><span class="status-lvl" id="xp-text">LV 1</span></div>
+      <div class="status-row"><span class="status-name" id="hud-name">Anasta</span><span class="status-lvl" id="xp-text">LV 1</span></div>
       <div class="bar-row"><span class="bar-label">HP</span><div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div><span class="bar-val" id="hp-text">50</span></div>
       <div class="bar-row"><span class="bar-label">SP</span><div class="bar sp"><div class="bar-fill" id="stamina-fill"></div></div><span class="bar-val" id="stamina-text">100</span></div>
       <div class="bar-row xp-row"><div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div></div>
-      <div class="clock-row"><span id="clock">Day · 06:00</span><span id="pet-chip" class="hidden">Pet: —</span></div>
+      <div class="clock-row"><span id="clock">Day 06:00</span><span id="pet-chip" class="hidden">Pet: —</span></div>
     </div>
 
     <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
@@ -42,6 +73,7 @@
       <div class="sk-div"></div>
       <button class="sk sk-util" id="btn-inv-hot"><span class="sk-key">I</span><span class="sk-name">Bag</span></button>
       <button class="sk sk-util" id="btn-craft-hot"><span class="sk-key">C</span><span class="sk-name">Forge</span></button>
+      <button class="sk sk-util" id="btn-quest-hot"><span class="sk-key">Q</span><span class="sk-name">Quest</span></button>
       <button class="sk sk-util" id="btn-move-mode"><span class="sk-key">M</span><span class="sk-name">Tap</span></button>
     </div>
 
@@ -55,6 +87,7 @@
         <button id="btn-attack" class="tbtn atk">ATK</button>
         <button id="btn-shield" class="tbtn shd">GRD</button>
         <button id="btn-evade" class="tbtn evd">DASH</button>
+        <button id="btn-interact" class="tbtn intr">F</button>
       </div>
     </div>
   </div>
@@ -67,6 +100,15 @@
   <div id="panel-craft" class="panel hidden">
     <div class="panel-head"><h2>Forge</h2><button class="panel-close" data-close="craft">×</button></div>
     <div id="craft-list"></div>
+  </div>
+  <div id="panel-quest" class="panel hidden">
+    <div class="panel-head"><h2>Quest Log</h2><button class="panel-close" data-close="quest">×</button></div>
+    <div id="quest-list"></div>
+  </div>
+  <div id="panel-dialog" class="panel hidden">
+    <div class="panel-head"><h2 id="dialog-name">NPC</h2><button class="panel-close" data-close="dialog">×</button></div>
+    <p id="dialog-text"></p>
+    <div id="dialog-quests"></div>
   </div>
   <div id="panel-level" class="panel hidden modal"><h2>Level Up</h2><p id="level-msg"></p><button id="btn-level-ok">Continue</button></div>
   <div id="panel-pet" class="panel hidden modal"><h2>A wild friend!</h2><img id="pet-img" width="96" height="96" style="image-rendering:pixelated;margin:0 auto;display:block"/><p id="pet-msg"></p><button id="btn-pet-ok">Adopt</button></div>
