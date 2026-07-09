@@ -7,8 +7,8 @@ const MAP_H = 64;
 const SCALE = 3; // internal pixels → CSS via canvas resize
 
 // internal resolution (pixel perfect)
-const VIEW_W = 480;
-const VIEW_H = 270;
+const VIEW_W = 400;
+const VIEW_H = 225;
 
 function mulberry32(a) {
   return function () {
@@ -64,7 +64,7 @@ export class Game {
     this.varMap = new Uint8Array(MAP_W * MAP_H);
     for (let i = 0; i < this.map.length; i++) {
       this.map[i] = 0;
-      this.varMap[i] = (rng() * 4) | 0;
+      this.varMap[i] = (rng() * 6) | 0;
     }
 
     // path
@@ -177,7 +177,7 @@ export class Game {
       dir: "down",
       frame: 0,
       frameT: 0,
-      speed: 78,
+      speed: 88,
       level: 1,
       xp: 0,
       hp: 50,
@@ -489,16 +489,17 @@ export class Game {
       if (Math.abs(mx) > Math.abs(my)) p.dir = mx < 0 ? "left" : "right";
       else p.dir = my < 0 ? "up" : "down";
       p.frameT += dt;
-      if (p.frameT > 0.12) {
+      if (p.frameT > 0.09) {
         p.frameT = 0;
-        p.frame = (p.frame + 1) % 4;
+        p.frame = (p.frame + 1) % 6;
       }
     } else if (p.evadeT <= 0) {
       p.vx *= 0.8;
       p.vy *= 0.8;
       if (Math.hypot(p.vx, p.vy) < 4) {
         p.vx = p.vy = 0;
-        p.frame = 0;
+        // idle breathe: oscillate 0-1 slowly
+        p.frame = Math.floor(this.t * 2) % 2 === 0 ? 0 : 1;
       }
     }
 
@@ -561,7 +562,7 @@ export class Game {
       return;
     }
     p.stamina = Math.max(0, p.stamina - w.cost);
-    p.attackT = 0.16;
+    p.attackT = 0.22;
     p.attackCd = w.speed;
 
     const ang = Math.atan2(this.mouse.wy - p.y, this.mouse.wx - p.x);
@@ -705,16 +706,17 @@ export class Game {
     e.x += (dx / d) * 8;
     e.y += (dy / d) * 8;
     // particles
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       this.particles.push({
         x: e.x,
         y: e.y - 6,
-        vx: (Math.random() - 0.5) * 60,
-        vy: -20 - Math.random() * 40,
-        life: 0.35,
-        color: "#5ef0c0",
+        vx: (Math.random() - 0.5) * 80,
+        vy: -30 - Math.random() * 50,
+        life: 0.4,
+        color: i % 2 ? "#ffffff" : "#5ef0c0",
       });
     }
+    this.slashFx.push({ x: e.x, y: e.y - 8, frame: 0, t: 0, ang: 0, hit: true });
     if (e.hp <= 0) {
       e.dead = true;
       this.grantXp(e.xp);
@@ -801,8 +803,8 @@ export class Game {
     for (let i = this.slashFx.length - 1; i >= 0; i--) {
       const s = this.slashFx[i];
       s.t += dt;
-      s.frame = Math.min(2, (s.t * 12) | 0);
-      if (s.t > 0.22) this.slashFx.splice(i, 1);
+      s.frame = Math.min(3, (s.t * 16) | 0);
+      if (s.t > 0.25) this.slashFx.splice(i, 1);
     }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
@@ -821,9 +823,9 @@ export class Game {
       e.hurtT = Math.max(0, e.hurtT - dt);
       e.atkCd = Math.max(0, e.atkCd - dt);
       e.frameT = (e.frameT || 0) + dt;
-      if (e.frameT > 0.2) {
+      if (e.frameT > 0.12) {
         e.frameT = 0;
-        e.frame = (e.frame + 1) % 4;
+        e.frame = (e.frame + 1) % 6;
       }
       e.sortY = e.y;
       const dx = p.x - e.x,
@@ -956,10 +958,10 @@ export class Game {
         const t = this.map[ty * MAP_W + tx];
         const v = this.varMap[ty * MAP_W + tx];
         let key;
-        if (t === 3) key = `world/water_${wf % 4}`;
-        else if (t === 1) key = `world/path_${v}`;
-        else if (t === 2) key = `world/path_${(v + 1) % 4}`;
-        else key = `world/grass_${v}`;
+        if (t === 3) key = `world/water_${wf % 6}`;
+        else if (t === 1) key = `world/path_${v % 6}`;
+        else if (t === 2) key = `world/path_${(v + 1) % 6}`;
+        else key = `world/grass_${v % 6}`;
         const im = img(key);
         if (im) ctx.drawImage(im, tx * TILE, ty * TILE);
       }
@@ -972,7 +974,7 @@ export class Game {
       if (tr.hp <= 0) continue;
       list.push({ sortY: tr.y + 22, draw: () => {
         const im = img(`world/tree_${tr.v}`);
-        if (im) ctx.drawImage(im, tr.x - 24, tr.y - 52);
+        if (im) ctx.drawImage(im, tr.x - 28, tr.y - 60);
       }});
     }
     for (const rk of this.rocks) {
@@ -984,7 +986,7 @@ export class Game {
     }
     for (const to of this.torches) {
       list.push({ sortY: to.y + 8, draw: () => {
-        const im = img(`world/torch_${((this.t * 8) | 0) % 4}`);
+        const im = img(`world/torch_${((this.t * 10) | 0) % 6}`);
         if (im) ctx.drawImage(im, to.x - 8, to.y - 28);
       }});
     }
@@ -996,7 +998,7 @@ export class Game {
     }
     // camp
     list.push({ sortY: this.camp.y + 6, draw: () => {
-      const im = img(`world/camp_${((this.t * 6) | 0) % 4}`);
+      const im = img(`world/camp_${((this.t * 8) | 0) % 6}`);
       if (im) ctx.drawImage(im, this.camp.x - 16, this.camp.y - 20);
     }});
 
@@ -1021,15 +1023,17 @@ export class Game {
           ctx.globalAlpha = 0.7;
           ctx.filter = "brightness(2)";
         }
-        ctx.drawImage(im, e.x - 14, e.y - 18);
+        ctx.drawImage(im, e.x - 16, e.y - 22);
         ctx.filter = "none";
         ctx.globalAlpha = 1;
         // hp bar
         const ratio = Math.max(0, e.hp / e.maxHp);
         ctx.fillStyle = "#1a1010";
-        ctx.fillRect(e.x - 10, e.y - 24, 20, 3);
+        ctx.fillRect(e.x - 12, e.y - 28, 24, 4);
+        ctx.fillStyle = "#0a0808";
+        ctx.fillRect(e.x - 11, e.y - 27, 22, 2);
         ctx.fillStyle = ratio > 0.5 ? "#50d070" : ratio > 0.25 ? "#e0a040" : "#e05050";
-        ctx.fillRect(e.x - 10, e.y - 24, 20 * ratio, 3);
+        ctx.fillRect(e.x - 11, e.y - 27, 22 * ratio, 2);
       }});
     }
 
@@ -1037,13 +1041,18 @@ export class Game {
     const p = this.player;
     list.push({ sortY: p.y + 4, draw: () => {
       if (p.invuln > 0 && Math.floor(this.t * 16) % 2 === 0) return;
-      const im = img(`player/p_${p.dir}_${p.frame}`);
-      if (im) ctx.drawImage(im, p.x - 16, p.y - 32);
+      const key = p.attackT > 0 ? `player/p_${p.dir}_atk` : `player/p_${p.dir}_${p.frame % 6}`;
+      const im = img(key);
+      if (im) ctx.drawImage(im, p.x - 20, p.y - 40);
       if (p.shield) {
-        ctx.strokeStyle = "rgba(120,180,255,0.55)";
+        ctx.strokeStyle = "rgba(120,180,255,0.65)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(p.x, p.y - 12, 14, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y - 16, 16, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(180,220,255,0.25)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 16, 18, 0, Math.PI * 2);
         ctx.stroke();
       }
     }});
@@ -1051,13 +1060,15 @@ export class Game {
     // slash fx
     for (const s of this.slashFx) {
       list.push({ sortY: s.y + 20, draw: () => {
-        const im = img(`fx/slash_${s.frame}`);
+        const key = s.hit ? `fx/hit_${Math.min(3, s.frame)}` : `fx/slash_${Math.min(3, s.frame)}`;
+        const im = img(key);
         if (!im) return;
         ctx.save();
         ctx.translate(s.x, s.y);
-        ctx.rotate(s.ang);
-        ctx.globalAlpha = 0.9;
-        ctx.drawImage(im, -16, -16);
+        if (!s.hit) ctx.rotate(s.ang);
+        ctx.globalAlpha = 0.95;
+        const ox = s.hit ? 8 : 20;
+        ctx.drawImage(im, -ox, -ox);
         ctx.restore();
       }});
     }
@@ -1099,7 +1110,7 @@ export class Game {
     // vignette
     const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.3, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.75);
     g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0.35)");
+    g.addColorStop(1, "rgba(10,16,14,0.4)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }

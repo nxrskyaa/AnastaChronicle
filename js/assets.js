@@ -1,25 +1,26 @@
 const PATHS = [];
 
-// tiles
-for (let i = 0; i < 4; i++) {
-  PATHS.push(`world/grass_${i}`, `world/path_${i}`, `world/water_${i}`, `world/tree_${i}`, `world/torch_${i}`, `world/camp_${i}`);
+for (let i = 0; i < 6; i++) {
+  PATHS.push(`world/grass_${i}`, `world/path_${i}`, `world/water_${i}`, `world/torch_${i}`, `world/camp_${i}`);
 }
+for (let i = 0; i < 4; i++) PATHS.push(`world/tree_${i}`);
 for (let i = 0; i < 3; i++) PATHS.push(`world/rock_${i}`);
 PATHS.push("world/chest", "world/chest_open");
 
-// player
 for (const d of ["down", "up", "left", "right"]) {
-  for (let f = 0; f < 4; f++) PATHS.push(`player/p_${d}_${f}`);
+  for (let f = 0; f < 6; f++) PATHS.push(`player/p_${d}_${f}`);
+  PATHS.push(`player/p_${d}_atk`);
 }
-// enemy
 for (const t of [1, 2]) {
-  for (let f = 0; f < 4; f++) PATHS.push(`enemy/slime_t${t}_${f}`);
+  for (let f = 0; f < 6; f++) PATHS.push(`enemy/slime_t${t}_${f}`);
 }
-// items
 for (const id of ["wood", "ore", "gel", "herb", "sword", "axe", "spear", "bow", "dagger"]) {
   PATHS.push(`items/${id}`);
 }
-PATHS.push("ui/heart", "ui/heart_empty", "fx/shadow", "fx/slash_0", "fx/slash_1", "fx/slash_2");
+PATHS.push("ui/heart", "ui/heart_empty");
+for (let f = 0; f < 4; f++) {
+  PATHS.push(`fx/slash_${f}`, `fx/hit_${f}`);
+}
 
 const cache = new Map();
 
@@ -36,8 +37,8 @@ export async function loadAll(onProgress) {
   let done = 0;
   await Promise.all(
     PATHS.map(async (p) => {
-      const img = await loadImage(`assets/px/${p}.png`);
-      cache.set(p, img);
+      const im = await loadImage(`assets/px/${p}.png`);
+      cache.set(p, im);
       done++;
       onProgress?.(done, PATHS.length);
     })
