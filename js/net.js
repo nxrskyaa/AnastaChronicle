@@ -62,9 +62,11 @@ export async function connectMultiplayer(look, name, spawn) {
     room.onStateChange(() => {
       if (_scanned) return;
       _scanned = true;
+      console.log('[MP] first onStateChange, players:', room.state.players.size);
       room.state.players.forEach((p, id) => {
         if (id !== net.selfId && !net.remote[id]) addRemote(p, id);
       });
+      console.log('[MP] after scan, remote:', Object.keys(net.remote).length);
     });
     room.state.players.onRemove = (p, id) => { delete net.remote[id]; };
 
