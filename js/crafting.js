@@ -12,7 +12,7 @@ export const ITEMS = {
   sword: { name: "Sword", glyph: "/", weapon: true },
   axe: { name: "Axe", glyph: "T", weapon: true },
   spear: { name: "Spear", glyph: "|", weapon: true },
-  dagger: { name: "Dagger", glyph: "<", weapon: true },
+  dagger: { name: "Dagger", glyph: "K", weapon: true },
   bow: { name: "Bow", glyph: ")", weapon: true },
   staff: { name: "Staff", glyph: "*", weapon: true },
   dragonblade: { name: "Dragon Blade", glyph: "/", weapon: true, rare: true },

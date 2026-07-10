@@ -80,11 +80,11 @@ Game.prototype.update = function (dt) {
   p.invuln = Math.max(0, p.invuln - dt);
   for (let i = 0; i < 4; i++) p.skillCd[i] = Math.max(0, p.skillCd[i] - dt);
 
-  p.shield = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
+  p.shield = !this.fishing && !!(this.keys.ShiftLeft || this.keys.ShiftRight);
   if (p.shield && p.stamina > 0) { p.stamina = Math.max(0, p.stamina - 16 * dt); if (p.stamina <= 0) p.shield = false; }
   else p.stamina = Math.min(p.maxStamina, p.stamina + 20 * dt);
 
-  if (this.keys.Space && p.evadeCd <= 0 && p.stamina >= 16) {
+  if (!this.fishing && this.keys.Space && p.evadeCd <= 0 && p.stamina >= 16) {
     p.evadeT = 0.16; p.evadeCd = 0.7; p.stamina -= 16; p.invuln = 0.18;
     const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
     const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
@@ -356,6 +356,7 @@ Game.prototype.updatePet = function (dt) {
 
 Game.prototype.useSkill = function (i) {
   const p = this.player;
+  if (this.fishing) return;
   if (p.skillCd[i] > 0) return;
   const cls = p.cls || "warrior";
   const dirVec = () => ({ fx: p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0, fy: p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0 });
