@@ -56,9 +56,15 @@ export async function connectMultiplayer(look, name, spawn) {
       if (id === net.selfId) return;
       addRemote(p, id);
     };
-    // Also handle players already present when we joined (race condition)
-    room.state.players.forEach((p, id) => {
-      if (id !== net.selfId && !net.remote[id]) addRemote(p, id);
+    // First state sync may not have arrived when joinOrCreate resolves, so scan
+    // existing players on the first onStateChange too (covers the late-join race).
+    let _scanned = false;
+    room.onStateChange(() => {
+      if (_scanned) return;
+      _scanned = true;
+      room.state.players.forEach((p, id) => {
+        if (id !== net.selfId && !net.remote[id]) addRemote(p, id);
+      });
     });
     room.state.players.onRemove = (p, id) => { delete net.remote[id]; };
 
