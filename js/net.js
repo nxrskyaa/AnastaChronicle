@@ -60,13 +60,22 @@ export async function connectMultiplayer(look, name, spawn) {
     // existing players on the first onStateChange too (covers the late-join race).
     let _scanned = false;
     room.onStateChange(() => {
-      if (_scanned) return;
-      _scanned = true;
-      console.log('[MP] first onStateChange, players:', room.state.players.size);
+      // Always re-scan: onAdd is unreliable on some CDN builds, so reconcile
+      // the remote list from current state every patch.
       room.state.players.forEach((p, id) => {
-        if (id !== net.selfId && !net.remote[id]) addRemote(p, id);
+        if (id === net.selfId) return;
+        if (!net.remote[id]) {
+          addRemote(p, id);
+        } else {
+          const r = net.remote[id];
+          r.x = p.x; r.y = p.y; r.dir = p.dir; r.moving = p.moving; r.name = p.name;
+        }
       });
-      console.log('[MP] after scan, remote:', Object.keys(net.remote).length);
+      // prune disconnected
+      for (const id of Object.keys(net.remote)) {
+        if (!room.state.players.get(id)) delete net.remote[id];
+      }
+      if (!_scanned) { _scanned = true; console.log('[MP] first onStateChange, remote:', Object.keys(net.remote).length); }
     });
     room.state.players.onRemove = (p, id) => { delete net.remote[id]; };
 
