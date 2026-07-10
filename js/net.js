@@ -19,6 +19,18 @@ export const net = {
 
 let Client = null;
 
+function addRemote(p, id) {
+  net.remote[id] = {
+    x: p.x, y: p.y, rx: p.x, ry: p.y, dir: p.dir, moving: p.moving,
+    name: p.name, look: p.look, frame: 0, frameT: 0, cache: null,
+  };
+  // live updates
+  p.onChange = () => {
+    const r = net.remote[id]; if (!r) return;
+    r.x = p.x; r.y = p.y; r.dir = p.dir; r.moving = p.moving; r.name = p.name;
+  };
+}
+
 async function loadClient() {
   if (Client) return Client;
   const mod = await import("https://cdn.jsdelivr.net/npm/colyseus.js@0.15.26/+esm");
@@ -42,16 +54,12 @@ export async function connectMultiplayer(look, name, spawn) {
 
     room.state.players.onAdd = (p, id) => {
       if (id === net.selfId) return;
-      net.remote[id] = {
-        x: p.x, y: p.y, rx: p.x, ry: p.y, dir: p.dir, moving: p.moving,
-        name: p.name, look: p.look, frame: 0, frameT: 0, cache: null,
-      };
-      // live updates
-      p.onChange = () => {
-        const r = net.remote[id]; if (!r) return;
-        r.x = p.x; r.y = p.y; r.dir = p.dir; r.moving = p.moving; r.name = p.name;
-      };
+      addRemote(p, id);
     };
+    // Also handle players already present when we joined (race condition)
+    room.state.players.forEach((p, id) => {
+      if (id !== net.selfId && !net.remote[id]) addRemote(p, id);
+    });
     room.state.players.onRemove = (p, id) => { delete net.remote[id]; };
 
     room.onMessage("chat", (m) => {
