@@ -10,12 +10,16 @@
 </head>
 <body>
 <div id="boot">
+  <canvas id="boot-fx"></canvas>
   <div class="title-scene">
     <div class="title-stars"></div>
     <div class="boot-card">
       <p class="boot-kicker">◆ CHRONICLE OF THE WILDS ◆</p>
       <h1 class="pixel-title">ANASTA</h1>
       <p class="boot-sub">Explore · Tame · Survive</p>
+      <div class="loading-bar-wrap">
+        <div class="loading-bar" id="loading-bar-fill"></div>
+      </div>
       <div id="boot-status">Loading…</div>
       <button id="btn-start" class="pixel-btn" disabled>▶ PRESS START</button>
       <div class="boot-credit">Creatures, audio & world: 100% procedurally generated</div>
@@ -38,6 +42,21 @@
       </div>
       <div class="creator-opts">
         <label class="opt-name">NAME<input id="opt-name" maxlength="14" value="Anasta" /></label>
+        <div class="opt-row" data-part="gender">
+          <span>GENDER</span>
+          <div class="class-pick" id="pick-gender">
+            <button data-gender="male" class="cls-btn sel">♂ Male</button>
+            <button data-gender="female" class="cls-btn">♀ Female</button>
+          </div>
+        </div>
+        <div class="opt-row" data-part="class">
+          <span>CLASS</span>
+          <div class="class-pick" id="pick-class">
+            <button data-cls="warrior" class="cls-btn sel">⚔ Warrior</button>
+            <button data-cls="mage" class="cls-btn">✦ Mage</button>
+            <button data-cls="archer" class="cls-btn">➶ Archer</button>
+          </div>
+        </div>
         <div class="opt-row" data-part="style"><span>HAIR STYLE</span><div class="swatches" id="sw-style"></div></div>
         <div class="opt-row" data-part="hair"><span>HAIR</span><div class="swatches" id="sw-hair"></div></div>
         <div class="opt-row" data-part="eyes"><span>EYES</span><div class="swatches" id="sw-eyes"></div></div>

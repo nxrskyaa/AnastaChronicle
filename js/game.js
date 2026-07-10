@@ -7,6 +7,8 @@ import { audio } from "./audio.js";
 import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
 import { view, computeView } from "./view.js";
 import { buildTiles } from "./tilegen.js";
+import { buildBoss } from "./boss.js";
+import { applyClass } from "./classes.js";
 import { net, sendMove } from "./net.js";
 
 const T = 24;
@@ -38,6 +40,7 @@ export class Game {
     this.bushes = [];
     this.rocks = [];
     this.flowers = [];
+    this.plants = [];   // harvestable plants
     this.npcs = [];
     this.pet = null;
     this.time = 6 * 60;
@@ -52,6 +55,7 @@ export class Game {
     this.buildings = [];
     this.monCache = buildMonsters();
     buildTiles();
+    buildBoss();
     this.pets = [];   // pet monster ids come from MON_IDS now
 
     this.look = look || { ...DEFAULT_LOOK };
@@ -127,6 +131,30 @@ export class Game {
     // fence line along south edge of camp
     for (let i = -5; i <= 5; i++) if (i !== 0) this.buildings.push({ type: "fenceH", x: (cx + i) * T, y: (cy + 7) * T, sortY: (cy + 7) * T });
 
+    // Japanese decor near village entrance
+    place("torii", cx, cy - 10);
+    place("pagoda", cx - 10, cy - 8);
+    place("sakura", cx + 8, cy - 8);
+    place("sakura", cx - 9, cy + 6);
+    // stone lanterns along paths
+    this.buildings.push({ type: "lantern", x: (cx - 2) * T, y: (cy - 8) * T, sortY: (cy - 8) * T });
+    this.buildings.push({ type: "lantern", x: (cx + 2) * T, y: (cy - 8) * T, sortY: (cy - 8) * T });
+    this.buildings.push({ type: "lantern", x: (cx - 4) * T, y: (cy + 3) * T, sortY: (cy + 3) * T });
+    this.buildings.push({ type: "lantern", x: (cx + 5) * T, y: (cy + 6) * T, sortY: (cy + 6) * T });
+    // bamboo groves near forest edges
+    for (let i = 0; i < 8; i++) {
+      const bx = 20 + Math.floor(Math.random() * 15);
+      const by = 80 + Math.floor(Math.random() * 20);
+      if (m[by * MAP_W + bx] !== 1 && m[by * MAP_W + bx] !== 2)
+        this.buildings.push({ type: "bamboo", x: bx * T, y: by * T, sortY: by * T });
+    }
+    for (let i = 0; i < 6; i++) {
+      const bx = 80 + Math.floor(Math.random() * 20);
+      const by = 60 + Math.floor(Math.random() * 20);
+      if (m[by * MAP_W + bx] !== 1 && m[by * MAP_W + bx] !== 2)
+        this.buildings.push({ type: "bamboo", x: bx * T, y: by * T, sortY: by * T });
+    }
+
     // decorations: trees, bushes, rocks, flowers by biome
     for (let y = 3; y < MAP_H - 3; y++) {
       for (let x = 3; x < MAP_W - 3; x++) {
@@ -146,6 +174,11 @@ export class Game {
           this.rocks.push({ x: wx, y: wy, sortY: wy, snow: t === 4 });
         } else if (r < treeDens + 0.075 && t === 0) {
           this.flowers.push({ x: wx, y: wy, k: (Math.random() * 3) | 0 });
+        } else if (r < treeDens + 0.11 && (t === 0 || t === 5)) {
+          // harvestable plants: bamboo shoot, herb bush, crystal ore, vine
+          const kinds = ["bamboo_shoot", "herb_bush", "crystal_ore", "glow_vine"];
+          const kind = kinds[(Math.random() * kinds.length) | 0];
+          this.plants.push({ x: wx, y: wy, kind, hp: kind === "crystal_ore" ? 3 : 2, sortY: wy, respawn: 0, sway: Math.random() * 6.28 });
         }
       }
     }
@@ -159,11 +192,15 @@ export class Game {
       level: 1, xp: 0, gold: 0,
       attackT: 0, attackDur: 0.24, attackCd: 0, evadeT: 0, evadeCd: 0, invuln: 0,
       shield: false, skillCd: [0, 0, 0, 0],
+      buffT: 0, buffMul: 1, dmgMul: 1, defense: 1,
       inv: { wood: 2, ore: 0, gel: 0, herb: 1 },
       equipped: "sword", dmg: 8, sortY: 0,
       name: this.look.name || "Anasta",
+      cls: this.look.cls || "warrior",
     };
-    this.player.inv.sword = 1;
+    // apply class stats + starting weapon
+    applyClass(this.player, this.player.cls);
+    this.player.inv[this.player.equipped] = 1;
 
     // NPCs around camp
     for (const def of NPC_DEFS) {
@@ -197,12 +234,14 @@ export class Game {
     do {
       x = rand(4 * T, (MAP_W - 4) * T); y = rand(4 * T, (MAP_H - 4) * T); tries++;
     } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 12 * T) && tries < 30);
-    const tier = Math.random() < 0.7 ? 1 : Math.random() < 0.75 ? 2 : 3;
+    const tier = Math.random() < 0.6 ? 1 : Math.random() < 0.8 ? 2 : 3;
     const id = MON_IDS[(Math.random() * MON_IDS.length) | 0];
+    // heavier HP/dmg scaling so combat feels meaningful; tier 3 hits harder
+    const baseHp = 18 + tier * 16, baseDmg = 4 + tier * 3;
     this.enemies.push({
       id, x, y, sortY: y, tier, hx: x, hy: y,       // hx/hy = home anchor for wander
-      hp: 12 + tier * 10, maxHp: 12 + tier * 10,
-      dmg: 3 + tier * 2, speed: 18 + tier * 6,
+      hp: baseHp, maxHp: baseHp,
+      dmg: baseDmg, speed: 18 + tier * 6,
       xp: 6 + tier * 8, gold: tier * 2,
       bob: Math.random() * 6, frame: 0, frameT: Math.random(),
       atkCd: 0, hurt: 0, dead: false, h: monHeight(),

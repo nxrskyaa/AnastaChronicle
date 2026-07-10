@@ -165,11 +165,91 @@ const SPECIES = {
     P(ctx, 14, 31 + b, 4, 2, d); P(ctx, 22, 31 + b, 4, 2, d);
     P(ctx, 29, 26 + b, 4, 2, body); E(ctx, 33, 25 + b, 2, 2.5, "#5a9af0");
   },
+  // Frostl — ice crystal sprite
+  frostl: (ctx, f) => {
+    const b = [0, -1, 0, 1][f], sx = [1, 1.05, 1, 0.95][f];
+    shadow(ctx, 20, 34, 10 * sx);
+    const body = "#7adcf0", d = shade(body, 0.7), l = shade(body, 1.25);
+    E(ctx, 20, 24 + b, 10 * sx, 8, body); E(ctx, 20, 22 + b, 7, 5, l);
+    // ice crystals on head
+    P(ctx, 18, 8 + b, 4, 6, l); P(ctx, 19, 6 + b, 2, 2, "#e0f8ff");
+    P(ctx, 13, 12 + b, 2, 5, body); P(ctx, 25, 12 + b, 2, 5, body);
+    E(ctx, 20, 27 + b, 5, 3, "#d8f4ff");
+    eyes(ctx, 16, 24, 23 + b, [0, 0, 1, -1][f]);
+    P(ctx, 14, 31 + b, 4, 3, d); P(ctx, 22, 31 + b, 4, 3, d);
+  },
+  // Shadown — shadow wraith
+  shadown: (ctx, f) => {
+    const b = [0, -1, 0, 1][f], fl = [0, 1, 0, -1][f];
+    shadow(ctx, 20, 34, 12);
+    const body = "#5a4a78", d = shade(body, 0.7), l = shade(body, 1.3);
+    // wispy floating body
+    E(ctx, 20, 22 + b, 11, 9, body); E(ctx, 20, 20 + b, 7, 5, l);
+    // tattered cloak bottom
+    P(ctx, 10, 28 + b, 3, 4 + fl, d); P(ctx, 14, 30 + b, 3, 3 - fl, d); P(ctx, 22, 30 + b, 3, 3 + fl, d); P(ctx, 27, 28 + b, 3, 4 - fl, d);
+    // glowing eyes
+    E(ctx, 17, 22 + b, 1.8, 1.8, "#e050a0"); E(ctx, 23, 22 + b, 1.8, 1.8, "#e050a0");
+    P(ctx, 16, 22 + b, 1, 1, "#fff0a0"); P(ctx, 22, 22 + b, 1, 1, "#fff0a0");
+  },
+  // Volth — electric orb creature
+  volth: (ctx, f) => {
+    const b = [0, -1, 0, 1][f], el = [0, 1, 2, 1][f];
+    shadow(ctx, 20, 34, 10);
+    const body = "#f0d040", d = shade(body, 0.7), l = shade(body, 1.2);
+    E(ctx, 20, 24 + b, 9, 8, body); E(ctx, 20, 22 + b, 6, 5, l);
+    // electric sparks
+    ctx.strokeStyle = "#fff8a0"; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) { const x = 12 + i * 6; ctx.beginPath(); ctx.moveTo(x, 16 + b); ctx.lineTo(x + 1, 12 + b - el); ctx.lineTo(x - 1, 10 + b - el); ctx.stroke(); }
+    eyes(ctx, 17, 24, 22 + b, [0, 0, 1, -1][f]);
+    P(ctx, 15, 30 + b, 3, 3, d); P(ctx, 22, 30 + b, 3, 3, d);
+  },
+  // Crysto — rock gem beast
+  crysto: (ctx, f) => {
+    const b = [0, -1, 0, 1][f];
+    shadow(ctx, 20, 34, 12);
+    const body = "#c09060", d = shade(body, 0.72), gem = "#d050a0";
+    // rocky body
+    ctx.fillStyle = body; ctx.beginPath(); ctx.moveTo(10, 28 + b); ctx.lineTo(13, 18 + b); ctx.lineTo(20, 15 + b); ctx.lineTo(27, 18 + b); ctx.lineTo(30, 28 + b); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = d; ctx.beginPath(); ctx.moveTo(10, 28 + b); ctx.lineTo(13, 18 + b); ctx.lineTo(16, 20 + b); ctx.lineTo(14, 28 + b); ctx.closePath(); ctx.fill();
+    // gem on forehead
+    E(ctx, 20, 21 + b, 4, 3, gem); E(ctx, 20, 20 + b, 2, 1.5, "#f0a0d0");
+    eyes(ctx, 16, 23, 24 + b, [0, 0, 1, -1][f]);
+    P(ctx, 13, 31 + b, 4, 3, d); P(ctx, 23, 31 + b, 4, 3, d);
+  },
+  // Florix — flower fairy
+  florix: (ctx, f) => {
+    const b = [0, -1, 0, 1][f], fl = [0, 1, 2, 1][f];
+    shadow(ctx, 20, 34, 9);
+    const body = "#f0a0d0", d = shade(body, 0.75), l = shade(body, 1.2);
+    E(ctx, 20, 25 + b, 8, 7, body); E(ctx, 20, 23 + b, 5, 4, l);
+    // flower petals on head
+    for (let i = 0; i < 5; i++) { const a = i / 5 * 7 - fl * 0.1; E(ctx, 20 + Math.cos(a) * 5, 13 + b + Math.sin(a) * 4, 3, 2.5, "#ffe0f0"); }
+    E(ctx, 20, 13 + b, 2.5, 2.5, "#fff8a0");
+    // little wings
+    ctx.fillStyle = "rgba(255,200,240,0.7)"; E(ctx, 12, 22 + b, 4, 3, "rgba(255,200,240,0.7)"); E(ctx, 28, 22 + b, 4, 3, "rgba(255,200,240,0.7)");
+    eyes(ctx, 17, 24, 23 + b, [0, 0, 1, -1][f]);
+  },
+  // Wraithix — dark armored knight-ling
+  wraithix: (ctx, f) => {
+    const b = [0, -1, 0, 1][f];
+    shadow(ctx, 20, 34, 11);
+    const body = "#3a3850", d = shade(body, 0.7), l = shade(body, 1.3), arm = "#5a5878";
+    // armored body
+    E(ctx, 20, 26 + b, 9, 8, body); E(ctx, 20, 24 + b, 6, 5, l);
+    // helmet visor slit
+    P(ctx, 15, 22 + b, 10, 2, d); P(ctx, 16, 22 + b, 8, 1, "#e04020");
+    // shoulder pauldrons
+    E(ctx, 13, 23 + b, 3, 2.5, arm); E(ctx, 27, 23 + b, 3, 2.5, arm);
+    // horn
+    P(ctx, 17, 13 + b, 2, 4, d); P(ctx, 21, 13 + b, 2, 4, d);
+    eyes(ctx, 17, 25, 23 + b, [0, 0, 1, -1][f]);
+    P(ctx, 14, 31 + b, 4, 3, d); P(ctx, 22, 31 + b, 4, 3, d);
+  },
 };
 
 const cache = {};   // id -> [frame canvases]
 export const MON_IDS = Object.keys(SPECIES);
-export const MON_ELEMENT = { leaflet: "grass", emberkit: "fire", aquab: "water", pebbit: "rock", sparkit: "electric", mothwing: "bug", sludgel: "grass", cindar: "fire" };
+export const MON_ELEMENT = { leaflet: "grass", emberkit: "fire", aquab: "water", pebbit: "rock", sparkit: "electric", mothwing: "bug", sludgel: "grass", cindar: "fire", frostl: "ice", shadown: "dark", volth: "electric", crysto: "rock", florix: "grass", wraithix: "dark" };
 
 export function buildMonsters() {
   for (const id of MON_IDS) {

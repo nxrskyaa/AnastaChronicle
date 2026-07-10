@@ -2,6 +2,7 @@ import { Game } from "./game.js";
 import { img, MONSTERS } from "./assets.js";
 import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { view } from "./view.js";
+import { CLASSES } from "./classes.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -12,7 +13,11 @@ const WEAPONS = {
   axe:    { name: "Axe",    dmg: 30, range: 38, speed: 0.62, cost: 12 },
   spear:  { name: "Spear",  dmg: 20, range: 62, speed: 0.5,  cost: 9 },
   dagger: { name: "Dagger", dmg: 14, range: 30, speed: 0.28, cost: 5 },
-  bow:    { name: "Bow",    dmg: 18, range: 95, speed: 0.55, cost: 10 },
+  bow:    { name: "Bow",    dmg: 18, range: 95, speed: 0.55, cost: 10, ranged: true },
+  staff:  { name: "Staff",  dmg: 16, range: 90, speed: 0.5,  cost: 10, ranged: true },
+  dragonblade:  { name: "Dragon Blade", dmg: 42, range: 52, speed: 0.42, cost: 10 },
+  dragonbow:    { name: "Dragon Bow",   dmg: 34, range: 110, speed: 0.5, cost: 10, ranged: true },
+  dragonstaff:  { name: "Dragon Staff", dmg: 36, range: 100, speed: 0.48, cost: 10, ranged: true },
 };
 Game.prototype.WEAPONS = WEAPONS;
 
@@ -126,8 +131,13 @@ Game.prototype.update = function (dt) {
   }
 
   this.updateEnemies(dt);
+  this.updateBoss(dt);
+  this.updateProjectiles(dt);
+  this.updatePlants(dt);
   this.updatePet(dt);
   this.updateInteract();
+  // buff timer (War Cry etc.)
+  if (p.buffT > 0) { p.buffT -= dt; if (p.buffT <= 0) { p.buffT = 0; p.buffMul = 1; } }
 
   for (const pa of this.particles) { pa.x += pa.vx * dt; pa.y += pa.vy * dt; pa.vy += 40 * dt; pa.life -= dt; }
   this.particles = this.particles.filter(pa => pa.life > 0);
@@ -185,7 +195,13 @@ Game.prototype.doAttack = function () {
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
   const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
   p.vx += fx * 55; p.vy += fy * 55;
-  const dmg = w.dmg + p.level * 2;
+  const dmg = (w.dmg + p.level * 2) * (p.dmgMul || 1);
+  // ranged weapons spawn a projectile instead of melee hitbox
+  if (w.ranged) {
+    const dvx = fx || 0, dvy = fy || 1;
+    this.spawnProjectile(p.x, p.y - 14, dvx, dvy, p.equipped === "staff" ? "fire" : "arrow", Math.round(dmg), p.equipped === "bow");
+    this.audio.sfx("attack"); return;
+  }
   let anyHit = false;
   for (const e of this.enemies) {
     if (e.dead) continue;
@@ -204,6 +220,28 @@ Game.prototype.doAttack = function () {
     if (crit) this.hitStop = 0.05;
     anyHit = true;
     if (e.hp <= 0) this.killEnemy(e);
+  }
+  // melee also hits the boss if in range & in facing direction
+  if (this.boss && !this.boss.dead) {
+    const b = this.boss;
+    const dx = b.x - p.x, dy = b.y - p.y, d = Math.hypot(dx, dy);
+    if (d < w.range + 34) {
+      const dot = d > 0 ? (dx / d) * fx + (dy / d) * fy : 1;
+      if (!(fx || fy) || dot > 0.1) { this.hurtBossDirect(Math.round(dmg * (Math.random() < 0.2 ? 1.8 : 1))); }
+    }
+  }
+  // melee also hits harvestable plants in range
+  for (const pl of this.plants) {
+    if (pl.hp <= 0) continue;
+    const dx = pl.x - p.x, dy = pl.y - p.y, d = Math.hypot(dx, dy);
+    if (d > w.range + 14) continue;
+    const dot = d > 0 ? (dx / d) * fx + (dy / d) * fy : 1;
+    if ((fx || fy) && dot < 0.1) continue;
+    pl.hp -= Math.max(1, Math.round(dmg));
+    pl.shake = 0.2;
+    this.spawnHit(pl.x, pl.y - 12);
+    this.audio.sfx("hit");
+    if (pl.hp <= 0) this.harvestPlant(pl);
   }
 };
 
@@ -231,6 +269,7 @@ Game.prototype.updateEnemies = function (dt) {
     e.atkCd = Math.max(0, e.atkCd - dt);
     e.bob += dt * 4;
     e.angry = Math.max(0, e.angry - dt);
+    if (e.frozen) { e.frozen -= dt; if (e.frozen < 0) e.frozen = 0; }
     // idle bounce frame
     e.frameT += dt; if (e.frameT > 0.28) { e.frameT = 0; e.frame = (e.frame + 1) % 4; }
 
@@ -248,14 +287,13 @@ Game.prototype.updateEnemies = function (dt) {
       e.state = "wander";
     }
 
-    if (e.state === "chase") {
+    if (e.state === "chase" && !e.frozen) {
       const sp = e.speed * dt;
       this.moveEntity(e, (dx / d) * sp, (dy / d) * sp, 8);
       // attack only when adjacent
       if (d < 20 && e.atkCd <= 0) {
         e.atkCd = 1.4;
-        if (p.invuln <= 0 && !p.shield) { p.hp -= e.dmg; p.invuln = 0.6; this.addFloater(p.x, p.y - 36, e.dmg, false, true); this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 4); }
-        else if (p.shield) p.stamina = Math.max(0, p.stamina - 5);
+        this.damagePlayer(e.dmg);
       }
     } else {
       // gentle wander around home anchor
@@ -340,15 +378,33 @@ Game.prototype.reelFish = function () {
     this.fishing = null;
     this.quests.fishCount++;
     const p = this.player;
-    const fishTypes = ["Minnow", "Bass", "Trout", "Carp", "Golden Fish"];
-    const rare = Math.random() < 0.15;
-    const fish = rare ? "Golden Fish" : fishTypes[(Math.random() * 4) | 0];
-    const gold = rare ? 40 : 6 + ((Math.random() * 10) | 0);
+    // weighted fish table: common → uncommon → rare → legendary
+    const FISH = [
+      { name: "Minnow",      gold: 5,  weight: 30, rarity: "common" },
+      { name: "Bass",        gold: 9,  weight: 24, rarity: "common" },
+      { name: "Trout",       gold: 12, weight: 18, rarity: "common" },
+      { name: "Carp",        gold: 10, weight: 16, rarity: "common" },
+      { name: "Pike",        gold: 20, weight: 10, rarity: "uncommon" },
+      { name: "Salmon",      gold: 26, weight: 8,  rarity: "uncommon" },
+      { name: "Koi",         gold: 38, weight: 5,  rarity: "rare" },
+      { name: "Catfish",     gold: 32, weight: 5,  rarity: "rare" },
+      { name: "Crystal Eel", gold: 60, weight: 2,  rarity: "rare" },
+      { name: "Golden Fish", gold: 80, weight: 1.2,rarity: "legendary" },
+      { name: "River Spirit",gold: 120,weight: 0.4,rarity: "legendary" },
+    ];
+    let total = 0; for (const fi of FISH) total += fi.weight;
+    let roll = Math.random() * total, fish = FISH[0];
+    for (const fi of FISH) { roll -= fi.weight; if (roll <= 0) { fish = fi; break; } }
+    const gold = fish.gold + ((Math.random() * 6) | 0);
+    const rare = fish.rarity === "rare" || fish.rarity === "legendary";
+    const legendary = fish.rarity === "legendary";
     p.gold += gold;
     p.inv.fish = (p.inv.fish || 0) + 1;
+    if (legendary) p.inv.dragonscale = (p.inv.dragonscale || 0); // no scale, but flag rarity
     this.audio.sfx("level");
-    for (let i = 0; i < 12; i++) this.particles.push({ x: f.bobX, y: f.bobY, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 40, life: 0.7, color: rare ? "rgba(240,216,120,0.95)" : "rgba(150,220,255,0.9)" });
-    this.ui.toast(`Caught a ${fish}! +${gold}g`);
+    const col = legendary ? "rgba(255,220,120,0.95)" : rare ? "rgba(240,200,140,0.9)" : "rgba(150,220,255,0.9)";
+    for (let i = 0; i < (legendary ? 24 : 12); i++) this.particles.push({ x: f.bobX, y: f.bobY, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 40, life: 0.7, color: col });
+    this.ui.toast(`${legendary ? "✨ LEGENDARY! " : rare ? "⭐ " : ""}Caught a ${fish.name}! +${gold}g`);
     this.ui.sync && this.ui.sync();
   } else if (f.state === "cast") {
     this.fishing = null; this.ui.toast("Reeled in early.");
@@ -385,10 +441,111 @@ Game.prototype.interact = function () {
 Game.prototype.useSkill = function (i) {
   const p = this.player;
   if (p.skillCd[i] > 0) return;
-  if (i === 0) { p.skillCd[0] = 4; this.mouse.down = true; this.doAttack(); this.mouse.down = false; this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.3 }); this.shake = Math.max(this.shake, 5); this.ui.toast("Power Strike!"); }
-  else if (i === 1) { if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[1] = 6; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, t: 0, dur: 0.8 }); this.ui.toast("Healed +30"); } else this.ui.toast("No herbs"); }
-  else if (i === 2) { p.skillCd[2] = 7; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackT = p.attackDur; this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, t: 0, dur: 0.4 }); this.shake = Math.max(this.shake, 7); for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 64) { const hit = Math.round((w.dmg + p.level * 2) * 1.3); e.hp -= hit; e.hurt = 0.2; this.addFloater(e.x, e.y - e.h, hit, true); this.spawnHit(e.x, e.y - e.h * 0.4); if (e.hp <= 0) this.killEnemy(e); } } this.ui.toast("Whirlwind!"); }
-  else if (i === 3) { if (p.stamina >= 16) { p.evadeT = 0.16; p.evadeCd = 0.4; p.stamina -= 16; p.invuln = 0.2; p.skillCd[3] = 5; this.audio.sfx("dash"); this.fx.push({ kind: "dashline", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.25 }); const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0, fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0; p.vx = fx * 340; p.vy = fy * 340; if (!fx && !fy) p.vy = 340; } }
+  const cls = p.cls || "warrior";
+  const dirVec = () => ({ fx: p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0, fy: p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0 });
+
+  // resolve skill id from class loadout
+  const CLS_SKILLS = {
+    warrior: ["powerstrike", "whirlwind", "warcry", "dash"],
+    mage:    ["fireball", "frostnova", "heal", "blink"],
+    archer:  ["arrowshot", "multishot", "heal", "roll"],
+  };
+  const skillId = (CLS_SKILLS[cls] || CLS_SKILLS.warrior)[i];
+
+  switch (skillId) {
+    case "powerstrike": {
+      p.skillCd[i] = 4; this.mouse.down = true; this.doAttack(); this.mouse.down = false;
+      this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.3 });
+      this.shake = Math.max(this.shake, 5); this.ui.toast("Power Strike!"); break;
+    }
+    case "whirlwind": {
+      p.skillCd[i] = 7; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackT = p.attackDur;
+      this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, t: 0, dur: 0.4 }); this.shake = Math.max(this.shake, 7);
+      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 70) { const hit = Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)); this.hurtEnemy(e, hit, true); } }
+      this.hurtBoss(p.x, p.y, 70, Math.round(40 * (p.dmgMul || 1)));
+      this.ui.toast("Whirlwind!"); break;
+    }
+    case "warcry": {
+      p.skillCd[i] = 12; p.buffT = 6; p.buffMul = 1.6;
+      this.audio.sfx("level"); this.fx.push({ kind: "levelring", x: p.x, y: p.y, t: 0, dur: 0.7 });
+      this.ui.toast("War Cry! +60% dmg"); break;
+    }
+    case "fireball": {
+      p.skillCd[i] = 3; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)));
+      this.audio.sfx("whirl"); this.ui.toast("Fireball!"); break;
+    }
+    case "frostnova": {
+      p.skillCd[i] = 8; this.fx.push({ kind: "frost", x: p.x, y: p.y, t: 0, dur: 0.6 }); this.shake = Math.max(this.shake, 5); this.audio.sfx("crit");
+      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 80) { this.hurtEnemy(e, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), true); e.frozen = 2.2; } }
+      this.hurtBoss(p.x, p.y, 80, Math.round(30 * (p.dmgMul || 1)));
+      this.ui.toast("Frost Nova!"); break;
+    }
+    case "arrowshot": {
+      p.skillCd[i] = 3; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true);
+      this.audio.sfx("attack"); this.ui.toast("Power Shot!"); break;
+    }
+    case "multishot": {
+      p.skillCd[i] = 7; const { fx, fy } = dirVec(); let dx = fx || 0, dy = fy || 1;
+      const base = Math.atan2(dy, dx);
+      for (const off of [-0.28, 0, 0.28]) { this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((16 + p.level * 2) * (p.dmgMul || 1))); }
+      this.audio.sfx("attack"); this.ui.toast("Multishot!"); break;
+    }
+    case "heal": {
+      if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[i] = 6; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, t: 0, dur: 0.8 }); this.ui.toast("Healed +30"); }
+      else this.ui.toast("No herbs"); break;
+    }
+    case "blink": {
+      p.skillCd[i] = 6; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      p.x = clamp(p.x + dx * 90, 8, 110 * 24 - 8); p.y = clamp(p.y + dy * 90, 8, 110 * 24 - 8);
+      p.invuln = 0.3; this.fx.push({ kind: "frost", x: p.x, y: p.y, t: 0, dur: 0.4 }); this.audio.sfx("dash"); this.ui.toast("Blink!"); break;
+    }
+    case "dash":
+    case "roll": {
+      if (p.stamina >= 16) { p.evadeT = 0.16; p.evadeCd = 0.4; p.stamina -= 16; p.invuln = 0.25; p.skillCd[i] = skillId === "roll" ? 4 : 5; this.audio.sfx("dash"); this.fx.push({ kind: "dashline", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.25 }); const { fx, fy } = dirVec(); p.vx = fx * 340; p.vy = fy * 340; if (!fx && !fy) p.vy = 340; } break;
+    }
+  }
+};
+
+// ---- Projectiles (fireballs, arrows, boss fire) ----
+Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce) {
+  const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+  this.projectiles = this.projectiles || [];
+  const speed = kind === "arrow" ? 280 : kind === "bossfire" ? 150 : 200;
+  this.projectiles.push({ x, y, dx, dy, kind, dmg, pierce: !!pierce, life: 1.4, hostile: kind === "bossfire", hits: [] });
+};
+Game.prototype.updateProjectiles = function (dt) {
+  if (!this.projectiles) return;
+  const p = this.player;
+  for (const pr of this.projectiles) {
+    pr.x += pr.dx * (pr.kind === "arrow" ? 280 : pr.kind === "bossfire" ? 150 : 200) * dt;
+    pr.y += pr.dy * (pr.kind === "arrow" ? 280 : pr.kind === "bossfire" ? 150 : 200) * dt;
+    pr.life -= dt;
+    if (pr.kind === "fire" || pr.kind === "bossfire") this.particles.push({ x: pr.x, y: pr.y, vx: 0, vy: 0, life: 0.3, color: pr.kind === "bossfire" ? "rgba(255,120,40,0.8)" : "rgba(255,160,60,0.8)" });
+    if (pr.hostile) {
+      // hits player
+      if (p.invuln <= 0 && Math.hypot(pr.x - p.x, pr.y - (p.y - 14)) < 16) { this.damagePlayer(pr.dmg); pr.life = 0; }
+    } else {
+      for (const e of this.enemies) { if (e.dead || pr.hits.includes(e)) continue; if (Math.hypot(pr.x - e.x, pr.y - (e.y - e.h * 0.4)) < 18) { this.hurtEnemy(e, pr.dmg, true); pr.hits.push(e); if (!pr.pierce) { pr.life = 0; break; } } }
+      // boss hit
+      if (this.boss && !this.boss.dead && Math.hypot(pr.x - this.boss.x, pr.y - (this.boss.y - 30)) < 34) { this.hurtBossDirect(pr.dmg); if (!pr.pierce) pr.life = 0; }
+    }
+  }
+  this.projectiles = this.projectiles.filter(pr => pr.life > 0 && pr.x > 0 && pr.y > 0 && pr.x < 110 * 24 && pr.y < 110 * 24);
+};
+
+// shared enemy damage (used by melee, skills, projectiles)
+Game.prototype.hurtEnemy = function (e, hit, crit) {
+  if (e.dead) return;
+  const p = this.player;
+  const buffed = Math.round(hit * (p.buffT > 0 ? (p.buffMul || 1) : 1));
+  e.hp -= buffed; e.hurt = 0.2; e.angry = 6; e.state = "chase";
+  this.addFloater(e.x, e.y - e.h, buffed, crit);
+  this.spawnHit(e.x, e.y - e.h * 0.4);
+  this.audio.sfx(crit ? "crit" : "hit");
+  this.shake = Math.max(this.shake, crit ? 5 : 3);
+  if (e.hp <= 0) this.killEnemy(e);
 };
 
 Game.prototype.equip = function (id) { this.player.equipped = id; this.ui.toast("Equipped " + (ITEMS[id]?.name || id)); this.ui.renderInv(); };
@@ -399,7 +556,15 @@ Game.prototype.craft = function (rid) {
   if (!canCraft(p.inv, r)) { this.ui.toast("Missing materials"); return; }
   for (const [k, n] of Object.entries(r.need)) p.inv[k] -= n;
   p.inv[r.result] = (p.inv[r.result] || 0) + 1;
-  this.ui.toast("Forged " + (ITEMS[r.result]?.name || r.result));
+  const isDragon = r.result.startsWith("dragon");
+  this.ui.toast(isDragon ? "🔥 Forged " + (ITEMS[r.result]?.name || r.result) + "!" : "Forged " + (ITEMS[r.result]?.name || r.result));
+  // forge spark particles at player
+  for (let i = 0; i < (isDragon ? 24 : 12); i++) {
+    this.particles.push({ x: p.x, y: p.y - 20, vx: (Math.random() - 0.5) * 100, vy: -40 - Math.random() * 60, life: 0.7, color: isDragon ? (Math.random() < 0.5 ? "rgba(255,140,40,0.95)" : "rgba(255,200,80,0.9)") : "rgba(200,220,255,0.85)" });
+  }
+  this.fx.push({ kind: "levelring", x: p.x, y: p.y - 10, t: 0, dur: 0.5 });
+  this.audio.sfx(isDragon ? "level" : "pickup");
+  this.shake = Math.max(this.shake, isDragon ? 6 : 2);
   this.ui.renderCraft(); this.ui.renderInv();
 };
 
@@ -410,7 +575,138 @@ Game.prototype.respawn = function () {
   this._dead = false; this.paused = false; this.ui.hideDeath();
 };
 
-Game.prototype.spawnHit = function (x, y) { this._hits = this._hits || []; this._hits.push({ x, y, t: 0 }); };
+// ---- WORLD BOSS: glowing dragon, spawns every 3 minutes ----
+Game.prototype.spawnBoss = function () {
+  if (this.boss && !this.boss.dead) return;
+  const p = this.player;
+  // spawn a bit away from the player, on land
+  let x, y, tries = 0;
+  do {
+    const a = Math.random() * 7, r = 200 + Math.random() * 120;
+    x = clamp(p.x + Math.cos(a) * r, 6 * 24, 104 * 24);
+    y = clamp(p.y + Math.sin(a) * r, 6 * 24, 104 * 24);
+    tries++;
+  } while (this.tileAt(x, y) === 2 && tries < 20);
+  const hp = 900 + p.level * 120;
+  this.boss = {
+    x, y, sortY: y, hp, maxHp: hp, dmg: 14 + p.level * 2,
+    frame: 0, frameT: 0, dead: false, hurt: 0,
+    state: "chase", atkCd: 3, breatheCd: 5, t: 0, rage: false,
+  };
+  this.ui.toast("⚠ A WORLD BOSS has appeared: Infernyx the Dragon!");
+  this.audio.sfx("level"); this.shake = Math.max(this.shake, 8);
+};
+Game.prototype.updateBoss = function (dt) {
+  // 3-minute spawn timer
+  this.bossTimer = (this.bossTimer == null ? 180 : this.bossTimer) - dt;
+  if (this.bossTimer <= 0 && (!this.boss || this.boss.dead)) { this.spawnBoss(); this.bossTimer = 180; }
+
+  const b = this.boss; if (!b || b.dead) return;
+  const p = this.player;
+  b.t += dt; b.hurt = Math.max(0, b.hurt - dt);
+  b.frameT += dt; if (b.frameT > 0.18) { b.frameT = 0; b.frame = (b.frame + 1) % 4; }
+  b.rage = b.hp < b.maxHp * 0.4;
+
+  const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
+  // move toward player but keep some distance (ranged aggressor)
+  const desired = b.rage ? 90 : 130;
+  const spd = (b.rage ? 62 : 44) * dt;
+  if (d > desired + 20) { b.x += (dx / d) * spd; b.y += (dy / d) * spd; }
+  else if (d < desired - 20) { b.x -= (dx / d) * spd; b.y -= (dy / d) * spd; }
+  b.sortY = b.y;
+
+  // melee swipe if player hugs the boss
+  b.atkCd -= dt;
+  if (d < 60 && b.atkCd <= 0) { b.atkCd = b.rage ? 1.4 : 2.2; this.damagePlayer(b.dmg); this.shake = Math.max(this.shake, 6); this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: "down", t: 0, dur: 0.3 }); }
+
+  // fire breath: volley of fireballs toward the player
+  b.breatheCd -= dt;
+  if (b.breatheCd <= 0) {
+    b.breatheCd = b.rage ? 2.6 : 4.5;
+    this.audio.sfx("whirl"); this.shake = Math.max(this.shake, 5);
+    const base = Math.atan2(dy, dx);
+    const spread = b.rage ? [-0.35, -0.12, 0.12, 0.35] : [-0.18, 0, 0.18];
+    for (const off of spread) this.spawnProjectile(b.x, b.y - 30, Math.cos(base + off), Math.sin(base + off), "bossfire", b.dmg);
+    this.fx.push({ kind: "whirl", x: b.x, y: b.y - 30, t: 0, dur: 0.4 });
+  }
+};
+// AoE damage helper for player skills hitting the boss
+Game.prototype.hurtBoss = function (x, y, radius, dmg) {
+  const b = this.boss; if (!b || b.dead) return;
+  if (Math.hypot(b.x - x, b.y - y) < radius + 30) this.hurtBossDirect(dmg);
+};
+Game.prototype.hurtBossDirect = function (dmg) {
+  const b = this.boss; if (!b || b.dead) return;
+  const p = this.player;
+  const buffed = Math.round(dmg * (p.buffT > 0 ? (p.buffMul || 1) : 1));
+  b.hp -= buffed; b.hurt = 0.2;
+  this.addFloater(b.x, b.y - 40, buffed, true);
+  this.audio.sfx("hit"); this.shake = Math.max(this.shake, 3);
+  if (b.hp <= 0) this.killBoss();
+};
+Game.prototype.killBoss = function () {
+  const b = this.boss; if (!b) return;
+  b.dead = true;
+  const p = this.player;
+  const goldReward = 200 + p.level * 20, xpReward = 300 + p.level * 40;
+  p.gold += goldReward; p.xp += xpReward;
+  p.inv.ore = (p.inv.ore || 0) + 8; p.inv.gel = (p.inv.gel || 0) + 6;
+  p.inv.dragonscale = (p.inv.dragonscale || 0) + 1;   // rare crafting mat
+  for (let i = 0; i < 30; i++) this.particles.push({ x: b.x, y: b.y - 30, vx: (Math.random() - 0.5) * 120, vy: -40 - Math.random() * 80, life: 1.0, color: Math.random() < 0.5 ? "rgba(255,180,60,0.95)" : "rgba(255,120,40,0.9)" });
+  this.fx.push({ kind: "levelring", x: b.x, y: b.y - 20, t: 0, dur: 1.0 });
+  this.shake = Math.max(this.shake, 12); this.audio.sfx("level");
+  this.ui.toast(`💀 Infernyx defeated! +${goldReward}g +${xpReward}xp +Dragon Scale!`);
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; this.ui.showLevel(p.level); }
+  this.ui.sync && this.ui.sync();
+  setTimeout(() => { this.boss = null; }, 600);
+};
+
+Game.prototype.spawnHit = function (x, y) {
+  this.fx.push({ kind: "hit", x, y, t: 0, dur: 0.15 });
+  for (let i = 0; i < 4; i++) this.particles.push({ x, y, vx: (Math.random() - 0.5) * 80, vy: -20 - Math.random() * 40, life: 0.3, color: "rgba(255,255,200,0.8)" });
+};
+
+Game.prototype.harvestPlant = function (pl) {
+  const drops = {
+    bamboo_shoot: { item: "wood", count: 2, xp: 4, gold: 2 },
+    herb_bush: { item: "herb", count: 2, xp: 3, gold: 1 },
+    crystal_ore: { item: "ore", count: 3, xp: 8, gold: 5 },
+    glow_vine: { item: "gel", count: 2, xp: 6, gold: 3 },
+  };
+  const d = drops[pl.kind] || drops.herb_bush;
+  const p = this.player;
+  p.inv[d.item] = (p.inv[d.item] || 0) + d.count;
+  p.xp += d.xp; p.gold += d.gold;
+  this.ui.toast(`🌿 Harvested ${pl.kind.replace("_", " ")}! +${d.count} ${d.item} +${d.xp}xp`);
+  this.audio.sfx("pickup");
+  this.addFloater(pl.x, pl.y - 16, `+${d.count} ${d.item}`, false, false, true);
+  // particle burst
+  for (let i = 0; i < 8; i++) this.particles.push({ x: pl.x, y: pl.y - 10, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 40, life: 0.6, color: pl.kind === "crystal_ore" ? "rgba(180,220,255,0.9)" : "rgba(120,200,100,0.9)" });
+  pl.respawn = 30; // respawn in 30 sec
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; this.ui.showLevel(p.level); }
+  this.ui.sync && this.ui.sync();
+};
+
+Game.prototype.updatePlants = function (dt) {
+  for (const pl of this.plants) {
+    pl.sway = (pl.sway || 0) + dt * 2;
+    if (pl.shake > 0) pl.shake -= dt;
+    if (pl.hp <= 0 && pl.respawn > 0) {
+      pl.respawn -= dt;
+      if (pl.respawn <= 0) { pl.hp = pl.kind === "crystal_ore" ? 3 : 2; }
+    }
+  }
+};
+
+Game.prototype.damagePlayer = function (raw) {
+  const p = this.player;
+  if (p.invuln > 0) return;
+  if (p.shield) { p.stamina = Math.max(0, p.stamina - 6); if (p.stamina > 0) { p.invuln = 0.2; return; } }
+  const dmg = Math.max(1, Math.round(raw * (p.defense || 1)));
+  p.hp -= dmg; p.invuln = 0.6;
+  this.addFloater(p.x, p.y - 36, dmg, false, true);
+  this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 5);
+};
 Game.prototype.addFloater = function (x, y, val, crit, dmgToPlayer, heal) {
   const sx = (x - this.cam.x) * (this.canvas.clientWidth / view.w);
   const sy = (y - this.cam.y) * (this.canvas.clientHeight / view.h);

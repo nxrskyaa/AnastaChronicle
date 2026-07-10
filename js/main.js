@@ -10,14 +10,71 @@ import { connectMultiplayer, net } from "./net.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
+const loadingBar = document.getElementById("loading-bar-fill");
 const startBtn = document.getElementById("btn-start");
 const creator = document.getElementById("creator");
 let look = { ...DEFAULT_LOOK };
 let game = null;
 
+// ---- Boot screen ambient particles (fireflies + drifting embers) ----
+const bootCanvas = document.getElementById("boot-fx");
+const bootCtx = bootCanvas?.getContext("2d");
+let bootParticles = [];
+let bootRAF = null;
+function initBootFx() {
+  if (!bootCanvas) return;
+  const resize = () => { bootCanvas.width = window.innerWidth; bootCanvas.height = window.innerHeight; };
+  resize();
+  addEventListener("resize", resize);
+  bootParticles = [];
+  for (let i = 0; i < 40; i++) {
+    bootParticles.push({
+      x: Math.random() * bootCanvas.width,
+      y: Math.random() * bootCanvas.height,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.3 - 0.15,
+      r: 1 + Math.random() * 2,
+      phase: Math.random() * 6.28,
+      speed: 0.02 + Math.random() * 0.03,
+      hue: Math.random() < 0.6 ? "firefly" : "ember",
+    });
+  }
+  const tick = () => {
+    bootCtx.clearRect(0, 0, bootCanvas.width, bootCanvas.height);
+    for (const p of bootParticles) {
+      p.x += p.vx; p.y += p.vy; p.phase += p.speed;
+      if (p.x < -10) p.x = bootCanvas.width + 10;
+      if (p.x > bootCanvas.width + 10) p.x = -10;
+      if (p.y < -10) p.y = bootCanvas.height + 10;
+      if (p.y > bootCanvas.height + 10) p.y = -10;
+      const a = 0.3 + Math.sin(p.phase) * 0.35;
+      if (p.hue === "firefly") {
+        bootCtx.fillStyle = `rgba(150,255,180,${Math.max(0, a)})`;
+        bootCtx.beginPath(); bootCtx.arc(p.x, p.y, p.r, 0, 7); bootCtx.fill();
+        bootCtx.fillStyle = `rgba(200,255,220,${Math.max(0, a * 0.3)})`;
+        bootCtx.beginPath(); bootCtx.arc(p.x, p.y, p.r * 2.5, 0, 7); bootCtx.fill();
+      } else {
+        bootCtx.fillStyle = `rgba(255,160,80,${Math.max(0, a * 0.6)})`;
+        bootCtx.beginPath(); bootCtx.arc(p.x, p.y, p.r, 0, 7); bootCtx.fill();
+      }
+    }
+    bootRAF = requestAnimationFrame(tick);
+  };
+  tick();
+}
+initBootFx();
+
 async function preload() {
   try {
-    await loadAll((d, t) => { bootStatus.textContent = `Loading… ${d}/${t}`; });
+    // Simulated load steps for visual feedback (loading bar animation)
+    const steps = ["Init engine", "Generating terrain", "Spawning creatures", "Tuning audio", "Ready"];
+    for (let i = 0; i < steps.length; i++) {
+      bootStatus.textContent = `Loading… ${steps[i]}`;
+      if (loadingBar) loadingBar.style.width = `${((i + 1) / steps.length) * 100}%`;
+      await loadAll((d, t) => { bootStatus.textContent = `Loading… ${d}/${t}`; });
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (loadingBar) loadingBar.style.width = "100%";
     bootStatus.textContent = "Ready";
     startBtn.disabled = false;
   } catch (e) { bootStatus.textContent = "Load error: " + e.message; console.error(e); }
@@ -48,11 +105,23 @@ function swatch(part) {
 function initCreator() {
   ["style", "hair", "eyes", "skin", "shirt", "pants", "boots"].forEach(swatch);
   document.getElementById("opt-name").addEventListener("input", (e) => { look.name = e.target.value || "Anasta"; });
+  // gender picker
+  document.querySelectorAll("#pick-gender .cls-btn").forEach(b => b.addEventListener("click", () => {
+    audio.sfx("ui"); look.gender = b.dataset.gender;
+    document.querySelectorAll("#pick-gender .cls-btn").forEach(x => x.classList.remove("sel")); b.classList.add("sel");
+    drawPreview();
+  }));
+  // class picker
+  document.querySelectorAll("#pick-class .cls-btn").forEach(b => b.addEventListener("click", () => {
+    audio.sfx("ui"); look.cls = b.dataset.cls;
+    document.querySelectorAll("#pick-class .cls-btn").forEach(x => x.classList.remove("sel")); b.classList.add("sel");
+    drawPreview();
+  }));
   document.querySelectorAll(".rot-btn").forEach(b => b.addEventListener("click", () => { audio.sfx("ui"); rotDir = b.dataset.rot; document.querySelectorAll(".rot-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); }));
   document.getElementById("btn-random").addEventListener("click", () => {
     audio.sfx("ui");
     const pick = a => a[(Math.random() * a.length) | 0];
-    look = { name: look.name, skin: pick(PRESETS.skin), hair: pick(PRESETS.hair), eyes: pick(PRESETS.eyes), shirt: pick(PRESETS.shirt), pants: pick(PRESETS.pants), boots: pick(PRESETS.boots), style: pick(HAIRSTYLES) };
+    look = { name: look.name, gender: look.gender, cls: look.cls, skin: pick(PRESETS.skin), hair: pick(PRESETS.hair), eyes: pick(PRESETS.eyes), shirt: pick(PRESETS.shirt), pants: pick(PRESETS.pants), boots: pick(PRESETS.boots), style: pick(HAIRSTYLES) };
     ["style", "hair", "eyes", "skin", "shirt", "pants", "boots"].forEach(swatch); drawPreview();
   });
   document.getElementById("btn-enter").addEventListener("click", startGame);
@@ -120,6 +189,7 @@ function startGame() {
 
 startBtn.addEventListener("click", () => {
   audio.init(); audio.resume(); audio.startMusic("title");
+  if (bootRAF) { cancelAnimationFrame(bootRAF); bootRAF = null; }
   boot.classList.add("hidden");
   creator.classList.remove("hidden");
   initCreator();

@@ -130,5 +130,138 @@ export function buildVillage() {
     well: well(),
     stall: stall(),
     fenceH: fenceH(),
+    torii: toriiGate(),
+    sakura: sakuraTree(),
+    lantern: stoneLantern(),
+    bamboo: bambooGrove(),
+    pagoda: pagoda(),
   };
+}
+
+// ===== JAPANESE AESTHETIC DECOR =====
+
+// Torii gate — vermillion, classic shape
+function toriiGate(w = 48, h = 60) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,0.22)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 3, w / 2 - 4, 4, 0, 0, 7); ctx.fill();
+  const RED = "#c8392e", RED_D = "#a02820", RED_L = "#e04a3a", BLACK = "#2a1a18";
+  // pillars
+  px(8, 22, 5, h - 26, RED, ctx); px(8, 22, 1, h - 26, RED_L, ctx); px(12, 22, 1, h - 26, RED_D, ctx);
+  px(w - 13, 22, 5, h - 26, RED, ctx); px(w - 13, 22, 1, h - 26, RED_L, ctx); px(w - 9, 22, 1, h - 26, RED_D, ctx);
+  // top crossbar (kasagi) — curved
+  for (let i = 0; i < w; i++) {
+    const curve = Math.sin(i / w * Math.PI) * 3;
+    px(i, 14 - Math.round(curve), 1, 8, i % 4 < 2 ? RED : RED_D, ctx);
+    px(i, 13 - Math.round(curve), 1, 1, RED_L, ctx);
+  }
+  px(0, 12, w, 2, BLACK, ctx);
+  // second bar (nuki)
+  px(4, 28, w - 8, 5, RED_D, ctx); px(4, 28, w - 8, 1, RED_L, ctx); px(4, 32, w - 8, 1, BLACK, ctx);
+  // center tablet (gakuzuka)
+  px(w / 2 - 5, 20, 10, 8, BLACK, ctx); px(w / 2 - 4, 21, 8, 6, "#1a1018", ctx);
+  return cv;
+}
+
+// Sakura tree — pink canopy + brown trunk
+function sakuraTree(w = 56, h = 64) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,0.18)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 3, w / 2 - 3, 4, 0, 0, 7); ctx.fill();
+  // trunk
+  ctx.fillStyle = "#6a4324"; ctx.fillRect(w / 2 - 3, h - 22, 6, 20);
+  ctx.fillStyle = "#4a3018"; ctx.fillRect(w / 2 + 1, h - 22, 2, 20);
+  // branches
+  ctx.strokeStyle = "#5a3818"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(w / 2, h - 18); ctx.lineTo(w / 2 - 14, h - 28); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w / 2, h - 20); ctx.lineTo(w / 2 + 14, h - 30); ctx.stroke();
+  // canopy — layered pink blobs
+  const pinks = ["#ffc8e0", "#ffb0d0", "#ff98c0", "#f088b0"];
+  const blobs = [[w/2, 14], [w/2-12, 18], [w/2+12, 18], [w/2-6, 10], [w/2+8, 12], [w/2, 22]];
+  for (const [bx, by] of blobs) {
+    ctx.fillStyle = pinks[(bx + by) % pinks.length];
+    ctx.beginPath(); ctx.arc(bx, by, 12, 0, 7); ctx.fill();
+  }
+  // highlight dots
+  for (let i = 0; i < 16; i++) {
+    const sx = w / 2 - 20 + ((i * 7.3) % 40);
+    const sy = 6 + ((i * 5.1) % 20);
+    ctx.fillStyle = i % 3 === 0 ? "#ffe0ee" : "#ff98c0";
+    ctx.fillRect(sx | 0, sy | 0, 2, 2);
+  }
+  // falling petals
+  ctx.fillStyle = "rgba(255,180,210,0.5)";
+  ctx.fillRect(10, 34, 2, 2); ctx.fillRect(34, 40, 2, 2); ctx.fillRect(22, 50, 2, 2);
+  return cv;
+}
+
+// Stone lantern (toro)
+function stoneLantern(w = 28, h = 48) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,0.2)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 2, 10, 3, 0, 0, 7); ctx.fill();
+  const GR = "#8a8e94", GR_D = "#6a6e74", GR_L = "#aab0b6";
+  // base
+  px(w / 2 - 8, h - 6, 16, 5, GR, ctx); px(w / 2 - 8, h - 6, 16, 1, GR_L, ctx); px(w / 2 - 8, h - 2, 16, 1, GR_D, ctx);
+  // post
+  px(w / 2 - 3, h - 14, 6, 8, GR_D, ctx); px(w / 2 - 3, h - 14, 1, 8, GR, ctx);
+  // light box
+  px(w / 2 - 7, h - 26, 14, 12, GR, ctx); px(w / 2 - 7, h - 26, 14, 1, GR_L, ctx);
+  // light opening (glows at night via render)
+  px(w / 2 - 4, h - 23, 8, 7, "#f5e0a0", ctx); px(w / 2 - 4, h - 23, 8, 1, "#ffe8c0", ctx);
+  // top cap
+  px(w / 2 - 9, h - 29, 18, 3, GR_D, ctx); px(w / 2 - 9, h - 29, 18, 1, GR_L, ctx);
+  // roof (small pagoda-style)
+  for (let i = 0; i < 12; i++) { const rw = 18 - i * 1.2; px((w - rw) / 2, h - 33 - i, rw, 1, i % 3 < 2 ? GR : GR_D, ctx); }
+  px(w / 2 - 1, h - 46, 2, 4, GR_D, ctx); // finial
+  return cv;
+}
+
+// Bamboo grove — cluster of green stalks
+function bambooGrove(w = 36, h = 60) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,0.15)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 2, w / 2 - 2, 3, 0, 0, 7); ctx.fill();
+  const BN = "#5a9a48", BN_D = "#3a7a30", BN_L = "#7abf60", LEAF = "#6ec058", LEAF_D = "#4a9038";
+  const stalks = [6, 14, 22, 28];
+  for (const sx of stalks) {
+    const sh = h - 4 - (sx % 3) * 4;
+    px(sx, h - sh, 4, sh, BN, ctx); px(sx, h - sh, 1, sh, BN_L, ctx); px(sx + 3, h - sh, 1, sh, BN_D, ctx);
+    // segments (node lines)
+    for (let y = h - sh + 6; y < h; y += 8) { px(sx, y, 4, 1, BN_D, ctx); px(sx, y - 1, 4, 1, BN_L, ctx); }
+    // leaves at top
+    ctx.fillStyle = LEAF;
+    for (let i = 0; i < 4; i++) {
+      const ly = h - sh + 2 + i * 3;
+      ctx.beginPath(); ctx.ellipse(sx + 6, ly, 5, 2, -0.3, 0, 7); ctx.fill();
+      ctx.fillStyle = LEAF_D;
+      ctx.beginPath(); ctx.ellipse(sx - 5, ly + 1, 4, 2, 0.3, 0, 7); ctx.fill();
+      ctx.fillStyle = LEAF;
+    }
+  }
+  return cv;
+}
+
+// Pagoda — multi-tier temple
+function pagoda(w = 52, h = 76) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,0.22)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 3, w / 2 - 3, 4, 0, 0, 7); ctx.fill();
+  const W2 = "#d4c8a0", W2_D = "#b0a480", R2 = "#8a4a3a", R2_D = "#6a3028", R2_L = "#a85a48", GOLD = "#e8c96a";
+  // stone platform
+  px(4, h - 8, w - 8, 6, "#8a8e94", ctx); px(4, h - 8, w - 8, 1, "#aab0b6", ctx);
+  // 3 tier body
+  const tiers = [[12, h - 24, w - 24], [16, h - 38, w - 32], [20, h - 52, w - 40]];
+  for (const [ty, th, tw] of tiers) {
+    px((w - tw) / 2, ty, tw, th, W2, ctx); px((w - tw) / 2, ty, tw, 1, W2_D, ctx);
+    // door
+    px(w / 2 - 3, ty + th - 10, 6, 10, "#3a2a20", ctx);
+    // roof eave for this tier
+    const ey = ty - 1;
+    for (let i = 0; i < tw + 8; i++) {
+      const rw = tw + 8 - i * ((tw + 8) / 2 / 8) * 2;
+      const rx = (w - rw) / 2;
+      px(rx, ey - i, rw, 1, i % 4 < 2 ? R2 : R2_D, ctx);
+    }
+  }
+  // finial spire
+  px(w / 2 - 1, h - 66, 2, 10, GOLD, ctx);
+  px(w / 2 - 2, h - 68, 4, 2, R2_D, ctx);
+  px(w / 2 - 1, h - 72, 2, 4, GOLD, ctx);
+  return cv;
 }

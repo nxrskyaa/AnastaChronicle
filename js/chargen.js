@@ -16,6 +16,8 @@ export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail
 
 export const DEFAULT_LOOK = {
   name: "Anasta",
+  gender: "male",
+  cls: "warrior",
   skin: PRESETS.skin[1],
   hair: PRESETS.hair[2],
   eyes: PRESETS.eyes[0],
@@ -85,17 +87,28 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
 
   // ================= TORSO (trapezoid, shoulders wider than waist) =========
   const tTop = 16 + by, tBot = 27 + by;
-  // shirt body as a shouldered trapezoid, NOT a circle
+  const female = look.gender === "female";
+  // shirt body as a shouldered trapezoid; female has narrower waist (hourglass)
   ctx.fillStyle = sh;
   ctx.beginPath();
-  ctx.moveTo(cx - 6, tTop + 1);     // left shoulder
-  ctx.lineTo(cx + 6, tTop + 1);     // right shoulder
-  ctx.lineTo(cx + 4, tBot);         // right waist
-  ctx.lineTo(cx - 4, tBot);         // left waist
+  if (female) {
+    ctx.moveTo(cx - 5, tTop + 1);     // slightly narrower shoulders
+    ctx.lineTo(cx + 5, tTop + 1);
+    ctx.lineTo(cx + 3, tTop + 5);     // chest curve out
+    ctx.lineTo(cx + 2.5, tBot);       // nipped waist
+    ctx.lineTo(cx - 2.5, tBot);
+    ctx.lineTo(cx - 3, tTop + 5);
+  } else {
+    ctx.moveTo(cx - 6, tTop + 1);     // left shoulder
+    ctx.lineTo(cx + 6, tTop + 1);     // right shoulder
+    ctx.lineTo(cx + 4, tBot);         // right waist
+    ctx.lineTo(cx - 4, tBot);         // left waist
+  }
   ctx.closePath(); ctx.fill();
   // shading down the left side + center highlight
   ctx.fillStyle = sh2;
-  ctx.beginPath(); ctx.moveTo(cx - 6, tTop + 1); ctx.lineTo(cx - 2, tTop + 1); ctx.lineTo(cx - 1, tBot); ctx.lineTo(cx - 4, tBot); ctx.closePath(); ctx.fill();
+  if (female) { ctx.beginPath(); ctx.moveTo(cx - 5, tTop + 1); ctx.lineTo(cx - 2, tTop + 1); ctx.lineTo(cx - 1, tBot); ctx.lineTo(cx - 2.5, tBot); ctx.closePath(); ctx.fill(); }
+  else { ctx.beginPath(); ctx.moveTo(cx - 6, tTop + 1); ctx.lineTo(cx - 2, tTop + 1); ctx.lineTo(cx - 1, tBot); ctx.lineTo(cx - 4, tBot); ctx.closePath(); ctx.fill(); }
   ctx.fillStyle = sh3;
   px(ctx, cx - 6, tTop + 1, 12, 1, sh3);      // collar line shade
   // belt
@@ -223,6 +236,28 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
     ctx.strokeStyle = "#e8e2d0"; ctx.lineWidth = 0.7;
     ctx.beginPath(); ctx.moveTo(Math.cos(-1.1) * 12, Math.sin(-1.1) * 12); ctx.lineTo(Math.cos(1.1) * 12, Math.sin(1.1) * 12); ctx.stroke();
     if (atkPhase != null && atkPhase < 0.6) { ctx.fillStyle = "#7a5228"; ctx.fillRect(-1, -1, 12, 2); ctx.fillStyle = "#dfe4ee"; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(8, -2); ctx.lineTo(8, 2); ctx.fill(); }
+  } else if (weapon === "staff") {
+    ctx.fillStyle = "#6a4324"; ctx.fillRect(-1.5, -18, 3, 24);     // shaft
+    ctx.fillStyle = "#8557a8"; ctx.beginPath(); ctx.arc(0, -20, 4, 0, 7); ctx.fill();  // orb
+    ctx.fillStyle = "#c8a0e8"; ctx.beginPath(); ctx.arc(-1, -21, 1.5, 0, 7); ctx.fill(); // orb shine
+    if (atkPhase != null && atkPhase < 0.3) { ctx.fillStyle = "rgba(180,120,255,0.4)"; ctx.beginPath(); ctx.arc(0, -20, 8, 0, 7); ctx.fill(); }
+  } else if (weapon === "dragonblade") {
+    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-1.5, 0, 3, 5);
+    ctx.fillStyle = "#ff7a2a"; ctx.fillRect(-4, -1, 8, 2);          // glowing crossguard
+    ctx.fillStyle = "#e05020"; ctx.fillRect(-2, -17, 4, 16);
+    ctx.fillStyle = "#ff9050"; ctx.fillRect(-2, -17, 1.5, 16);
+    ctx.fillStyle = "#ffce5a"; ctx.beginPath(); ctx.moveTo(-2, -17); ctx.lineTo(2, -17); ctx.lineTo(0, -21); ctx.fill();
+  } else if (weapon === "dragonbow") {
+    ctx.strokeStyle = "#a05a2a"; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(0, 0, 13, -1.1, 1.1); ctx.stroke();
+    ctx.strokeStyle = "#ff8a3a"; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(Math.cos(-1.1) * 13, Math.sin(-1.1) * 13); ctx.lineTo(Math.cos(1.1) * 13, Math.sin(1.1) * 13); ctx.stroke();
+    if (atkPhase != null && atkPhase < 0.6) { ctx.fillStyle = "#7a5228"; ctx.fillRect(-1, -1, 12, 2); ctx.fillStyle = "#ffce5a"; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(8, -2); ctx.lineTo(8, 2); ctx.fill(); }
+  } else if (weapon === "dragonstaff") {
+    ctx.fillStyle = "#5a3018"; ctx.fillRect(-1.5, -20, 3, 26);
+    ctx.fillStyle = "#ff5a2a"; ctx.beginPath(); ctx.arc(0, -22, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#ffae40"; ctx.beginPath(); ctx.arc(-1, -23, 2, 0, 7); ctx.fill();
+    if (atkPhase != null && atkPhase < 0.3) { ctx.fillStyle = "rgba(255,100,40,0.45)"; ctx.beginPath(); ctx.arc(0, -22, 10, 0, 7); ctx.fill(); }
   }
   ctx.restore();
 
