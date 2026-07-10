@@ -277,6 +277,7 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
 @media(max-width:720px){#char-preview{height:96%}}
 .creator-preview{align-items:stretch}.preview-stage{width:100%}
 #login{overflow-x:hidden}
+@media(max-width:720px){.realm-showcase{overflow:hidden}}
 .companion-panel{display:flex;flex-direction:column;max-height:min(86vh,720px);overflow:hidden}.companion-panel>.panel-head,.companion-hero,.companion-grid-head{flex:0 0 auto}.companion-grid{min-height:0;flex:1;overflow:auto}.companion-card.active{cursor:default}
 @media(pointer:coarse){#pet-chip{min-height:44px;padding:5px 7px}}
 @media(max-height:560px){.companion-panel{max-height:96%;width:min(820px,96%)}.companion-hero{grid-template-columns:82px minmax(0,1fr) auto;padding:9px 12px}.companion-hero-art{width:76px;height:76px}#companion-active-art{width:68px;height:68px}.companion-hero-copy>p{display:none}.companion-grid-head{padding-top:8px}.companion-grid{grid-template-columns:repeat(7,1fr);padding-bottom:10px}}
