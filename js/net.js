@@ -65,6 +65,12 @@ export async function connectMultiplayer(look, name, spawn) {
     ws.onclose = () => { net.connected = false; };
     ws.onerror = () => { net.connected = false; };
 
+    // Keepalive: Railway's TLS proxy drops idle sockets. Send a tiny ping
+    // every 4s so the connection stays warm in the browser.
+    net._ping = setInterval(() => {
+      if (ws.readyState === ws.OPEN) { try { ws.send(JSON.stringify({ t: "ping" })); } catch {} }
+    }, 4000);
+
     // send join
     ws.send(JSON.stringify({
       t: "join",
