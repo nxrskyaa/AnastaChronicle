@@ -1,34 +1,50 @@
 import { Game } from "./game.js";
 import { ITEMS } from "./crafting.js";
 import { fishingContext, rollFish } from "./fishing.js";
+import { getFishSprite } from "./fishart.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+export const INTERACT_RADIUS = 48;
+const TAP_TARGET_RADIUS = 30;
 
-Game.prototype.resolveInteract = function () {
+Game.prototype.resolveInteract = function (point = null) {
   const player = this.player;
-  const candidates = [];
-  const offer = (target, kind, label) => {
+  const focus = point || player;
+  const offer = (list, target, kind, label, focusRadius) => {
+    const focusDistance = Math.hypot(target.x - focus.x, target.y - focus.y);
+    if (focusDistance > focusRadius) return;
     const distance = Math.hypot(target.x - player.x, target.y - player.y);
-    if (distance <= 34) candidates.push({ target, kind, label, distance });
+    list.push({ target, kind, label, distance, focusDistance, reachable: distance <= INTERACT_RADIUS });
   };
 
-  for (const npc of this.npcs) offer(npc, "npc", `Talk to ${npc.name}`);
+  const actors = [];
+  const focusRadius = point ? TAP_TARGET_RADIUS : INTERACT_RADIUS;
+  for (const npc of this.npcs) offer(actors, npc, "npc", `Talk to ${npc.name}`, focusRadius);
   for (const chest of this.chests) {
-    if (!chest.opened) offer(chest, "chest", chest.pet ? "Claim Companion Cache" : "Claim Supply Cache");
+    if (!chest.opened) offer(actors, chest, "chest", chest.pet ? "Claim Companion Cache" : "Claim Supply Cache", focusRadius);
   }
-  candidates.sort((a, b) => a.distance - b.distance);
-  if (candidates.length) return candidates[0];
+  actors.sort((a, b) => a.focusDistance - b.focusDistance || a.distance - b.distance);
+  if (actors.length) return actors[0];
 
-  const tileX = (player.x / T) | 0, tileY = (player.y / T) | 0;
-  const around = [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, 1], [1, -1], [-1, 1]];
-  for (const [dx, dy] of around) {
-    const x = tileX + dx, y = tileY + dy;
-    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
-    if (this.map[y * MAP_W + x] === 2) {
-      return { target: { x: (x + .5) * T, y: (y + .5) * T }, kind: "fish", label: "Cast Fishing Line" };
+  const water = [];
+  if (point) {
+    const x = (point.x / T) | 0, y = (point.y / T) | 0;
+    if (x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && this.map[y * MAP_W + x] === 2) {
+      const target = { x: (x + .5) * T, y: (y + .5) * T, water: true };
+      offer(water, target, "fish", "Cast Fishing Line", T);
+    }
+  } else {
+    const tileX = (player.x / T) | 0, tileY = (player.y / T) | 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const x = tileX + dx, y = tileY + dy;
+      if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || this.map[y * MAP_W + x] !== 2) continue;
+      const target = { x: (x + .5) * T, y: (y + .5) * T, water: true };
+      offer(water, target, "fish", "Cast Fishing Line", INTERACT_RADIUS);
     }
   }
+  water.sort((a, b) => a.focusDistance - b.focusDistance || a.distance - b.distance);
+  if (water.length) return water[0];
   return { target: null, kind: null, label: "" };
 };
 
@@ -46,6 +62,20 @@ Game.prototype.updateInteract = function () {
     return;
   }
 
+  const pending = this._pendingInteraction;
+  if (pending) {
+    const invalid = pending.kind === "chest" && pending.target.opened;
+    const distance = Math.hypot(pending.target.x - this.player.x, pending.target.y - this.player.y);
+    if (invalid) {
+      this._pendingInteraction = null;
+    } else if (distance <= INTERACT_RADIUS) {
+      this._pendingInteraction = null;
+      this.moveTarget = null;
+      this.interact({ ...pending, distance, reachable: true });
+      return;
+    }
+  }
+
   const resolved = this.resolveInteract();
   this._interactTarget = resolved.target;
   this._interactKind = resolved.kind;
@@ -55,6 +85,7 @@ Game.prototype.updateInteract = function () {
 Game.prototype.startFishing = function (spot) {
   const player = this.player;
   this.moveTarget = null;
+  this._pendingInteraction = null;
   player.dir = spot.y < player.y ? "up" : spot.y > player.y ? "down" : (spot.x < player.x ? "left" : "right");
   const context = fishingContext(this, spot);
   const fish = rollFish(context);
@@ -177,6 +208,15 @@ Game.prototype.landFish = function (fishing) {
   const bonus = controlled ? Math.round(fish.gold * .2) : 0;
   const reward = fish.gold + bonus;
   this.fishing = null;
+  this.catchReveal = {
+    fish,
+    sprite: getFishSprite(fish),
+    origin: { x: fishing.bobX, y: fishing.bobY },
+    reward,
+    bonus,
+    elapsed: 0,
+    duration: 2.4,
+  };
   this.quests.fishCount++;
   player.gold += reward;
   player.inv.fish = (player.inv.fish || 0) + 1;
@@ -201,10 +241,10 @@ Game.prototype.landFish = function (fishing) {
   this.ui.sync();
 };
 
-Game.prototype.interact = function () {
+Game.prototype.interact = function (resolved = null) {
   if (this.paused) return;
   if (this.fishing) { this.reelFish(); return; }
-  const resolved = this.resolveInteract();
+  resolved = resolved?.target ? resolved : this.resolveInteract();
   const target = resolved.target, kind = resolved.kind;
   if (!target) return;
   if (kind === "fish") { this.startFishing(target); return; }

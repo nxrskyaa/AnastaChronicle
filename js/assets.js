@@ -270,6 +270,53 @@ function slashSprite(frame) {
   return cv;
 }
 
+function campfireSprite(frame) {
+  const cv = canvas(44, 42);
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const f = frame % 6;
+
+  // Ground shadow, uneven stone ring, and crossed split logs.
+  shadow(ctx, 22, 36, 34);
+  const stones = [
+    [6, 30, 7, 4], [13, 34, 7, 4], [22, 35, 7, 4], [31, 31, 7, 4],
+    [30, 27, 6, 4], [8, 26, 6, 4],
+  ];
+  for (let i = 0; i < stones.length; i++) {
+    const [x, y, w, h] = stones[i];
+    px(ctx, x, y, w, h, i % 2 ? "#5b524b" : "#6f6256");
+    px(ctx, x + 1, y, Math.max(2, w - 2), 1, i % 2 ? "#8b7967" : "#9b8873");
+  }
+  px(ctx, 10, 27, 25, 5, "#3b2722");
+  px(ctx, 12, 26, 21, 3, "#7d4229");
+  px(ctx, 14, 26, 5, 2, "#b26335");
+  px(ctx, 11, 30, 24, 4, "#35231f");
+  px(ctx, 14, 29, 18, 3, "#6d3927");
+  px(ctx, 27, 29, 4, 2, "#a85831");
+
+  // Six deliberately different stepped silhouettes avoid rubbery ellipse fire.
+  const silhouettes = [
+    [[18, 6, 8, 19], [14, 13, 7, 13], [24, 12, 6, 14]],
+    [[17, 9, 10, 16], [21, 4, 5, 14], [13, 15, 7, 11]],
+    [[16, 6, 8, 19], [23, 10, 7, 16], [13, 14, 6, 12]],
+    [[19, 4, 7, 21], [14, 11, 7, 15], [25, 15, 5, 11]],
+    [[16, 8, 11, 18], [13, 16, 6, 10], [24, 7, 5, 18]],
+    [[18, 5, 8, 21], [14, 12, 6, 14], [24, 14, 7, 12]],
+  ][f];
+  for (const [x, y, w, h] of silhouettes) {
+    px(ctx, x, y + 4, w, h - 4, "#b83b22");
+    px(ctx, x + 1, y + 2, Math.max(2, w - 2), h - 5, "#ed6c25");
+  }
+  const innerX = [19, 19, 17, 20, 18, 19][f];
+  const innerY = [13, 11, 12, 9, 13, 10][f];
+  px(ctx, innerX, innerY, 7, 13, "#ffb52e");
+  px(ctx, innerX + 2, innerY + 4, 4, 9, "#ffe77b");
+  px(ctx, innerX + 3, innerY + 8, 2, 5, "#fff7cf");
+  px(ctx, 14 + (f * 5) % 17, 3 + (f * 3) % 7, 2, 2, f % 2 ? "#ffcf4a" : "#f07127");
+  if (f === 1 || f === 4) px(ctx, 29, 7, 1, 2, "#ffd65a");
+  return cv;
+}
+
 function heartSprite(filled) {
   const cv = canvas(11, 10);
   const ctx = cv.getContext("2d");
@@ -298,6 +345,12 @@ const BUILDERS = [
   ["fx/slash_1", () => slashSprite(1)],
   ["fx/slash_2", () => slashSprite(2)],
   ["fx/slash_3", () => slashSprite(3)],
+  ["fx/campfire_0", () => campfireSprite(0)],
+  ["fx/campfire_1", () => campfireSprite(1)],
+  ["fx/campfire_2", () => campfireSprite(2)],
+  ["fx/campfire_3", () => campfireSprite(3)],
+  ["fx/campfire_4", () => campfireSprite(4)],
+  ["fx/campfire_5", () => campfireSprite(5)],
   ["fx/heart", () => heartSprite(true)],
   ["fx/heart_empty", () => heartSprite(false)],
 ];

@@ -131,7 +131,13 @@
     </div>
 
     <div id="top-right">
-      <button class="icon-btn" id="btn-settings" title="Settings">⚙</button>
+      <div class="top-right-tools">
+        <div id="realm-status" class="realm-status" role="status" aria-live="polite" title="This character is stored locally. Wallet features are planned for a future update.">
+          <span class="realm-sigil" aria-hidden="true">◇</span>
+          <span class="realm-status-copy"><b id="realm-mode">LOCAL REALM</b><small id="realm-sync-indicator">ONCHAIN ROADMAP</small></span>
+        </div>
+        <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Open settings">⚙</button>
+      </div>
       <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
     </div>
 
@@ -163,6 +169,15 @@
         <b id="fishing-tension-text">LOW</b>
       </div>
       <p id="fishing-tip">Wait for a bite…</p>
+    </div>
+
+    <div id="catch-card" class="catch-card hidden" aria-live="polite">
+      <div class="catch-art"><canvas id="catch-fish-art" width="72" height="44"></canvas></div>
+      <div class="catch-copy">
+        <span id="catch-rarity">CATCH LANDED</span>
+        <strong id="catch-name">Silver Minnow</strong>
+        <small><b id="catch-size">0.0 cm</b><i aria-hidden="true">◆</i><b id="catch-reward">+0g</b></small>
+      </div>
     </div>
 
     <div id="touch-ui">
@@ -202,6 +217,19 @@
   <div id="panel-dialog" class="panel hidden"><div class="panel-head"><h2 id="dialog-name">NPC</h2><button class="panel-close" data-close="dialog">×</button></div><p id="dialog-text"></p><div id="dialog-quests"></div></div>
   <div id="panel-settings" class="panel hidden">
     <div class="panel-head"><h2>Settings</h2><button class="panel-close" data-close="settings">×</button></div>
+    <section id="realm-passport" class="realm-passport" aria-labelledby="realm-passport-title">
+      <div class="realm-passport-head">
+        <div><span class="realm-passport-kicker">FUTURE ONCHAIN PROFILE</span><h3 id="realm-passport-title">Realm Passport</h3></div>
+        <span class="realm-roadmap-tag">ROADMAP</span>
+      </div>
+      <p>Your character remains a local save today. This reserved profile will later surface wallet identity, realm proofs, and collectible ownership without changing the core adventure.</p>
+      <dl class="realm-passport-grid">
+        <div><dt>Wallet</dt><dd id="realm-wallet-address">Not linked</dd></div>
+        <div><dt>Network</dt><dd id="realm-network-name">Future realm</dd></div>
+        <div><dt>Save state</dt><dd id="realm-sync-state"><i aria-hidden="true"></i> Local only</dd></div>
+      </dl>
+      <button id="realm-connect-button" class="realm-connect-button" type="button" disabled aria-disabled="true">Connect wallet · Coming soon</button>
+    </section>
     <div class="set-row"><span>Music</span><input type="range" id="set-music" min="0" max="100" value="35" /></div>
     <div class="set-row"><span>SFX</span><input type="range" id="set-sfx" min="0" max="100" value="50" /></div>
     <div class="set-row"><span>Mobile Control</span>

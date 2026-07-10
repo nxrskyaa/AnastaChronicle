@@ -1,10 +1,12 @@
 import { Game } from "./game.js";
 import { img } from "./assets.js";
 import { view } from "./view.js";
-import { tile as gtile, grassFringe, waterFoam } from "./tilegen.js";
+import { tile as gtile, grassFringe, forestFringe, waterFoam } from "./tilegen.js";
 import { buildCharacter, DEFAULT_LOOK } from "./chargen.js";
 import { net } from "./net.js";
 import { bossFrame, BOSS_SIZE } from "./boss.js";
+import { activeRod } from "./fishing.js";
+import { drawFishSprite } from "./fishart.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -24,13 +26,13 @@ Game.prototype.render = function () {
 
   const wf = (this.t * 3) | 0;
   const map = this.map;
-  const gAt = (x, y) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) ? true : isGrass(map[y * MAP_W + x]);
+  const typeAt = (x, y) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) ? -1 : map[y * MAP_W + x];
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
-      const i = y * MAP_W + x, t = map[i], v = this.vmap[i];
+      const i = y * MAP_W + x, t = map[i], v = (this.vmap[i] + x * 3 + y * 5) & 7;
       const sx = x * T - camx, sy = y * T - camy;
       let im;
-      if (t === 2) im = gtile("water", wf % 4);
+      if (t === 2) im = gtile("water", (wf % 4) * 8 + v);
       else if (t === 1) im = gtile("dirt", v);
       else if (t === 3) im = gtile("sand", v);
       else if (t === 4) im = gtile("snow", v);
@@ -40,12 +42,17 @@ Game.prototype.render = function () {
       else { ctx.fillStyle = "#5aa050"; ctx.fillRect(sx, sy, T, T); }
       // grass fringe spilling onto non-grassy tiles from grassy neighbors
       if (!isGrass(t)) {
-        let mask = 0;
-        if (gAt(x, y - 1)) mask |= 1;
-        if (gAt(x + 1, y)) mask |= 2;
-        if (gAt(x, y + 1)) mask |= 4;
-        if (gAt(x - 1, y)) mask |= 8;
-        if (mask) { const e = grassFringe(mask); if (e) ctx.drawImage(e, sx, sy, T, T); }
+        const maskFor = (kind) => {
+          let mask = 0;
+          if (typeAt(x, y - 1) === kind) mask |= 1;
+          if (typeAt(x + 1, y) === kind) mask |= 2;
+          if (typeAt(x, y + 1) === kind) mask |= 4;
+          if (typeAt(x - 1, y) === kind) mask |= 8;
+          return mask;
+        };
+        const forestMask = maskFor(5), grassMask = maskFor(0);
+        if (forestMask) { const edge = forestFringe(forestMask); if (edge) ctx.drawImage(edge, sx, sy, T, T); }
+        if (grassMask) { const edge = grassFringe(grassMask); if (edge) ctx.drawImage(edge, sx, sy, T, T); }
       }
       // foam shoreline on water tiles bordering land
       if (t === 2) {
@@ -67,21 +74,6 @@ Game.prototype.render = function () {
         }
       }
     }
-  }
-
-  // camp fire — layered flame + rising embers
-  const csx = this.camp.x - camx, csy = this.camp.y - camy;
-  if (csx > -40 && csx < view.w + 40) {
-    const fl = 6 + Math.sin(this.t * 8) * 2, fl2 = Math.sin(this.t * 13) * 1.5;
-    ctx.fillStyle = "rgba(60,40,25,0.5)"; ctx.beginPath(); ctx.ellipse(csx, csy, 18, 8, 0, 0, 7); ctx.fill();
-    for (let a = 0; a < 6; a++) { const an = a / 6 * 7; ctx.fillStyle = "#7a5230"; ctx.fillRect(csx + Math.cos(an) * 12 - 2, csy + Math.sin(an) * 5 - 1, 4, 3); }
-    // outer flame
-    ctx.fillStyle = "#c8481e"; ctx.beginPath(); ctx.ellipse(csx + fl2, csy - 4, fl * 0.7, fl * 1.5, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#f08828"; ctx.beginPath(); ctx.ellipse(csx, csy - 5, fl * 0.5, fl * 1.2, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#f8d048"; ctx.beginPath(); ctx.ellipse(csx - fl2 * 0.5, csy - 6, fl * 0.3, fl * 0.7, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = "#fff0c0"; ctx.beginPath(); ctx.ellipse(csx, csy - 6, fl * 0.15, fl * 0.4, 0, 0, 7); ctx.fill();
-    // rising embers
-    for (let i = 0; i < 3; i++) { const ey = (this.t * 20 + i * 9) % 24; ctx.fillStyle = `rgba(255,${170 + i * 20},80,${1 - ey / 24})`; ctx.fillRect(csx + Math.sin(this.t * 3 + i) * 5, csy - 6 - ey, 1.5, 1.5); }
   }
 
   // flowers (flat, under everything)
@@ -110,6 +102,7 @@ Game.prototype.render = function () {
 
   const draw = [];
   const inv = (wx, wy, margin = 80) => wx - camx > -margin && wx - camx < view.w + margin && wy - camy > -margin && wy - camy < view.h + margin;
+  if (inv(this.camp.x, this.camp.y)) draw.push({ y: this.camp.y, k: "campfire", o: this.camp });
   for (const o of this.buildings) if (inv(o.x, o.y, 100)) draw.push({ y: o.sortY, k: "building", o });
   for (const o of this.trees) if (inv(o.x, o.y, 90)) draw.push({ y: o.sortY, k: "tree", o });
   for (const o of this.bushes) if (inv(o.x, o.y)) draw.push({ y: o.sortY, k: "bush", o });
@@ -135,6 +128,16 @@ Game.prototype.render = function () {
   for (const d of draw) {
     const o = d.o, sx = Math.round(o.x - camx), sy = Math.round(o.y - camy);
     if (d.k === "building") { const cv = this.village[o.type]; if (cv) ctx.drawImage(cv, sx - cv.width / 2, sy - cv.height + 8); }
+    else if (d.k === "campfire") {
+      const frame = img(`fx/campfire_${Math.floor(this.t * 11) % 6}`);
+      if (frame) ctx.drawImage(frame, sx - 22, sy - 38);
+      for (let i = 0; i < 3; i++) {
+        const travel = Math.floor((this.t * (18 + i * 2) + i * 7) % 24);
+        const ex = sx + Math.round(Math.sin(this.t * 4 + i * 2) * 4);
+        ctx.fillStyle = i === 2 ? `rgba(255,233,132,${1 - travel / 24})` : `rgba(241,112,39,${1 - travel / 24})`;
+        ctx.fillRect(ex, sy - 25 - travel, i === 0 ? 2 : 1, i === 0 ? 2 : 1);
+      }
+    }
     else if (d.k === "tree") { const im = img(`tree_${o.v}`); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 6); }
     else if (d.k === "bush") { const im = img("bush_0"); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 4); }
     else if (d.k === "rock") {
@@ -276,6 +279,7 @@ Game.prototype.render = function () {
         const wf2 = this.weaponFrames(p.equipped);
         weap = wf2.walk[dir];
       }
+      if (this.fishing) weap = null;
       if (p.invuln > 0 && Math.floor(this.t * 20) % 2) ctx.globalAlpha = 0.5;
       // weapon behind body when facing up/left
       const behind = dir === "up" || dir === "left";
@@ -291,15 +295,23 @@ Game.prototype.render = function () {
     this._hits = this._hits.filter(h => h.t < 0.2);
   }
   if (this.aimAssist && this.aimAssist.until > this.t) {
-    const ax = Math.round(this.aimAssist.x - camx), ay = Math.round(this.aimAssist.y - camy);
+    const aim = this.aimAssist;
+    const ax = Math.round(aim.x - camx), ay = Math.round(aim.y - camy);
+    const fromX = Math.round((aim.fromX ?? this.player.x) - camx), fromY = Math.round((aim.fromY ?? this.player.y) - camy);
     const pulse = 7 + Math.round(Math.sin(this.t * 18));
-    ctx.strokeStyle = "rgba(225,255,190,.9)"; ctx.lineWidth = 1;
+    const color = aim.kind === "fire" ? "rgba(203,151,255,.95)" : "rgba(184,255,198,.95)";
+    const lineColor = aim.kind === "fire" ? "rgba(188,129,255,.3)" : "rgba(142,235,177,.28)";
+    const lineDx = ax - fromX, lineDy = ay - fromY, lineD = Math.hypot(lineDx, lineDy) || 1;
+    ctx.fillStyle = lineColor;
+    for (let d = 15; d < lineD - 12; d += 10) ctx.fillRect(Math.round(fromX + lineDx / lineD * d), Math.round(fromY + lineDy / lineD * d), 2, 2);
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(ax - pulse, ay - pulse + 4); ctx.lineTo(ax - pulse, ay - pulse); ctx.lineTo(ax - pulse + 4, ay - pulse);
     ctx.moveTo(ax + pulse - 4, ay - pulse); ctx.lineTo(ax + pulse, ay - pulse); ctx.lineTo(ax + pulse, ay - pulse + 4);
     ctx.moveTo(ax - pulse, ay + pulse - 4); ctx.lineTo(ax - pulse, ay + pulse); ctx.lineTo(ax - pulse + 4, ay + pulse);
     ctx.moveTo(ax + pulse - 4, ay + pulse); ctx.lineTo(ax + pulse, ay + pulse); ctx.lineTo(ax + pulse, ay + pulse - 4);
     ctx.stroke();
+    ctx.fillStyle = color; ctx.fillRect(ax - 1, ay - 1, 3, 3);
   }
   for (const pa of this.particles) { ctx.fillStyle = pa.color; ctx.globalAlpha = Math.max(0, pa.life * 2); ctx.fillRect(Math.round(pa.x - camx), Math.round(pa.y - camy), 2, 2); }
   ctx.globalAlpha = 1;
@@ -311,19 +323,38 @@ Game.prototype.render = function () {
     const px = Math.round(p.x - camx), py = Math.round(p.y - camy - 20);
     const bx = Math.round(f.bobX - camx), by = Math.round(f.bobY - camy);
     const dx = bx - px, dy = by - py, distance = Math.hypot(dx, dy) || 1;
-    const rodTipX = Math.round(px + dx / distance * 12), rodTipY = Math.round(py + dy / distance * 12 - 6);
+    const ux = dx / distance, uy = dy / distance, nx = -uy, ny = ux;
     const tension = f.tension || 0;
-    // Bent rod and curved line communicate tension before the HUD is read.
-    ctx.strokeStyle = "#5a351e"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px - dx / distance * 5, py + 4); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+    const rod = activeRod(p.inv);
+    const rodPal = rod.id === "spiritrod"
+      ? { dark: "#27365d", mid: "#5aa3ab", hi: "#a8fff0", reel: "#bd8cff" }
+      : rod.id === "ironrod"
+        ? { dark: "#3c3331", mid: "#7d776f", hi: "#d1c79c", reel: "#b8d0d4" }
+        : { dark: "#3b251c", mid: "#7b492b", hi: "#c78b4a", reel: "#d9b45d" };
+    const baseX = px - ux * 6, baseY = py + 5 - uy * 3;
+    const rodLength = rod.id === "spiritrod" ? 31 : rod.id === "ironrod" ? 28 : 25;
+    const bend = f.state === "hooked" ? (3 + tension * 7) : 2;
+    let rodTipX = baseX, rodTipY = baseY;
+    // A segmented integer-pixel shaft stays crisp and visibly bends under load.
+    for (let i = 0; i <= 12; i++) {
+      const u = i / 12;
+      rodTipX = Math.round(baseX + ux * rodLength * u + nx * bend * u * u);
+      rodTipY = Math.round(baseY + uy * rodLength * u + ny * bend * u * u - 7 * u);
+      ctx.fillStyle = i < 3 ? rodPal.dark : rodPal.mid;
+      ctx.fillRect(rodTipX - 1, rodTipY - 1, i < 5 ? 3 : 2, 3);
+      if (i % 3 === 0) { ctx.fillStyle = rodPal.hi; ctx.fillRect(rodTipX, rodTipY - 1, 1, 1); }
+    }
+    ctx.fillStyle = rodPal.dark; ctx.fillRect(Math.round(baseX - 2), Math.round(baseY - 2), 5, 8);
+    ctx.fillStyle = rodPal.reel; ctx.fillRect(Math.round(baseX + nx * 3 - 2), Math.round(baseY + ny * 3), 5, 5);
+    ctx.fillStyle = "#1a2024"; ctx.fillRect(Math.round(baseX + nx * 3), Math.round(baseY + ny * 3 + 1), 1, 3);
+    if (rod.id === "spiritrod") { ctx.fillStyle = `rgba(167,255,238,${.6 + Math.sin(this.t * 7) * .3})`; ctx.fillRect(rodTipX - 1, rodTipY - 2, 3, 3); }
     ctx.strokeStyle = tension > .8 ? "rgba(255,150,120,.95)" : "rgba(235,244,238,.78)"; ctx.lineWidth = 1;
     const sag = f.state === "hooked" ? Math.round((1 - tension) * 10) : 5;
     ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.quadraticCurveTo((rodTipX + bx) / 2, (rodTipY + by) / 2 + sag, bx, by); ctx.stroke();
     const bounce = f.state === "bite" ? Math.sin(this.t * 30) * 2 : f.state === "hooked" ? Math.sin(this.t * (f.surge ? 24 : 8)) * (f.surge ? 3 : 1) : Math.sin(this.t * 3);
     if (f.state === "hooked") {
       const dart = Math.round(Math.sin(f.totalT * (3 + f.fish.difficulty * 3) + f.phase) * (6 + f.fish.difficulty * 8));
-      ctx.fillStyle = "rgba(14,55,70,.48)";
-      ctx.fillRect(bx + dart - 7, by + 6, 12, 4); ctx.fillRect(bx + dart - 4, by + 4, 7, 8);
-      ctx.fillRect(bx + dart + 5, by + 5, 3, 2); ctx.fillRect(bx + dart + 5, by + 9, 3, 2);
+      drawFishSprite(ctx, f.fish, bx + dart, by + 8, { scale: .5, flip: dart < 0, alpha: .48 });
       if (f.surge) {
         ctx.strokeStyle = "rgba(205,245,250,.8)";
         for (let i = 0; i < 2; i++) { const radius = 5 + ((this.t * 18 + i * 6) % 13); ctx.strokeRect(bx - radius, by - Math.round(radius / 3), radius * 2, Math.round(radius / 1.5)); }
@@ -338,6 +369,21 @@ Game.prototype.render = function () {
       const ripple = 5 + Math.round(Math.sin(this.t * 12) * 2); ctx.strokeRect(bx - ripple, by - Math.round(ripple / 2), ripple * 2, ripple);
       ctx.fillStyle = "#ffd24a"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
       ctx.fillText("!", bx, by - 8); ctx.textAlign = "left";
+    }
+  }
+  if (this.catchReveal) {
+    const reveal = this.catchReveal;
+    const flight = Math.min(1, reveal.elapsed / .72);
+    const ease = 1 - Math.pow(1 - flight, 3);
+    const startX = reveal.origin.x - camx, startY = reveal.origin.y - camy;
+    const endX = this.player.x - camx, endY = this.player.y - camy - 52;
+    const fishX = startX + (endX - startX) * ease;
+    const fishY = startY + (endY - startY) * ease - Math.sin(flight * Math.PI) * 42;
+    const fade = reveal.elapsed > reveal.duration - .35 ? (reveal.duration - reveal.elapsed) / .35 : 1;
+    drawFishSprite(ctx, reveal.fish, fishX, fishY, { scale: flight < 1 ? 1.15 + flight * .45 : 1.6, flip: endX < startX, alpha: Math.max(0, fade) });
+    if (flight < 1) {
+      ctx.fillStyle = `rgba(210,248,255,${1 - flight})`;
+      for (let i = 0; i < 4; i++) ctx.fillRect(Math.round(startX - 9 + i * 6), Math.round(startY - 4 - flight * (6 + i * 2)), 2, 2);
     }
   }
   // ambient critters: butterflies by day, glowing fireflies at night
@@ -372,7 +418,7 @@ Game.prototype.render = function () {
       }
     }
   }
-  this.renderDayNight(ctx);
+  this.renderDayNight(ctx, camx, camy);
   this.renderWeather(ctx);
   this.renderPostFX(ctx);
   this.renderMinimap();
@@ -381,12 +427,13 @@ Game.prototype.render = function () {
 // Post-processing: vignette + ambient color grade + depth fog + subtle bloom
 Game.prototype.renderPostFX = function (ctx) {
   const w = view.w, h = view.h;
+  const isNight = this.time >= 19 * 60 || this.time < 5 * 60;
   // 1. Depth fog — subtle warm haze at top (distance), cool at bottom (foreground)
   const fog = ctx.createLinearGradient(0, 0, 0, h);
-  fog.addColorStop(0, "rgba(180,200,160,0.08)");
+  fog.addColorStop(0, isNight ? "rgba(84,108,154,0.045)" : "rgba(180,200,160,0.08)");
   fog.addColorStop(0.4, "rgba(0,0,0,0)");
   fog.addColorStop(0.85, "rgba(0,0,0,0)");
-  fog.addColorStop(1, "rgba(40,30,20,0.06)");
+  fog.addColorStop(1, isNight ? "rgba(15,20,43,0.035)" : "rgba(40,30,20,0.06)");
   ctx.fillStyle = fog;
   ctx.fillRect(0, 0, w, h);
 
@@ -401,6 +448,9 @@ Game.prototype.renderPostFX = function (ctx) {
   } else if (golden) {
     grade.addColorStop(0, "rgba(255,180,100,0.08)");
     grade.addColorStop(1, "rgba(255,120,60,0.05)");
+  } else if (isNight) {
+    grade.addColorStop(0, "rgba(88,112,174,0.025)");
+    grade.addColorStop(1, "rgba(38,52,104,0.035)");
   } else {
     grade.addColorStop(0, "rgba(255,250,240,0.02)");
     grade.addColorStop(1, "rgba(240,250,255,0.02)");
@@ -412,7 +462,7 @@ Game.prototype.renderPostFX = function (ctx) {
   const cx = w / 2, cy = h / 2;
   const vig = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.3, cx, cy, Math.max(w, h) * 0.7);
   vig.addColorStop(0, "rgba(0,0,0,0)");
-  vig.addColorStop(1, "rgba(0,0,0,0.28)");
+  vig.addColorStop(1, `rgba(0,0,0,${isNight ? .18 : .28})`);
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
 };
@@ -420,7 +470,64 @@ Game.prototype.renderPostFX = function (ctx) {
 Game.prototype.renderFX = function (ctx, camx, camy) {
   for (const f of this.fx) {
     const sx = f.x - camx, sy = f.y - camy, pr = f.t / f.dur;
-    if (f.kind === "heal") {
+    if (f.kind === "weaponslash") {
+      const frame = img(`fx/slash_${clamp(Math.floor(pr * 4), 0, 3)}`);
+      const rot = f.dir === "right" ? 0 : f.dir === "down" ? Math.PI / 2 : f.dir === "left" ? Math.PI : -Math.PI / 2;
+      const reach = f.weapon === "spear" ? 1.35 : f.weapon === "dagger" ? .72 : f.weapon === "axe" ? 1.2 : 1;
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 17)); ctx.rotate(rot); ctx.scale(reach, reach);
+      ctx.globalAlpha = Math.max(0, 1 - pr * .7);
+      if (frame) { ctx.drawImage(frame, 2, -20); ctx.globalAlpha *= .3; ctx.drawImage(frame, -2, -20); }
+      ctx.restore();
+    } else if (f.kind === "bowrelease") {
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); ctx.rotate(f.angle || 0);
+      const power = f.variant === "power" || f.variant === "dragon";
+      const color = power ? "#ffe38a" : "#bff7cf";
+      const count = f.variant === "multi" ? 3 : 1;
+      ctx.globalAlpha = 1 - pr;
+      for (let i = 0; i < count; i++) {
+        const off = (i - (count - 1) / 2) * 5;
+        ctx.fillStyle = color; ctx.fillRect(5 + Math.round(pr * 18), off - 1, power ? 18 : 12, 2);
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(10 + Math.round(pr * 18), off - 1, power ? 8 : 4, 1);
+      }
+      ctx.fillStyle = "rgba(151,242,184,.7)"; ctx.fillRect(-2, -9 - Math.round(pr * 5), 2, 19 + Math.round(pr * 10));
+      ctx.restore();
+    } else if (f.kind === "castburst") {
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); ctx.rotate((f.angle || 0) + Math.PI / 4);
+      const dragon = f.variant === "dragon", skill = f.variant === "skill";
+      const color = dragon ? "rgba(202,125,255,A)" : skill ? "rgba(255,182,72,A)" : "rgba(129,205,255,A)";
+      const radius = 6 + Math.round(pr * 20);
+      ctx.strokeStyle = color.replace("A", String(1 - pr)); ctx.lineWidth = 2; ctx.strokeRect(-radius, -radius, radius * 2, radius * 2);
+      ctx.fillStyle = color.replace("A", String((1 - pr) * .85));
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.fillRect(Math.round(Math.cos(a) * (radius + 4)) - 1, Math.round(Math.sin(a) * (radius + 4)) - 1, i % 2 ? 2 : 3, i % 2 ? 2 : 3); }
+      ctx.restore();
+    } else if (f.kind === "warcry") {
+      const radius = 10 + pr * 48;
+      ctx.globalAlpha = 1 - pr;
+      for (let i = 0; i < 16; i++) {
+        const a = i / 16 * Math.PI * 2, r = radius + (i % 2 ? 5 : -3);
+        ctx.fillStyle = i % 3 === 0 ? "#ffe089" : "#d95b43";
+        ctx.fillRect(Math.round(sx + Math.cos(a) * r) - 2, Math.round(sy - 16 + Math.sin(a) * r) - 2, i % 2 ? 3 : 5, i % 2 ? 3 : 5);
+      }
+      ctx.globalAlpha = 1;
+    } else if (f.kind === "blink") {
+      ctx.globalAlpha = 1 - pr;
+      for (let i = 0; i < 10; i++) {
+        const spread = ((i * 13) % 21) - 10, rise = ((i * 7) % 26) + pr * 24;
+        ctx.fillStyle = i % 3 === 0 ? "#f0e7ff" : f.arrive ? "#8edcff" : "#b28cff";
+        ctx.fillRect(Math.round(sx + spread * (1 - pr)), Math.round(sy - rise), i % 2 ? 2 : 3, 5 + i % 3);
+      }
+      ctx.globalAlpha = 1;
+    } else if (f.kind === "projectileimpact") {
+      const fire = f.element === "fire" || f.element === "bossfire";
+      const color = f.variant === "dragon" ? "#d699ff" : fire ? "#ffb14c" : "#e8ffd0";
+      ctx.globalAlpha = 1 - pr;
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * Math.PI * 2 + pr, r = 3 + pr * (14 + i % 3 * 3);
+        ctx.fillStyle = i % 3 === 0 ? "#ffffff" : color;
+        ctx.fillRect(Math.round(sx + Math.cos(a) * r) - 1, Math.round(sy + Math.sin(a) * r) - 1, i % 2 ? 2 : 3, i % 2 ? 2 : 3);
+      }
+      ctx.globalAlpha = 1;
+    } else if (f.kind === "heal") {
       ctx.globalAlpha = 1 - pr;
       for (let i = 0; i < 8; i++) {
         const a = i / 8 * 7 + f.t * 3;
@@ -430,26 +537,24 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       }
       ctx.globalAlpha = 1;
     } else if (f.kind === "whirl") {
-      // layered fiery whirlwind
-      ctx.save(); ctx.translate(sx, sy - 14); ctx.rotate(pr * 14);
-      const cols = ["rgba(255,220,120,A)", "rgba(255,150,60,A)", "rgba(255,90,40,A)"];
-      for (let ring = 0; ring < 3; ring++) {
-        ctx.strokeStyle = cols[ring].replace("A", String((1 - pr) * (0.9 - ring * 0.2)));
-        ctx.lineWidth = 4 - ring;
-        ctx.beginPath(); ctx.arc(0, 0, 14 + ring * 8 + pr * 26, ring, ring + 5); ctx.stroke();
+      ctx.globalAlpha = 1 - pr;
+      for (let ring = 0; ring < 3; ring++) for (let i = 0; i < 14; i++) {
+        if ((i + ring) % 4 === Math.floor(pr * 4)) continue;
+        const a = i / 14 * Math.PI * 2 + pr * (8 + ring * 2);
+        const rr = 14 + ring * 9 + pr * 24;
+        ctx.fillStyle = ring === 0 ? "#fff0a4" : ring === 1 ? "#f59a3d" : "#d94b31";
+        const size = ring === 0 ? 2 : 3;
+        ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 14 + Math.sin(a) * rr * .65) - 1, size + (i % 3 === 0 ? 2 : 0), size);
       }
-      ctx.restore();
-      // embers flung out
-      for (let i = 0; i < 6; i++) { const a = i / 6 * 7 + pr * 8; const rr = 20 + pr * 34; ctx.fillStyle = `rgba(255,${150 + i * 12},60,${1 - pr})`; ctx.fillRect(sx + Math.cos(a) * rr, sy - 14 + Math.sin(a) * rr, 2.5, 2.5); }
+      ctx.globalAlpha = 1;
     } else if (f.kind === "slashbig") {
       const ox = f.dir === "left" ? -18 : f.dir === "right" ? 18 : 0;
       const oy = f.dir === "up" ? -20 : f.dir === "down" ? 6 : -8;
-      ctx.save(); ctx.translate(sx + ox, sy - 16 + oy);
-      // fiery double-arc
-      ctx.strokeStyle = `rgba(255,240,180,${1 - pr})`; ctx.lineWidth = 5 - pr * 4;
-      ctx.beginPath(); ctx.arc(0, 0, 16 + pr * 18, -1, 1.9); ctx.stroke();
-      ctx.strokeStyle = `rgba(255,140,60,${(1 - pr) * 0.8})`; ctx.lineWidth = 3 - pr * 2;
-      ctx.beginPath(); ctx.arc(0, 0, 12 + pr * 16, -0.8, 1.7); ctx.stroke();
+      const frame = img(`fx/slash_${clamp(Math.floor(pr * 4), 0, 3)}`);
+      ctx.save(); ctx.translate(Math.round(sx + ox), Math.round(sy - 16 + oy));
+      ctx.rotate(f.dir === "down" ? Math.PI / 2 : f.dir === "left" ? Math.PI : f.dir === "up" ? -Math.PI / 2 : 0);
+      ctx.globalAlpha = 1 - pr * .65; ctx.scale(1.5 + pr * .25, 1.5 + pr * .25);
+      if (frame) ctx.drawImage(frame, -8, -20);
       ctx.restore();
     } else if (f.kind === "levelring") {
       ctx.strokeStyle = `rgba(240,216,120,${1 - pr})`; ctx.lineWidth = 3;
@@ -486,83 +591,136 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(f.angle) * length, Math.sin(f.angle) * length); ctx.stroke();
       const pulse = 9 + Math.round(pr * 14); ctx.strokeStyle = `rgba(255,120,45,${1 - pr * .35})`;
       ctx.strokeRect(-pulse, -pulse, pulse * 2, pulse * 2); ctx.restore();
-    } else if (f.kind === "frost") {      // expanding icy ring + shards
-      ctx.strokeStyle = `rgba(150,230,255,${1 - pr})`; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(sx, sy - 8, 8 + pr * 60, 0, 7); ctx.stroke();
-      ctx.strokeStyle = `rgba(200,245,255,${(1 - pr) * 0.7})`; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(sx, sy - 8, 4 + pr * 40, 0, 7); ctx.stroke();
-      for (let i = 0; i < 8; i++) { const a = i / 8 * 7 + pr * 2; const rr = 10 + pr * 50; ctx.fillStyle = `rgba(220,245,255,${1 - pr})`; ctx.fillRect(sx + Math.cos(a) * rr, sy - 8 + Math.sin(a) * rr, 2, 4); }
+    } else if (f.kind === "frost") {
+      ctx.globalAlpha = 1 - pr;
+      for (let i = 0; i < 24; i++) {
+        const a = i / 24 * Math.PI * 2, rr = 9 + pr * 59;
+        ctx.fillStyle = i % 3 === 0 ? "#efffff" : i % 2 ? "#78cbed" : "#b6efff";
+        const h = i % 3 === 0 ? 7 : 4;
+        ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 8 + Math.sin(a) * rr) - Math.floor(h / 2), 2 + (i % 4 === 0 ? 1 : 0), h);
+      }
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 - pr * 2; const rr = 5 + pr * 36; ctx.fillStyle = "#dffbff"; ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 8 + Math.sin(a) * rr) - 1, 3, 3); }
+      ctx.globalAlpha = 1;
     }
   }
   // ---- projectiles ----
   if (this.projectiles) for (const pr of this.projectiles) {
     const sx = pr.x - camx, sy = pr.y - camy;
     if (pr.kind === "fire" || pr.kind === "bossfire") {
-      const r = pr.kind === "bossfire" ? 7 : 5;
-      ctx.fillStyle = `rgba(255,220,120,0.95)`; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill();
-      ctx.fillStyle = `rgba(255,130,40,0.85)`; ctx.beginPath(); ctx.arc(sx, sy, r * 0.6, 0, 7); ctx.fill();
+      const boss = pr.kind === "bossfire", dragon = pr.variant === "dragon";
+      const outer = dragon ? "#8545c7" : boss ? "#b63222" : "#df5b27";
+      const middle = dragon ? "#c475f3" : boss ? "#ff7431" : "#ff9a35";
+      const core = dragon ? "#f2d6ff" : "#fff1a6";
+      const size = boss ? 11 : pr.variant === "skill" || dragon ? 9 : 7;
+      for (let i = 3; i >= 1; i--) {
+        const tx = Math.round(sx - pr.dx * i * 5), ty = Math.round(sy - pr.dy * i * 5);
+        ctx.globalAlpha = .16 + (3 - i) * .12; ctx.fillStyle = outer; ctx.fillRect(tx - 2, ty - 2, 5, 5);
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = outer; ctx.fillRect(Math.round(sx - size / 2), Math.round(sy - size / 2), size, size);
+      ctx.fillStyle = middle; ctx.fillRect(Math.round(sx - size / 2 + 2), Math.round(sy - size / 2 + 1), size - 3, size - 3);
+      ctx.fillStyle = core; ctx.fillRect(Math.round(sx - 1), Math.round(sy - 2), 4, 4);
+      for (let i = 0; i < 4; i++) { const a = pr.age * 10 + i * Math.PI / 2; ctx.fillStyle = i % 2 ? middle : core; ctx.fillRect(Math.round(sx + Math.cos(a) * (size / 2 + 3)), Math.round(sy + Math.sin(a) * (size / 2 + 3)), 2, 2); }
     } else if (pr.kind === "arrow") {
-      ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.atan2(pr.dy, pr.dx));
-      ctx.strokeStyle = "#caa060"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(5, 0); ctx.stroke();
-      ctx.fillStyle = "#e8e0d0"; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(1, -2.5); ctx.lineTo(1, 2.5); ctx.closePath(); ctx.fill();
-      ctx.restore();
+      const power = pr.variant === "power", dragon = pr.variant === "dragon", multi = pr.variant === "multi";
+      const shaft = dragon ? "#c58aff" : power ? "#ffe07b" : multi ? "#9ce8ad" : "#c79555";
+      const head = dragon ? "#f3e0ff" : power ? "#fff8bd" : "#e9eef0";
+      const length = power || dragon ? 18 : 13;
+      for (let i = 2; i >= 1; i--) {
+        ctx.globalAlpha = .18 / i; ctx.fillStyle = shaft;
+        const tx = sx - pr.dx * (i * 7), ty = sy - pr.dy * (i * 7);
+        ctx.fillRect(Math.round(tx) - 1, Math.round(ty) - 1, 3, 3);
+      }
+      ctx.globalAlpha = 1;
+      for (let d = -length / 2; d <= length / 2; d += 2) {
+        ctx.fillStyle = d > length / 2 - 4 ? head : shaft;
+        ctx.fillRect(Math.round(sx + pr.dx * d) - 1, Math.round(sy + pr.dy * d) - 1, d > length / 2 - 4 ? 3 : 2, d > length / 2 - 4 ? 3 : 2);
+      }
+      const nx = -pr.dy, ny = pr.dx, tailX = sx - pr.dx * length / 2, tailY = sy - pr.dy * length / 2;
+      ctx.fillStyle = multi ? "#d4ffd8" : dragon ? "#e1bdff" : "#e8d4bb";
+      ctx.fillRect(Math.round(tailX + nx * 3) - 1, Math.round(tailY + ny * 3) - 1, 3, 3);
+      ctx.fillRect(Math.round(tailX - nx * 3) - 1, Math.round(tailY - ny * 3) - 1, 3, 3);
     }
   }
   ctx.globalAlpha = 1;
 };
 
-Game.prototype.renderDayNight = function (ctx) {
+Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.cam.y) {
   const t = this.time; let dark = 0;
   if (t < 5 * 60) dark = 0.72;
   else if (t < 7 * 60) dark = 0.72 * (1 - (t - 5 * 60) / (2 * 60));
   else if (t < 17 * 60) dark = 0;
   else if (t < 19 * 60) dark = 0.72 * ((t - 17 * 60) / (2 * 60));
   else dark = 0.72;
-  if (dark > 0.01) {
-    const night = t > 19 * 60 || t < 5 * 60;
-    ctx.fillStyle = night ? `rgba(18,24,58,${dark})` : `rgba(60,40,70,${dark * 0.8})`;
-    ctx.fillRect(0, 0, view.w, view.h);
-    const glow = (wx, wy, r, col) => { const g = ctx.createRadialGradient(wx, wy, 4, wx, wy, r); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(wx, wy, r, 0, 7); ctx.fill(); };
-    ctx.globalCompositeOperation = "lighter";
-    glow(this.camp.x - this.cam.x, this.camp.y - this.cam.y, 95, `rgba(255,180,80,${dark * 0.5})`);
-    glow(this.player.x - this.cam.x, this.player.y - this.cam.y, 72, `rgba(255,210,140,${dark * 0.4})`);
-    // lantern glows near village
-    for (const b of this.buildings) {
-      if (b.type !== "lantern") continue;
-      const lx = b.x - this.cam.x, ly = b.y - this.cam.y;
-      if (lx < -60 || lx > view.w + 60) continue;
-      const flicker = 0.85 + Math.sin(this.t * 5 + b.x * 0.01) * 0.15;
-      glow(lx, ly - 20, 38, `rgba(255,200,100,${dark * 0.55 * flicker})`);
-    }
-    // torii gate aura
-    for (const b of this.buildings) {
-      if (b.type !== "torii") continue;
-      const tx = b.x - this.cam.x, ty = b.y - this.cam.y;
-      if (tx < -60 || tx > view.w + 60) continue;
-      glow(tx, ty - 20, 55, `rgba(255,140,80,${dark * 0.3})`);
-    }
-    // pagoda spiritual glow
-    for (const b of this.buildings) {
-      if (b.type !== "pagoda") continue;
-      const px2 = b.x - this.cam.x, py2 = b.y - this.cam.y;
-      if (px2 < -60 || px2 > view.w + 60) continue;
-      glow(px2, py2 - 50, 50, `rgba(180,220,255,${dark * 0.25})`);
-    }
-    ctx.globalCompositeOperation = "source-over";
-    // torch fire animation at camp entrance (obor api)
-    if (night) {
-      for (const b of this.buildings) {
-        if (b.type !== "lantern") continue;
-        const lx = b.x - this.cam.x, ly = b.y - this.cam.y;
-        if (lx < -30 || lx > view.w + 30) continue;
-        const fy = ly - 22 + Math.sin(this.t * 8 + b.x) * 1.5;
-        const fs = 3 + Math.sin(this.t * 10 + b.y) * 1;
-        ctx.fillStyle = `rgba(255,140,50,${0.7 + Math.sin(this.t * 12) * 0.2})`;
-        ctx.beginPath(); ctx.ellipse(lx, fy, fs, fs + 2, 0, 0, 7); ctx.fill();
-        ctx.fillStyle = `rgba(255,220,120,0.6)`;
-        ctx.beginPath(); ctx.ellipse(lx, fy - 1, fs * 0.5, fs * 0.6, 0, 0, 7); ctx.fill();
-      }
-    }
+  if (dark <= .01) return;
+  const night = t > 19 * 60 || t < 5 * 60;
+  if (!this._nightLayer) this._nightLayer = document.createElement("canvas");
+  const layer = this._nightLayer;
+  if (layer.width !== view.w || layer.height !== view.h) { layer.width = view.w; layer.height = view.h; }
+  const lctx = layer.getContext("2d");
+  lctx.clearRect(0, 0, view.w, view.h);
+  lctx.fillStyle = night ? `rgba(11,17,43,${dark})` : `rgba(53,32,62,${dark * .82})`;
+  lctx.fillRect(0, 0, view.w, view.h);
+  lctx.globalCompositeOperation = "destination-out";
+  const aperture = (x, y, radius, strength = 1) => {
+    const gradient = lctx.createRadialGradient(x, y, 2, x, y, radius);
+    gradient.addColorStop(0, `rgba(0,0,0,${strength})`);
+    gradient.addColorStop(.48, `rgba(0,0,0,${strength * .72})`);
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    lctx.fillStyle = gradient; lctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  };
+  const campX = this.camp.x - camx, campY = this.camp.y - camy - 18;
+  aperture(campX, campY, 112, .96);
+  aperture(this.player.x - camx, this.player.y - camy - 14, 48, .58);
+  for (const b of this.buildings) {
+    const x = b.x - camx, y = b.y - camy;
+    if (x < -90 || x > view.w + 90 || y < -90 || y > view.h + 90) continue;
+    if (b.type === "lantern") aperture(x, y - 21, 48, .88);
+    else if (b.type === "pagoda") aperture(x, y - 49, 42, .32);
+  }
+  for (const plant of this.plants) if (plant.hp > 0 && plant.kind === "glow_vine") aperture(plant.x - camx, plant.y - camy - 15, 25, .34);
+  if (this.boss && !this.boss.dead && (this.boss.rage || this.boss.breathWindup > 0)) aperture(this.boss.x - camx, this.boss.y - camy - 34, 74, .58);
+  for (const projectile of this.projectiles || []) if (projectile.kind === "fire" || projectile.kind === "bossfire") aperture(projectile.x - camx, projectile.y - camy, projectile.kind === "bossfire" ? 35 : 27, .72);
+  lctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(layer, 0, 0);
+
+  // Source-bound bloom goes on after the darkness mask; there is no fake warm player aura.
+  const bloom = (x, y, radius, color, alpha) => {
+    const gradient = ctx.createRadialGradient(x, y, 2, x, y, radius);
+    gradient.addColorStop(0, color.replace("A", String(alpha)));
+    gradient.addColorStop(.45, color.replace("A", String(alpha * .32)));
+    gradient.addColorStop(1, color.replace("A", "0"));
+    ctx.fillStyle = gradient; ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  };
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const campFlicker = .88 + Math.sin(this.t * 9) * .08 + Math.sin(this.t * 17) * .04;
+  bloom(campX, campY, 68, "rgba(255,145,52,A)", dark * .34 * campFlicker);
+  for (const b of this.buildings) if (b.type === "lantern") {
+    const x = b.x - camx, y = b.y - camy - 21;
+    if (x < -60 || x > view.w + 60) continue;
+    const flicker = .85 + Math.sin(this.t * 6 + b.x * .03) * .12;
+    bloom(x, y, 31, "rgba(255,188,86,A)", dark * .28 * flicker);
+  }
+  for (const projectile of this.projectiles || []) if (projectile.kind === "fire" || projectile.kind === "bossfire") {
+    bloom(projectile.x - camx, projectile.y - camy, projectile.kind === "bossfire" ? 24 : 18, projectile.variant === "dragon" ? "rgba(187,104,255,A)" : "rgba(255,124,45,A)", dark * .34);
+  }
+  ctx.restore();
+
+  // Pixel emissive pass: lantern flames and fireflies stay bright after grading.
+  for (const b of this.buildings) if (b.type === "lantern") {
+    const x = Math.round(b.x - camx), y = Math.round(b.y - camy - 23);
+    if (x < -20 || x > view.w + 20) continue;
+    const flip = Math.floor(this.t * 12 + b.x) % 3;
+    ctx.fillStyle = "#d95526"; ctx.fillRect(x - 2, y - 3 - flip, 5, 7 + flip);
+    ctx.fillStyle = "#ffad36"; ctx.fillRect(x - 1, y - 4, 3, 6);
+    ctx.fillStyle = "#fff2a4"; ctx.fillRect(x, y - 2, 1, 3);
+  }
+  if (night && this.critters) for (const c of this.critters) {
+    const x = Math.round(c.x - camx), y = Math.round(c.y - camy - 12);
+    if (x < 0 || x > view.w || y < 0 || y > view.h) continue;
+    const alpha = .45 + Math.sin(c.ph) * .35;
+    ctx.fillStyle = `rgba(207,255,151,${alpha})`; ctx.fillRect(x, y, 2, 2);
+    if (alpha > .62) { ctx.fillStyle = `rgba(225,255,188,${alpha * .55})`; ctx.fillRect(x - 2, y, 1, 1); ctx.fillRect(x + 3, y, 1, 1); }
   }
 };
 

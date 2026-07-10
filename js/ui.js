@@ -2,6 +2,7 @@ import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { QUESTS } from "./quests.js";
 import { CLASSES } from "./classes.js";
 import { RODS, activeRod } from "./fishing.js";
+import { getFishSprite } from "./fishart.js";
 
 export class UI {
   constructor(audio) {
@@ -143,19 +144,28 @@ export class UI {
     for (let i = 0; i < 4; i++) { const el = document.getElementById("cd" + i); if (el) { const cd = p.skillCd[i]; el.style.transform = cd > 0 ? `scaleY(${Math.min(1, cd / maxCd[i])})` : "scaleY(0)"; } }
     this.syncBoss(g.boss);
     this.syncFishing(g.fishing);
+    this.syncCatch(g.catchReveal);
   }
 
   syncBoss(boss) {
     const hud = document.getElementById("boss-hud"); if (!hud) return;
     const visible = !!boss && !boss.dead;
     hud.classList.toggle("hidden", !visible);
-    if (!visible) { hud.classList.remove("rage"); return; }
+    if (!visible) { hud.classList.remove("rage", "warning"); return; }
     const pct = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+    const warning = (boss.breathWindup || 0) > 0;
     hud.classList.toggle("rage", !!boss.rage);
+    hud.classList.toggle("warning", warning);
     const fill = document.getElementById("boss-health-fill"); if (fill) fill.style.width = `${pct * 100}%`;
     const hp = document.getElementById("boss-health-text"); if (hp) hp.textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp} HP`;
     const phase = document.getElementById("boss-phase"); if (phase) phase.textContent = boss.rage ? "PHASE II · RAGE" : "PHASE I · AWAKENED";
-    const state = document.getElementById("boss-state"); if (state) state.textContent = boss.rage ? "Firestorm active" : pct < .7 ? "Oni guard is cracking" : "Break the oni guard";
+    const state = document.getElementById("boss-state");
+    if (state) {
+      if (warning) state.textContent = `BREATH WIND-UP · ${Math.max(0, boss.breathWindup).toFixed(1)}s`;
+      else if (boss.state === "melee") state.textContent = "Oni swipe range";
+      else if (boss.state === "chase") state.textContent = "Closing distance";
+      else state.textContent = boss.rage ? "Firestorm active" : pct < .7 ? "Oni guard is cracking" : "Break the oni guard";
+    }
     const distance = document.getElementById("boss-distance");
     if (distance && this.game?.player) distance.textContent = `${Math.round(Math.hypot(boss.x - this.game.player.x, boss.y - this.game.player.y) / 24)} tiles`;
   }
@@ -164,6 +174,12 @@ export class UI {
     const hud = document.getElementById("fishing-hud"); if (!hud) return;
     hud.classList.toggle("hidden", !fishing);
     document.getElementById("hud")?.classList.toggle("fishing-active", !!fishing);
+    const action = document.getElementById("btn-interact");
+    if (action) {
+      action.classList.toggle("fishing-action", !!fishing);
+      action.textContent = !fishing ? "F" : fishing.state === "bite" ? "HOOK" : fishing.state === "hooked" ? "REEL" : "CANCEL";
+      action.setAttribute("aria-label", !fishing ? "Interact" : fishing.state === "hooked" ? "Hold to reel, release during a surge" : fishing.state === "bite" ? "Set fishing hook" : "Cancel fishing cast");
+    }
     if (!fishing) return;
     const progress = Math.max(0, Math.min(1, fishing.progress || 0));
     const tension = Math.max(0, Math.min(1, fishing.tension || 0));
@@ -176,6 +192,31 @@ export class UI {
     set("fishing-tip", fishing.tip || (fishing.state === "bite" ? "Tap F now to set the hook!" : fishing.state === "hooked" ? "Hold F to reel · release during a surge" : "Wait for the bobber to dive…"));
     const progressEl = document.getElementById("fishing-progress"); if (progressEl) progressEl.style.width = `${progress * 100}%`;
     const tensionEl = document.getElementById("fishing-tension"); if (tensionEl) tensionEl.style.width = `${tension * 100}%`;
+  }
+
+  syncCatch(reveal) {
+    const card = document.getElementById("catch-card"); if (!card) return;
+    card.classList.toggle("hidden", !reveal);
+    if (!reveal) { this._catchToken = ""; return; }
+    const fish = reveal.fish;
+    const token = `${fish.id}:${fish.rarity}:${fish.size}`;
+    card.dataset.rarity = fish.rarity || "common";
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set("catch-rarity", fish.rarity === "legendary" ? "LEGENDARY CATCH" : fish.rarity === "rare" ? "RARE CATCH" : fish.rarity === "uncommon" ? "UNCOMMON CATCH" : "CATCH LANDED");
+    set("catch-name", fish.name);
+    set("catch-size", `${fish.size.toFixed(1)} cm`);
+    set("catch-reward", `+${reveal.reward}g${reveal.bonus ? " · precision" : ""}`);
+    if (this._catchToken !== token) {
+      this._catchToken = token;
+      const canvas = document.getElementById("catch-fish-art");
+      const ctx = canvas?.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(reveal.sprite || getFishSprite(fish), 0, 0, canvas.width, canvas.height);
+      }
+      card.classList.remove("landed"); void card.offsetWidth; card.classList.add("landed");
+    }
   }
 
   renderInv() {

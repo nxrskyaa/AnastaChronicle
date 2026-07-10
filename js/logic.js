@@ -23,7 +23,7 @@ const PROJECTILE_SPEED = { arrow: 280, bossfire: 150, fire: 200 };
 const PROJECTILE_LIFE = 1.4;
 const projectileSpeed = (kind) => PROJECTILE_SPEED[kind] || PROJECTILE_SPEED.fire;
 
-function rangedAim(game, kind) {
+function rangedAim(game, kind, preview = false) {
   const p = game.player;
   const ox = p.x, oy = p.y - 14;
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
@@ -46,7 +46,7 @@ function rangedAim(game, kind) {
   if (!best) return fallback;
 
   const d = Math.sqrt(bestD2);
-  game.aimAssist = { x: ox + best.dx, y: oy + best.dy, until: game.t + .32 };
+  game.aimAssist = { x: ox + best.dx, y: oy + best.dy, fromX: ox, fromY: oy, kind, until: game.t + (preview ? .12 : .55) };
   return { dx: best.dx / d, dy: best.dy / d };
 }
 
@@ -152,6 +152,9 @@ Game.prototype.update = function (dt) {
   this.cam.x = clamp(this.cam.x + (tx - this.cam.x) * cl, 0, MAP_W * T - view.w);
   this.cam.y = clamp(this.cam.y + (ty - this.cam.y) * cl, 0, MAP_H * T - view.h);
 
+  const equipped = WEAPONS[p.equipped] || WEAPONS.fist;
+  if (!this.fishing && equipped.ranged) rangedAim(this, equipped.projectile || "arrow", true);
+
   // npc idle anim
   for (const n of this.npcs) {
     n.frameT += dt;
@@ -219,19 +222,26 @@ Game.prototype.doAttack = function () {
   const w = WEAPONS[p.equipped] || WEAPONS.fist;
   if (p.stamina < w.cost * 0.4) return;
   p.stamina = Math.max(0, p.stamina - w.cost);
+  const durations = { dagger: .18, sword: .28, axe: .42, spear: .34, dragonblade: .36, bow: .34, staff: .38, dragonbow: .4, dragonstaff: .42 };
+  p.attackDur = durations[p.equipped] || .26;
   p.attackT = p.attackDur; p.attackCd = w.speed;
+  p.attackStyle = w.ranged ? (w.projectile === "arrow" ? "bow" : "cast") : "melee";
   this.audio.sfx("attack");
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
   const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
-  p.vx += fx * 55; p.vy += fy * 55;
   const dmg = (w.dmg + p.level * 2) * (p.dmgMul || 1);
   // ranged weapons spawn a projectile instead of melee hitbox
   if (w.ranged) {
     const kind = w.projectile || "arrow";
     const { dx, dy } = rangedAim(this, kind);
-    this.spawnProjectile(p.x, p.y - 14, dx, dy, kind, Math.round(dmg), w.pierce);
-    this.audio.sfx("attack"); return;
+    const variant = p.equipped.startsWith("dragon") ? "dragon" : kind === "fire" ? "arcane" : "basic";
+    this.spawnProjectile(p.x, p.y - 14, dx, dy, kind, Math.round(dmg), w.pierce, variant);
+    p.vx -= dx * 14; p.vy -= dy * 14;
+    this.fx.push({ kind: kind === "arrow" ? "bowrelease" : "castburst", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant, t: 0, dur: .3 });
+    return;
   }
+  p.vx += fx * 55; p.vy += fy * 55;
+  this.fx.push({ kind: "weaponslash", x: p.x, y: p.y, dir: p.dir, weapon: p.equipped, t: 0, dur: p.attackDur });
   let anyHit = false;
   for (const e of this.enemies) {
     if (e.dead) continue;
@@ -242,7 +252,7 @@ Game.prototype.doAttack = function () {
     const crit = Math.random() < 0.2;
     const hit = Math.round(dmg * (crit ? 1.8 : 1));
     e.hp -= hit; e.hurt = 0.2; e.angry = 6; e.state = "chase";
-    e.x += (dx / d) * 8; e.y += (dy / d) * 8;
+    if (d > .001) { e.x += (dx / d) * 8; e.y += (dy / d) * 8; }
     this.spawnHit(e.x, e.y - e.h * 0.4);
     this.addFloater(e.x, e.y - e.h, hit, crit);
     this.audio.sfx(crit ? "crit" : "hit");
@@ -384,12 +394,14 @@ Game.prototype.useSkill = function (i) {
     }
     case "warcry": {
       p.skillCd[i] = 12; p.buffT = 6; p.buffMul = 1.6;
-      this.audio.sfx("level"); this.fx.push({ kind: "levelring", x: p.x, y: p.y, t: 0, dur: 0.7 });
+      this.audio.sfx("level"); this.fx.push({ kind: "warcry", x: p.x, y: p.y, t: 0, dur: 0.8 });
       this.ui.toast("War Cry! +60% dmg"); break;
     }
     case "fireball": {
       p.skillCd[i] = 3; const { dx, dy } = rangedAim(this, "fire");
-      this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)));
+      p.attackDur = .42; p.attackT = p.attackDur; p.attackStyle = "cast";
+      this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)), false, "skill");
+      this.fx.push({ kind: "castburst", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "skill", t: 0, dur: .42 });
       this.audio.sfx("whirl"); this.ui.toast("Fireball!"); break;
     }
     case "frostnova": {
@@ -400,13 +412,17 @@ Game.prototype.useSkill = function (i) {
     }
     case "arrowshot": {
       p.skillCd[i] = 3; const { dx, dy } = rangedAim(this, "arrow");
-      this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true);
+      p.attackDur = .4; p.attackT = p.attackDur; p.attackStyle = "bow";
+      this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true, "power");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "power", t: 0, dur: .36 });
       this.audio.sfx("attack"); this.ui.toast("Power Shot!"); break;
     }
     case "multishot": {
       p.skillCd[i] = 7; const { dx, dy } = rangedAim(this, "arrow");
       const base = Math.atan2(dy, dx);
-      for (const off of [-0.28, 0, 0.28]) { this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((16 + p.level * 2) * (p.dmgMul || 1))); }
+      p.attackDur = .44; p.attackT = p.attackDur; p.attackStyle = "bow";
+      for (const off of [-0.28, 0, 0.28]) { this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((16 + p.level * 2) * (p.dmgMul || 1)), false, "multi"); }
+      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: base, variant: "multi", t: 0, dur: .42 });
       this.audio.sfx("attack"); this.ui.toast("Multishot!"); break;
     }
     case "heal": {
@@ -415,8 +431,9 @@ Game.prototype.useSkill = function (i) {
     }
     case "blink": {
       p.skillCd[i] = 6; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      this.fx.push({ kind: "blink", x: p.x, y: p.y, t: 0, dur: .45 });
       p.x = clamp(p.x + dx * 90, 8, 110 * 24 - 8); p.y = clamp(p.y + dy * 90, 8, 110 * 24 - 8);
-      p.invuln = 0.3; this.fx.push({ kind: "frost", x: p.x, y: p.y, t: 0, dur: 0.4 }); this.audio.sfx("dash"); this.ui.toast("Blink!"); break;
+      p.invuln = 0.3; this.fx.push({ kind: "blink", x: p.x, y: p.y, t: 0, dur: .45, arrive: true }); this.audio.sfx("dash"); this.ui.toast("Blink!"); break;
     }
     case "dash":
     case "roll": {
@@ -426,10 +443,11 @@ Game.prototype.useSkill = function (i) {
 };
 
 // ---- Projectiles (fireballs, arrows, boss fire) ----
-Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce) {
+Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce, variant = "basic") {
   const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
   this.projectiles = this.projectiles || [];
-  this.projectiles.push({ x, y, dx, dy, kind, dmg, pierce: !!pierce, life: PROJECTILE_LIFE, hostile: kind === "bossfire", hits: [], hitBoss: false });
+  const maxLife = variant === "power" || variant === "dragon" ? PROJECTILE_LIFE * 1.15 : PROJECTILE_LIFE;
+  this.projectiles.push({ x, y, dx, dy, kind, variant, dmg, pierce: !!pierce, life: maxLife, maxLife, age: 0, trailT: 0, hostile: kind === "bossfire", hits: [], hitBoss: false });
 };
 Game.prototype.updateProjectiles = function (dt) {
   if (!this.projectiles) return;
@@ -438,16 +456,21 @@ Game.prototype.updateProjectiles = function (dt) {
     const speed = projectileSpeed(pr.kind);
     pr.x += pr.dx * speed * dt;
     pr.y += pr.dy * speed * dt;
-    pr.life -= dt;
-    if (pr.kind === "fire" || pr.kind === "bossfire") this.particles.push({ x: pr.x, y: pr.y, vx: 0, vy: 0, life: 0.3, color: pr.kind === "bossfire" ? "rgba(255,120,40,0.8)" : "rgba(255,160,60,0.8)" });
+    pr.life -= dt; pr.age += dt; pr.trailT -= dt;
+    if ((pr.kind === "fire" || pr.kind === "bossfire") && pr.trailT <= 0) {
+      pr.trailT = pr.variant === "dragon" || pr.variant === "boss" ? .025 : .045;
+      const color = pr.kind === "bossfire" ? "rgba(255,93,35,.85)" : pr.variant === "dragon" ? "rgba(174,105,255,.86)" : "rgba(255,165,58,.82)";
+      this.particles.push({ x: pr.x - pr.dx * 4, y: pr.y - pr.dy * 4, vx: -pr.dx * 18 + (Math.random() - .5) * 9, vy: -pr.dy * 18 + (Math.random() - .5) * 9, life: .28, color });
+    }
+    const impact = () => this.fx.push({ kind: "projectileimpact", x: pr.x, y: pr.y, element: pr.kind, variant: pr.variant, t: 0, dur: .3 });
     if (pr.hostile) {
       // hits player
-      if (p.invuln <= 0 && Math.hypot(pr.x - p.x, pr.y - (p.y - 14)) < 16) { this.damagePlayer(pr.dmg); pr.life = 0; }
+      if (p.invuln <= 0 && Math.hypot(pr.x - p.x, pr.y - (p.y - 14)) < 16) { this.damagePlayer(pr.dmg); impact(); pr.life = 0; }
     } else {
       let consumed = false;
-      for (const e of this.enemies) { if (e.dead || pr.hits.includes(e)) continue; if (Math.hypot(pr.x - e.x, pr.y - (e.y - e.h * 0.4)) < 18) { this.hurtEnemy(e, pr.dmg, true); pr.hits.push(e); if (!pr.pierce) { pr.life = 0; consumed = true; break; } } }
+      for (const e of this.enemies) { if (e.dead || pr.hits.includes(e)) continue; if (Math.hypot(pr.x - e.x, pr.y - (e.y - e.h * 0.4)) < 18) { this.hurtEnemy(e, pr.dmg, true); impact(); pr.hits.push(e); if (!pr.pierce) { pr.life = 0; consumed = true; break; } } }
       // boss hit
-      if (!consumed && !pr.hitBoss && this.boss && !this.boss.dead && Math.hypot(pr.x - this.boss.x, pr.y - (this.boss.y - 30)) < 34) { this.hurtBossDirect(pr.dmg); pr.hitBoss = true; if (!pr.pierce) pr.life = 0; }
+      if (!consumed && !pr.hitBoss && this.boss && !this.boss.dead && Math.hypot(pr.x - this.boss.x, pr.y - (this.boss.y - 30)) < 34) { this.hurtBossDirect(pr.dmg); impact(); pr.hitBoss = true; if (!pr.pierce) pr.life = 0; }
     }
   }
   this.projectiles = this.projectiles.filter(pr => pr.life > 0 && pr.x > 0 && pr.y > 0 && pr.x < 110 * 24 && pr.y < 110 * 24);
@@ -509,6 +532,7 @@ Game.prototype.spawnBoss = function () {
     x, y, sortY: y, hp, maxHp: hp, dmg: 14 + p.level * 2,
     frame: 0, frameT: 0, dead: false, hurt: 0,
     state: "chase", atkCd: 3, breatheCd: 5, breathWindup: 0, t: 0, rage: false,
+    strafeDir: Math.random() < 0.5 ? -1 : 1, strafeT: 1.2 + Math.random() * 1.4,
   };
   this.ui.toast("WORLD BOSS · Infernyx, the Ashen Oni, has awakened!");
   this.audio.sfx("level"); this.shake = Math.max(this.shake, 8);
@@ -531,11 +555,27 @@ Game.prototype.updateBoss = function (dt) {
   b.rage = rageNow;
 
   const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
-  // move toward player but keep some distance (ranged aggressor)
+  // Close distance when needed, then orbit or hold ground. Infernyx never
+  // backpedals radially from a player who commits to close combat.
   const desired = b.rage ? 90 : 130;
   const spd = (b.rage ? 62 : 44) * dt;
-  if (d > desired + 20) { b.x += (dx / d) * spd; b.y += (dy / d) * spd; }
-  else if (d < desired - 20) { b.x -= (dx / d) * spd; b.y -= (dy / d) * spd; }
+  b.strafeT = (b.strafeT ?? 1) - dt;
+  b.strafeDir = b.strafeDir || 1;
+  if (b.strafeT <= 0) {
+    b.strafeT = 1.5 + Math.random() * 1.5;
+    if (Math.random() < 0.45) b.strafeDir *= -1;
+  }
+  if (d > desired + 20) {
+    b.x += (dx / d) * spd; b.y += (dy / d) * spd;
+  } else if (d >= 62 && b.breathWindup <= 0) {
+    // Rotate around the player to preserve distance exactly instead of
+    // introducing a tiny outward drift from a Cartesian tangent step.
+    const orbit = (spd * (b.rage ? 0.56 : 0.42)) / d * b.strafeDir;
+    const angle = Math.atan2(b.y - p.y, b.x - p.x) + orbit;
+    const nx = p.x + Math.cos(angle) * d, ny = p.y + Math.sin(angle) * d;
+    if (this.tileAt(nx, ny) !== 2) { b.x = nx; b.y = ny; }
+    else b.strafeDir *= -1;
+  }
   b.sortY = b.y;
 
   // melee swipe if player hugs the boss
@@ -548,7 +588,7 @@ Game.prototype.updateBoss = function (dt) {
     if (b.breathWindup <= 0) {
       const base = b.breathAngle;
       const spread = b.rage ? [-0.35, -0.12, 0.12, 0.35] : [-0.18, 0, 0.18];
-      for (const off of spread) this.spawnProjectile(b.x, b.y - 30, Math.cos(base + off), Math.sin(base + off), "bossfire", b.dmg);
+      for (const off of spread) this.spawnProjectile(b.x, b.y - 30, Math.cos(base + off), Math.sin(base + off), "bossfire", b.dmg, false, "boss");
       this.fx.push({ kind: "whirl", x: b.x, y: b.y - 30, t: 0, dur: 0.4 });
     }
   } else {
@@ -561,6 +601,7 @@ Game.prototype.updateBoss = function (dt) {
     this.audio.sfx("whirl"); this.shake = Math.max(this.shake, 5);
     this.fx.push({ kind: "bosswarn", x: b.x, y: b.y - 30, angle: b.breathAngle, t: 0, dur: b.breathWindup });
   }
+  b.state = b.breathWindup > 0 ? "windup" : d < 60 ? "melee" : d > desired + 20 ? "chase" : "strafe";
 };
 // AoE damage helper for player skills hitting the boss
 Game.prototype.hurtBoss = function (x, y, radius, dmg) {

@@ -43,6 +43,7 @@ export class Game {
     this.pet = null;
     this.flags = { starterCache: false };
     this.fishingStats = { total: 0, best: 0, records: {} };
+    this.catchReveal = null;
     this.time = 6 * 60;
     this.weather = "clear";     // clear | rain | snow
     this.weatherT = 30;
@@ -204,11 +205,12 @@ export class Game {
 
     // NPCs around camp
     for (const def of NPC_DEFS) {
+      const npcClass = def.look.cls || ({ Guard: "warrior", Forge: "warrior", Champion: "warrior", Potions: "mage", Scout: "archer" }[def.role] || "villager");
       this.npcs.push({
         name: def.name, look: def.look, role: def.role, line: def.line,
         x: this.camp.x + def.dx, y: this.camp.y + def.dy,
         dir: "down", frame: 0, frameT: Math.random() * 4, sortY: 0,
-        cache: buildCharacter({ ...DEFAULT_LOOK, ...def.look, name: def.name }),
+        cache: buildCharacter({ ...DEFAULT_LOOK, ...def.look, name: def.name, cls: npcClass }),
       });
     }
 
@@ -263,6 +265,25 @@ export class Game {
     const tx = clamp((px / T) | 0, 0, MAP_W - 1);
     const ty = clamp((py / T) | 0, 0, MAP_H - 1);
     return this.map[ty * MAP_W + tx];
+  }
+
+  resetInputState() {
+    this.keys = {};
+    this.mouse.down = false;
+    this.stick.active = false;
+    this.stick.x = 0;
+    this.stick.y = 0;
+    this.moveTarget = null;
+    this._pendingInteraction = null;
+    const knob = document.getElementById("stick-knob");
+    if (knob) knob.style.transform = "translate(0,0)";
+    if (this.player) {
+      this.player.vx = 0;
+      this.player.vy = 0;
+      this.player.moving = false;
+      this.player.shield = false;
+      this.player.evadeT = 0;
+    }
   }
 
   bindInput() {
@@ -324,44 +345,109 @@ export class Game {
       stick.addEventListener("touchstart", (e) => { e.preventDefault(); set(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
       stick.addEventListener("touchmove", (e) => { e.preventDefault(); set(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
       stick.addEventListener("touchend", end);
+      stick.addEventListener("touchcancel", end);
     }
-    const hold = (id, on, off) => {
+    const activeReleases = new Set();
+    const bindAction = (id, on, off) => {
       const el = document.getElementById(id); if (!el) return;
-      const end = (e) => { e.preventDefault(); off?.(); };
-      el.addEventListener("pointerdown", (e) => { e.preventDefault(); on(); });
-      el.addEventListener("pointerup", end);
-      el.addEventListener("pointercancel", end);
-      el.addEventListener("pointerleave", (e) => { if (e.buttons) end(e); });
+      let active = false, lastPointerAt = -Infinity, fallbackTimer = 0;
+      el.style.touchAction = "none";
+      el.style.webkitTapHighlightColor = "transparent";
+
+      const end = (e) => {
+        e?.preventDefault?.();
+        if (!active) return;
+        active = false;
+        activeReleases.delete(end);
+        off?.();
+      };
+      const begin = (e) => {
+        e?.preventDefault?.();
+        if (active) return;
+        active = true;
+        activeReleases.add(end);
+        if (e?.pointerId != null) {
+          lastPointerAt = performance.now();
+          try { el.setPointerCapture?.(e.pointerId); } catch { /* capture can fail after cancellation */ }
+        }
+        on?.();
+      };
+
+      el.addEventListener("pointerdown", begin, { passive: false });
+      el.addEventListener("pointerup", end, { passive: false });
+      el.addEventListener("pointercancel", end, { passive: false });
+      el.addEventListener("lostpointercapture", end);
+      if (typeof PointerEvent === "undefined") {
+        el.addEventListener("touchstart", (e) => { lastPointerAt = performance.now(); begin(e); }, { passive: false });
+        el.addEventListener("touchend", end, { passive: false });
+        el.addEventListener("touchcancel", end, { passive: false });
+      }
+      // Keyboard activation and older touch WebViews still produce click even
+      // when they do not deliver a usable pointer stream.
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (performance.now() - lastPointerAt < 650) return;
+        begin();
+        clearTimeout(fallbackTimer);
+        fallbackTimer = setTimeout(() => end(), 90);
+      });
     };
-    hold("btn-attack", () => this.mouse.down = true, () => this.mouse.down = false);
-    hold("btn-shield", () => this.keys.ShiftLeft = true, () => this.keys.ShiftLeft = false);
-    hold("btn-evade", () => this.keys.Space = true, () => this.keys.Space = false);
-    hold("btn-interact", () => { this.keys.KeyF = true; if (!this.paused) this.interact(); }, () => this.keys.KeyF = false);
+    const releaseActions = () => {
+      for (const release of [...activeReleases]) release();
+    };
+    const resetAllInput = () => {
+      releaseActions();
+      this.resetInputState();
+    };
+    addEventListener("blur", resetAllInput);
+    addEventListener("focus", resetAllInput);
+    addEventListener("pagehide", resetAllInput);
+    document.addEventListener("visibilitychange", resetAllInput);
+
+    bindAction("btn-attack", () => this.mouse.down = true, () => this.mouse.down = false);
+    bindAction("btn-shield", () => this.keys.ShiftLeft = true, () => this.keys.ShiftLeft = false);
+    bindAction("btn-evade", () => this.keys.Space = true, () => this.keys.Space = false);
+    bindAction("btn-interact", () => {
+      this.keys.KeyF = true;
+      if (this.paused || this.fishing?.state === "hooked") return;
+      this.interact();
+    }, () => this.keys.KeyF = false);
     this.canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (this.paused || this.fishing) return;
       const r = this.canvas.getBoundingClientRect();
       const mx = (e.touches[0].clientX - r.left) * (view.w / r.width);
       const my = (e.touches[0].clientY - r.top) * (view.h / r.height);
       const wx = mx + this.cam.x, wy = my + this.cam.y;
-      // tapping directly on/near a chest or NPC interacts with it (any control mode)
-      let hit = null;
-      for (const c of this.chests) { if (!c.opened && Math.hypot(c.x - wx, c.y - wy) < 26) { hit = { t: c, k: "chest" }; break; } }
-      if (!hit) for (const n of this.npcs) { if (Math.hypot(n.x - wx, n.y - wy) < 26) { hit = { t: n, k: "npc" }; break; } }
-      if (hit) {
-        // if player close enough, interact immediately; else walk toward it
-        const p = this.player, near = Math.hypot(hit.t.x - p.x, hit.t.y - p.y) <= 34;
-        if (near) { this._interactTarget = hit.t; this._interactKind = hit.k; this.interact(); }
-        else { this.moveTarget = { x: hit.t.x, y: hit.t.y }; this.ui.toast("Approaching…"); }
+      const resolved = this.resolveInteract?.({ x: wx, y: wy });
+      if (resolved?.target) {
+        if (resolved.reachable) {
+          this.interact(resolved);
+        } else if (this.moveMode === "tap") {
+          this._pendingInteraction = resolved;
+          this.moveTarget = { x: resolved.target.x, y: resolved.target.y };
+          this.ui.toast("Approaching…");
+        } else {
+          this.ui.toast("Move closer to interact.");
+        }
         return;
       }
+      this._pendingInteraction = null;
       if (this.moveMode === "tap") this.moveTarget = { x: wx, y: wy };
-    }, { passive: true });
+    }, { passive: false });
   }
 
   start() {
     let last = performance.now();
     const loop = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
-      if (!this.paused) this.update(dt);
+      if (!this.paused) {
+        this.update(dt);
+        if (this.catchReveal) {
+          this.catchReveal.elapsed += dt;
+          if (this.catchReveal.elapsed >= this.catchReveal.duration) this.catchReveal = null;
+        }
+      }
       if (net.connected) sendMove(this.player, now);
       this.render();
       requestAnimationFrame(loop);
