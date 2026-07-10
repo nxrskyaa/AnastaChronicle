@@ -27,6 +27,32 @@
   </div>
 </div>
 
+<div id="login" class="hidden">
+  <canvas id="login-fx"></canvas>
+  <div class="login-card">
+    <div class="login-glow"></div>
+    <h2 class="pixel-h2">WELCOME, TRAVELER</h2>
+    <p class="login-sub">Enter your name to begin your journey</p>
+    <div class="login-input-wrap">
+      <input id="login-name" type="text" maxlength="14" placeholder="Your name…" autocomplete="off" />
+    </div>
+    <div id="login-existing" class="login-existing hidden">
+      <p class="login-return">✦ Welcome back, <b id="login-return-name"></b> ✦</p>
+      <p class="login-stats" id="login-return-stats"></p>
+      <button id="btn-continue" class="pixel-btn">▶ CONTINUE</button>
+    </div>
+    <button id="btn-newgame" class="pixel-btn">✦ NEW TRAVELER</button>
+    <div class="login-divider"><span>or</span></div>
+    <div class="login-quick">
+      <button class="quick-btn" data-name="Akira">Akira</button>
+      <button class="quick-btn" data-name="Yuki">Yuki</button>
+      <button class="quick-btn" data-name="Hana">Hana</button>
+      <button class="quick-btn" data-name="Kai">Kai</button>
+    </div>
+    <p class="login-note">Progress auto-saved locally. No account needed.</p>
+  </div>
+</div>
+
 <div id="creator" class="hidden">
   <div class="creator-card">
     <h2 class="pixel-h2">CREATE YOUR TRAVELER</h2>

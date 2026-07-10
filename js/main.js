@@ -159,7 +159,10 @@ function wireSettings() {
   });
 }
 
-function startGame() {
+function startGame(savedLook, savedName, saveData) {
+  // Apply saved look if provided (continue scenario)
+  if (savedLook) { Object.assign(look, savedLook); }
+  if (savedName) { look.name = savedName; }
   creator.classList.add("hidden");
   document.getElementById("game-wrap").classList.remove("hidden");
   audio.init(); audio.resume(); audio.startMusic("explore");
@@ -169,12 +172,48 @@ function startGame() {
     const ui = new UI(audio);
     game = new Game(canvas, ui, look);
     ui.bind(game);
+    // Apply saved game state if continuing
+    if (saveData && saveData.stats) {
+      const p = game.player;
+      p.level = saveData.stats.level || 1;
+      p.xp = saveData.stats.xp || 0;
+      p.gold = saveData.stats.gold || 0;
+      p.hp = saveData.stats.hp || p.maxHp;
+      if (saveData.stats.cls) { p.cls = saveData.stats.cls; }
+      if (saveData.inv) { game.inv = saveData.inv; }
+      if (saveData.equipped) { p.equipped = saveData.equipped; }
+      game.ui.toast(`Welcome back, ${look.name}!`);
+    }
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
     window.__ANASTA__ = game;
     wireSettings();
     // recompute internal resolution on rotate/resize so it stays fullscreen
     addEventListener("resize", () => computeView(canvas));
     game.start();
+    // Auto-save every 15s
+    setInterval(() => {
+      if (!game || !game.player) return;
+      const p = game.player;
+      putSave({
+        name: look.name,
+        look: look,
+        stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
+        inv: game.inv,
+        equipped: p.equipped,
+        ts: Date.now(),
+      });
+    }, 15000);
+    // Save on page hide / unload
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && game && game.player) {
+        const p = game.player;
+        putSave({
+          name: look.name, look,
+          stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
+          inv: game.inv, equipped: p.equipped, ts: Date.now(),
+        });
+      }
+    });
     // Multiplayer presence (no-op unless enabled in config.js). Fire-and-forget.
     connectMultiplayer(look, look.name, { x: game.player.x, y: game.player.y })
       .then((room) => {
@@ -187,12 +226,113 @@ function startGame() {
   } catch (e) { console.error(e); alert("Start failed: " + e.message); }
 }
 
+// ── LOGIN SYSTEM ──────────────────────────────────────────────
+const loginScreen = document.getElementById("login");
+const loginName = document.getElementById("login-name");
+const loginExisting = document.getElementById("login-existing");
+const loginReturnName = document.getElementById("login-return-name");
+const loginReturnStats = document.getElementById("login-return-stats");
+const btnContinue = document.getElementById("btn-continue");
+const btnNewGame = document.getElementById("btn-newgame");
+const SAVE_KEY = "anasta_save";
+
+function getSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
+function putSave(data) { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
+
+function startLoginFx() {
+  const c = document.getElementById("login-fx");
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  c.width = window.innerWidth; c.height = window.innerHeight;
+  const ps = [];
+  for (let i = 0; i < 40; i++) ps.push({ x: Math.random() * c.width, y: Math.random() * c.height, vy: -0.3 - Math.random() * 0.5, r: 1 + Math.random() * 2, ph: Math.random() * 7, hue: 250 + Math.random() * 60 });
+  let raf;
+  (function loop() {
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of ps) {
+      p.y += p.vy; p.ph += 0.02;
+      if (p.y < -10) { p.y = c.height + 10; p.x = Math.random() * c.width; }
+      const a = 0.3 + 0.7 * Math.sin(p.ph);
+      ctx.fillStyle = `hsla(${p.hue},70%,65%,${a * 0.3})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 3, 0, 7); ctx.fill();
+      ctx.fillStyle = `hsla(${p.hue},80%,75%,${a})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+    }
+    ctx.globalCompositeOperation = "source-over";
+    raf = requestAnimationFrame(loop);
+    loginScreen._raf = raf;
+  })();
+}
+
+function showLogin() {
+  boot.classList.add("hidden");
+  loginScreen.classList.remove("hidden");
+  startLoginFx();
+  const save = getSave();
+  if (save && save.name) {
+    loginExisting.classList.remove("hidden");
+    loginReturnName.textContent = save.name;
+    const stats = save.stats || {};
+    loginReturnStats.textContent = `Lv ${stats.level || 1} · ${stats.cls || "warrior"} · ${stats.gold || 0} gold`;
+    loginName.value = save.name;
+  } else {
+    loginExisting.classList.add("hidden");
+  }
+  loginName.focus();
+}
+
+function enterGameWithSave(save) {
+  if (loginScreen._raf) cancelAnimationFrame(loginScreen._raf);
+  loginScreen.classList.add("hidden");
+  // Use saved look + skip creator
+  startGame(save.look, save.name, save);
+}
+
+function enterNewGame(name) {
+  if (loginScreen._raf) cancelAnimationFrame(loginScreen._raf);
+  loginScreen.classList.add("hidden");
+  creator.classList.remove("hidden");
+  initCreator();
+  if (name) {
+    document.getElementById("opt-name").value = name;
+    look.name = name;
+  }
+}
+
+btnContinue.addEventListener("click", () => {
+  const save = getSave();
+  if (save) enterGameWithSave(save);
+});
+
+btnNewGame.addEventListener("click", () => {
+  const name = loginName.value.trim() || "Traveler";
+  enterNewGame(name);
+});
+
+loginName.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const name = loginName.value.trim();
+    const save = getSave();
+    if (save && save.name === name) enterGameWithSave(save);
+    else enterNewGame(name || "Traveler");
+  }
+});
+
+document.querySelectorAll(".quick-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const name = btn.dataset.name;
+    loginName.value = name;
+    const save = getSave();
+    if (save && save.name === name) enterGameWithSave(save);
+    else enterNewGame(name);
+  });
+});
+
 startBtn.addEventListener("click", () => {
   audio.init(); audio.resume(); audio.startMusic("title");
   if (bootRAF) { cancelAnimationFrame(bootRAF); bootRAF = null; }
-  boot.classList.add("hidden");
-  creator.classList.remove("hidden");
-  initCreator();
+  showLogin();
 });
 
 preload();

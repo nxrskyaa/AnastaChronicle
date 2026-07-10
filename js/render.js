@@ -205,6 +205,8 @@ Game.prototype.render = function () {
       }
       const dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
       const cv = o.cache.walk[dir][o.frame % 4];
+      // soft shadow for remote player
+      ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(rsx, rsy + 1, 12, 3.5, 0, 0, 7); ctx.fill();
       ctx.drawImage(cv, rsx - 16, rsy - 36);
       // name tag (blue tint to distinguish other players)
       ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
@@ -215,6 +217,8 @@ Game.prototype.render = function () {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
       const bob = Math.sin(o.bob) * 2;
       if (im) {
+        // soft shadow
+        ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, im.width * 0.35, 3, 0, 0, 7); ctx.fill();
         ctx.drawImage(im, sx - im.width / 2, sy - im.height + bob);
         if (o.state === "chase" && o.angry > 0) { ctx.fillStyle = "#ff5a5a"; ctx.font = "bold 11px sans-serif"; ctx.fillText("!", sx - 2, sy - im.height + bob - 2); }
         if (o.hp < o.maxHp) {
@@ -228,9 +232,13 @@ Game.prototype.render = function () {
     else if (d.k === "boss") {
       const sz = BOSS_SIZE * 1.4;   // bigger than native
       const frame = bossFrame(o.frame, o.rage);
+      // large soft shadow for boss
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(sx, sy + 2, sz * 0.4, 6, 0, 0, 7); ctx.fill();
       if (frame) {
         ctx.save();
         if (o.hurt > 0) ctx.filter = "brightness(1.6)";
+        // rage glow aura
+        if (o.rage) { ctx.shadowColor = "rgba(255,80,20,0.8)"; ctx.shadowBlur = 20; }
         ctx.drawImage(frame, sx - sz / 2, sy - sz + 8, sz, sz);
         ctx.restore();
       }
@@ -238,6 +246,8 @@ Game.prototype.render = function () {
     else if (d.k === "pet") { const im = this.monCache[o.id] ? this.monCache[o.id][(Math.floor(this.t * 4)) % 4] : null; const bob = Math.sin(o.bob) * 2; if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height * 0.7 + bob, im.width * 0.7, im.height * 0.7); }
     else if (d.k === "player") {
       const dir = p.dir;
+      // soft shadow
+      ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12, 3.5, 0, 0, 7); ctx.fill();
       let body, weap;
       if (p.attackT > 0) {
         const ph = 1 - p.attackT / p.attackDur;
@@ -321,7 +331,47 @@ Game.prototype.render = function () {
   }
   this.renderDayNight(ctx);
   this.renderWeather(ctx);
+  this.renderPostFX(ctx);
   this.renderMinimap();
+};
+
+// Post-processing: vignette + ambient color grade + depth fog + subtle bloom
+Game.prototype.renderPostFX = function (ctx) {
+  const w = view.w, h = view.h;
+  // 1. Depth fog — subtle warm haze at top (distance), cool at bottom (foreground)
+  const fog = ctx.createLinearGradient(0, 0, 0, h);
+  fog.addColorStop(0, "rgba(180,200,160,0.08)");
+  fog.addColorStop(0.4, "rgba(0,0,0,0)");
+  fog.addColorStop(0.85, "rgba(0,0,0,0)");
+  fog.addColorStop(1, "rgba(40,30,20,0.06)");
+  ctx.fillStyle = fog;
+  ctx.fillRect(0, 0, w, h);
+
+  // 2. Color grading — warm/magical tint overlay (very subtle)
+  const grade = ctx.createLinearGradient(0, 0, w, h);
+  const t = this.time;
+  const morning = t > 5*60 && t < 9*60;
+  const golden = t > 16*60 && t < 19*60;
+  if (morning) {
+    grade.addColorStop(0, "rgba(255,220,160,0.06)");
+    grade.addColorStop(1, "rgba(200,230,255,0.04)");
+  } else if (golden) {
+    grade.addColorStop(0, "rgba(255,180,100,0.08)");
+    grade.addColorStop(1, "rgba(255,120,60,0.05)");
+  } else {
+    grade.addColorStop(0, "rgba(255,250,240,0.02)");
+    grade.addColorStop(1, "rgba(240,250,255,0.02)");
+  }
+  ctx.fillStyle = grade;
+  ctx.fillRect(0, 0, w, h);
+
+  // 3. Vignette — darken edges for focal depth
+  const cx = w / 2, cy = h / 2;
+  const vig = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.3, cx, cy, Math.max(w, h) * 0.7);
+  vig.addColorStop(0, "rgba(0,0,0,0)");
+  vig.addColorStop(1, "rgba(0,0,0,0.28)");
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
 };
 
 Game.prototype.renderFX = function (ctx, camx, camy) {

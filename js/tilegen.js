@@ -39,17 +39,29 @@ function scatter(ctx, seed, color, count, size) {
 function grassTile(variant, dark) {
   const cv = C(); const ctx = cv.getContext("2d");
   const base = (dark ? PAL.forest : PAL.grass)[variant % (dark ? PAL.forest.length : PAL.grass.length)];
-  ctx.fillStyle = base; ctx.fillRect(0, 0, TS, TS);
+  // subtle gradient for depth
+  const grad = ctx.createLinearGradient(0, 0, 0, TS);
+  grad.addColorStop(0, base);
+  grad.addColorStop(1, dark ? "#3f8038" : PAL.grassLo);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, TS, TS);
   // subtle mottle: lighter + darker patches
   scatter(ctx, variant * 11 + 1, dark ? "#57a04e" : PAL.grassHi, 14, 2);
   scatter(ctx, variant * 11 + 4, PAL.grassLo, 12, 2);
   scatter(ctx, variant * 11 + 7, dark ? "#3f8038" : "#84cf6f", 20, 1);
-  // a few grass blades
+  // a few grass blades (with slight curve for organic look)
   ctx.strokeStyle = dark ? "#6fbf5a" : PAL.grassBlade[0]; ctx.lineWidth = 1;
   for (let i = 0; i < 3; i++) {
     const bx = 3 + ((noise(variant * 3 + i) * (TS - 6)) | 0);
     const by = 6 + ((noise(variant * 7 + i) * (TS - 8)) | 0);
     ctx.beginPath(); ctx.moveTo(bx, by + 3); ctx.lineTo(bx - 1, by); ctx.moveTo(bx + 1, by + 3); ctx.lineTo(bx + 1, by - 1); ctx.stroke();
+  }
+  // occasional tiny flower (1 per ~2 tiles) for visual pop
+  if (noise(variant * 31) > 0.5) {
+    const fx = 4 + ((noise(variant * 17) * (TS - 8)) | 0);
+    const fy = 4 + ((noise(variant * 23) * (TS - 8)) | 0);
+    const fcol = [["#f0a0c0", "#e080a0"], ["#f0e080", "#d4b850"], ["#c0a0f0", "#a080d0"]][((variant * 7) | 0) % 3];
+    ctx.fillStyle = fcol[0]; ctx.fillRect(fx, fy, 2, 2);
+    ctx.fillStyle = fcol[1]; ctx.fillRect(fx, fy, 1, 1);
   }
   return cv;
 }
@@ -76,19 +88,29 @@ function sandTile(variant) {
 
 function waterTile(frame) {
   const cv = C(); const ctx = cv.getContext("2d");
-  const base = PAL.water[0];
-  ctx.fillStyle = base; ctx.fillRect(0, 0, TS, TS);
+  // depth gradient: lighter at top, darker at bottom
+  const grad = ctx.createLinearGradient(0, 0, 0, TS);
+  grad.addColorStop(0, PAL.water[2]);
+  grad.addColorStop(0.5, PAL.water[0]);
+  grad.addColorStop(1, PAL.waterLo);
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, TS, TS);
   // gentle animated ripples via sine bands offset by frame
-  ctx.fillStyle = PAL.waterLo;
   for (let y = 0; y < TS; y++) {
     const off = Math.sin((y + frame * 2) * 0.5) * 2;
-    ctx.fillRect(0, y, TS, 1);
-    ctx.fillStyle = (y % 4 === (frame % 4)) ? PAL.water[2] : PAL.water[0];
+    ctx.fillStyle = (y % 4 === (frame % 4)) ? `rgba(92,195,234,0.5)` : `rgba(69,184,224,0.3)`;
     ctx.fillRect((off + 4) | 0, y, 8, 1);
   }
-  // sparkles
+  // shimmer sparkles (animated by frame)
   ctx.fillStyle = PAL.waterHi;
-  for (let i = 0; i < 4; i++) { const sx = ((noise(i * 3 + frame) * TS) | 0); const sy = ((noise(i * 7 + frame * 2) * TS) | 0); ctx.fillRect(sx, sy, 2, 1); }
+  for (let i = 0; i < 5; i++) {
+    const sx = ((noise(i * 3 + frame) * TS) | 0);
+    const sy = ((noise(i * 7 + frame * 2) * TS) | 0);
+    const sz = 1 + ((noise(i * 11 + frame) * 2) | 0);
+    ctx.fillRect(sx, sy, sz, 1);
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.fillRect(sx + 1, sy, 1, 1);
+    ctx.fillStyle = PAL.waterHi;
+  }
   return cv;
 }
 
