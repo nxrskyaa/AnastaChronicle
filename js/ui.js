@@ -3,6 +3,14 @@ import { QUESTS } from "./quests.js";
 import { CLASSES } from "./classes.js";
 import { RODS, activeRod } from "./fishing.js";
 import { getFishSprite } from "./fishart.js";
+import { MON_IDS, MON_ELEMENT } from "./monsters.js";
+
+const PET_COLORS = {
+  grass: ["#baf39a", "#55b878"], fire: ["#ffd070", "#e45f3d"], water: ["#a4efff", "#4aa6d4"],
+  rock: ["#ead9ae", "#987757"], electric: ["#fff49a", "#e5bd38"], bug: ["#eac2fa", "#a96fc2"],
+  ice: ["#e8ffff", "#71cae2"], dark: ["#d1b4ff", "#6c4f9f"],
+};
+const petName = (id) => String(id || "companion").replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
 export class UI {
   constructor(audio) {
@@ -12,6 +20,7 @@ export class UI {
       inv: document.getElementById("panel-inv"),
       craft: document.getElementById("panel-craft"),
       quest: document.getElementById("panel-quest"),
+      companions: document.getElementById("panel-companions"),
       dialog: document.getElementById("panel-dialog"),
       settings: document.getElementById("panel-settings"),
       level: document.getElementById("panel-level"),
@@ -24,10 +33,21 @@ export class UI {
     document.getElementById("btn-inv-hot")?.addEventListener("click", () => this.toggle("inv"));
     document.getElementById("btn-craft-hot")?.addEventListener("click", () => this.toggle("craft"));
     document.getElementById("btn-quest-hot")?.addEventListener("click", () => this.toggle("quest"));
+    document.getElementById("pet-chip")?.addEventListener("click", () => this.toggle("companions"));
+    document.getElementById("btn-cycle-pet")?.addEventListener("click", () => this.cyclePet());
+    document.addEventListener("keydown", (event) => {
+      if (event.code !== "KeyP" || event.repeat || !this.game || /INPUT|TEXTAREA|SELECT/.test(event.target?.tagName || "")) return;
+      const sanctuaryOpen = !this.panels.companions?.classList.contains("hidden");
+      if (this.anyOpen() && !sanctuaryOpen) return;
+      event.preventDefault(); this.cyclePet();
+    });
     this._petCb = null;
-    document.getElementById("btn-pet-ok")?.addEventListener("click", () => { this.panels.pet.classList.add("hidden"); if (this.game) this.game.paused = false; if (this._petCb) this._petCb(); });
+    document.getElementById("btn-pet-ok")?.addEventListener("click", () => {
+      this.panels.pet.classList.add("hidden"); if (this.game) this.game.paused = false;
+      const callback = this._petCb; this._petCb = null; if (callback) callback();
+    });
   }
-  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); }
+  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); this.syncPet(true); }
 
   renderSkillbar() {
     if (!this.game) return;
@@ -52,11 +72,11 @@ export class UI {
     const p = this.panels[name]; if (!p) return;
     this.audio?.sfx("ui");
     const open = p.classList.contains("hidden"); this.closeAll();
-    if (open) { p.classList.remove("hidden"); if (name === "inv") this.renderInv(); if (name === "craft") this.renderCraft(); if (name === "quest") this.renderQuestLog(); if (this.game) this.game.paused = true; }
+    if (open) { p.classList.remove("hidden"); if (name === "inv") this.renderInv(); if (name === "craft") this.renderCraft(); if (name === "quest") this.renderQuestLog(); if (name === "companions") this.renderCompanions(); if (this.game) this.game.paused = true; }
   }
   close(name) { this.panels[name]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["inv", "craft", "quest", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
-  anyOpen() { return ["inv", "craft", "quest", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  closeAll() { for (const k of ["inv", "craft", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
+  anyOpen() { return ["inv", "craft", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   showLevel(lv) { const el = document.getElementById("level-msg"); if (el) el.textContent = `Level ${lv}! Max HP, stamina and damage increased.`; this.panels.level?.classList.remove("hidden"); if (this.game) this.game.paused = true; }
   showDeath() { this.panels.death?.classList.remove("hidden"); }
@@ -65,9 +85,98 @@ export class UI {
     this._petCb = cb;
     this.audio?.sfx("pet");
     const im = document.getElementById("pet-img");
-    if (im && this.game && this.game.monCache[id]) { im.src = this.game.monCache[id][0].toDataURL(); }
-    const msg = document.getElementById("pet-msg"); if (msg) msg.textContent = `A wild ${id} appeared! It wants to join you.`;
+    if (im && this.game && this.game.monCache[id]) { im.src = this.game.monCache[id][0].toDataURL(); im.alt = `${petName(id)} companion`; }
+    const msg = document.getElementById("pet-msg"); if (msg) msg.textContent = `A wild ${petName(id)} appeared! It wants to join you.`;
     this.panels.pet?.classList.remove("hidden"); if (this.game) this.game.paused = true;
+  }
+
+  drawPet(canvas, id, frame = 0) {
+    if (!canvas || !this.game?.monCache?.[id]) return;
+    const ctx = canvas.getContext("2d"); if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.imageSmoothingEnabled = false;
+    const sprite = this.game.monCache[id][frame % this.game.monCache[id].length];
+    const size = Math.min(canvas.width, canvas.height);
+    ctx.fillStyle = "rgba(0,0,0,.24)";
+    ctx.beginPath(); ctx.ellipse(canvas.width / 2, canvas.height * .77, size * .27, size * .075, 0, 0, 7); ctx.fill();
+    ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, Math.round((canvas.width - size) / 2), Math.round((canvas.height - size) / 2) - 3, size, size);
+  }
+
+  cyclePet() {
+    if (!this.game) return;
+    const id = this.game.cyclePet();
+    if (!id) {
+      this.toast("No bonded companion yet — explore supply caches.");
+      if (this.panels.companions?.classList.contains("hidden")) this.toggle("companions");
+      return;
+    }
+    this.audio?.sfx("ui");
+    this.toast(`${petName(id)} answered your call.`);
+  }
+
+  syncPet(force = false) {
+    const g = this.game; if (!g) return;
+    const owned = Array.isArray(g.pets) ? g.pets.filter(id => MON_IDS.includes(id)) : [];
+    const active = g.activePetId || g.pet?.id || null;
+    const token = `${owned.join(",")}|${active || ""}`;
+    const chip = document.getElementById("pet-chip");
+    chip?.classList.remove("hidden");
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set("pet-chip-name", active ? petName(active) : "Sanctuary");
+    set("pet-chip-count", `${owned.length}/${MON_IDS.length}`);
+    set("companion-owned-count", `${owned.length} / ${MON_IDS.length} BONDED`);
+    const fill = document.getElementById("companion-progress-fill"); if (fill) fill.style.width = `${owned.length / MON_IDS.length * 100}%`;
+    const canvas = document.getElementById("companion-active-art");
+    const ctx = canvas?.getContext("2d"); if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const orb = document.getElementById("companion-element-orb");
+    if (active) {
+      const element = MON_ELEMENT[active] || "arcane";
+      const colors = PET_COLORS[element] || ["#b9a6e8", "#68539f"];
+      set("companion-active-element", `${element.toUpperCase()} BOND · ACTIVE`);
+      set("companion-active-name", petName(active));
+      set("companion-active-desc", `${petName(active)} follows your trail. Switch bonds freely; every companion you discover remains in this sanctuary.`);
+      this.drawPet(canvas, active, Math.floor((g.t || 0) * 4));
+      if (orb) { orb.style.borderColor = colors[0]; orb.style.boxShadow = `0 0 22px ${colors[1]}55, inset 0 0 16px ${colors[0]}22`; }
+      if (chip) chip.style.setProperty("--pet-color", colors[0]);
+    } else {
+      set("companion-active-element", "NO ACTIVE BOND");
+      set("companion-active-name", "Find your first companion");
+      set("companion-active-desc", "Rare supply caches may reveal wild spirits. Bonded companions remain in your sanctuary and can be summoned at any time.");
+      if (ctx) {
+        ctx.fillStyle = "rgba(93,190,145,.2)"; ctx.fillRect(45, 24, 6, 48); ctx.fillRect(24, 45, 48, 6);
+        ctx.strokeStyle = "rgba(128,220,176,.5)"; ctx.strokeRect(31, 31, 34, 34);
+      }
+    }
+    if (force || this._petToken !== token) {
+      this._petToken = token;
+      if (!this.panels.companions?.classList.contains("hidden")) this.renderCompanions();
+    }
+  }
+
+  renderCompanions() {
+    const grid = document.getElementById("companion-grid"); if (!grid || !this.game) return;
+    const owned = new Set(Array.isArray(this.game.pets) ? this.game.pets : []);
+    const active = this.game.activePetId || this.game.pet?.id;
+    grid.innerHTML = "";
+    for (const id of MON_IDS) {
+      const isOwned = owned.has(id), isActive = id === active;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `companion-card ${isOwned ? "owned" : "locked"}${isActive ? " active" : ""}`;
+      button.disabled = !isOwned || isActive;
+      if (isActive) button.setAttribute("aria-current", "true");
+      button.setAttribute("aria-label", isOwned ? `${isActive ? "Active companion" : "Summon"} ${petName(id)}` : "Undiscovered companion");
+      const art = document.createElement("canvas"); art.width = 72; art.height = 72; button.appendChild(art);
+      const name = document.createElement("strong"); name.textContent = isOwned ? petName(id) : "Unknown"; button.appendChild(name);
+      const element = document.createElement("small"); element.textContent = isOwned ? MON_ELEMENT[id] || "spirit" : "not bonded"; button.appendChild(element);
+      this.drawPet(art, id, 0);
+      if (!isOwned) art.style.filter = "brightness(0)";
+      if (isOwned) button.addEventListener("click", () => {
+        if (isActive) return;
+        if (this.game.setActivePet(id)) this.toast(`${petName(id)} summoned.`);
+      });
+      grid.appendChild(button);
+    }
+    this.syncPet(false);
   }
 
   showDialog(npc, game) {

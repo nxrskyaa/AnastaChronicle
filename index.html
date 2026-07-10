@@ -11,90 +11,83 @@
 <body>
 <div id="boot">
   <canvas id="boot-fx"></canvas>
+  <div class="chronicle-scene" aria-hidden="true">
+    <div class="scene-moon"></div><div class="scene-ridge ridge-far"></div><div class="scene-ridge ridge-near"></div>
+    <div class="scene-torii"><i></i><b></b><span></span></div>
+    <div class="scene-lantern lantern-left"></div><div class="scene-lantern lantern-right"></div><div class="scene-grass"></div>
+  </div>
   <div class="title-scene">
     <div class="title-stars"></div>
-    <div class="boot-card">
-      <p class="boot-kicker">◆ CHRONICLE OF THE WILDS ◆</p>
-      <h1 class="pixel-title">ANASTA</h1>
-      <p class="boot-sub">Explore · Tame · Survive</p>
-      <div class="loading-bar-wrap">
-        <div class="loading-bar" id="loading-bar-fill"></div>
-      </div>
-      <div id="boot-status">Loading…</div>
-      <button id="btn-start" class="pixel-btn" disabled>▶ PRESS START</button>
-      <div class="boot-credit">Creatures, audio & world: 100% procedurally generated</div>
+    <div class="boot-layout">
+      <aside class="boot-world-note"><span class="world-note-index">REALM 01</span><strong>The Wilds of Anasta</strong><p>A living pixel realm of ancient shrines, wandering spirits, forged relics, and companions waiting to be found.</p><div class="world-note-tags"><span>OPEN WORLD</span><span>MMO</span><span>CODE-BORN ART</span></div></aside>
+      <main class="boot-card">
+        <div class="boot-seal"><span>A</span><i></i></div>
+        <p class="boot-kicker">CHRONICLE OF THE WILDS</p>
+        <h1 class="pixel-title">ANASTA</h1>
+        <p class="boot-sub">Explore <i></i> Tame <i></i> Forge <i></i> Survive</p>
+        <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar-fill"></div></div>
+        <div class="boot-load-row"><div id="boot-status">Loading...</div><span id="boot-percent">BUILDING REALM</span></div>
+        <button id="btn-start" class="pixel-btn" disabled><span>ENTER THE CHRONICLE</span><kbd>START</kbd></button>
+        <div class="boot-credit">WORLD / CREATURES / AUDIO &mdash; 100% PROCEDURAL</div>
+      </main>
+      <aside class="boot-build-note"><span>BUILD</span><b>FOREST AGE</b><small>Local realm ready</small></aside>
     </div>
   </div>
 </div>
 
 <div id="login" class="hidden">
   <canvas id="login-fx"></canvas>
-  <div class="login-card">
-    <div class="login-glow"></div>
-    <h2 class="pixel-h2">WELCOME, TRAVELER</h2>
-    <p class="login-sub">Enter your name to begin your journey</p>
-    <div class="login-input-wrap">
-      <input id="login-name" type="text" maxlength="14" placeholder="Your name…" autocomplete="off" />
-    </div>
-    <div id="login-existing" class="login-existing hidden">
-      <p class="login-return">✦ Welcome back, <b id="login-return-name"></b> ✦</p>
-      <p class="login-stats" id="login-return-stats"></p>
-      <button id="btn-continue" class="pixel-btn">▶ CONTINUE</button>
-    </div>
-    <button id="btn-newgame" class="pixel-btn">✦ NEW TRAVELER</button>
-    <div class="login-divider"><span>or</span></div>
-    <div class="login-quick">
-      <button class="quick-btn" data-name="Akira">Akira</button>
-      <button class="quick-btn" data-name="Yuki">Yuki</button>
-      <button class="quick-btn" data-name="Hana">Hana</button>
-      <button class="quick-btn" data-name="Kai">Kai</button>
-    </div>
-    <p class="login-note">Progress auto-saved locally. No account needed.</p>
+  <div class="login-shell">
+    <section class="realm-showcase">
+      <span class="realm-eyebrow">THE FOREST REMEMBERS</span>
+      <h1>Your legend begins<br/>before the first step.</h1>
+      <p>Create a traveler, master a class, bond with wild companions, and leave your mark across a shared living realm.</p>
+      <div class="login-hero-art" aria-hidden="true"><div class="hero-shadow"></div><div class="hero-cape"></div><div class="hero-body"></div><div class="hero-head"></div><div class="hero-hair"></div><div class="hero-blade"></div><i class="hero-spark s1"></i><i class="hero-spark s2"></i><i class="hero-spark s3"></i></div>
+      <div class="realm-pillars"><div><b>3</b><span>CLASSES</span></div><div><b>14</b><span>COMPANIONS</span></div><div><b>&infin;</b><span>CHRONICLES</span></div></div>
+    </section>
+    <section class="login-card">
+      <div class="login-glow"></div><div class="login-sigil"><span>A</span></div><span class="login-step">REALM ACCESS / 01</span>
+      <h2 class="pixel-h2">WELCOME, TRAVELER</h2><p class="login-sub">Choose the name the realm will remember.</p>
+      <label class="login-input-wrap"><span>TRAVELER NAME</span><input id="login-name" type="text" maxlength="14" placeholder="Your name..." autocomplete="off" /></label>
+      <div id="login-existing" class="login-existing hidden"><span class="save-rune" aria-hidden="true"></span><div><p class="login-return">CHRONICLE FOUND &middot; <b id="login-return-name"></b></p><p class="login-stats" id="login-return-stats"></p></div><button id="btn-continue" class="pixel-btn">CONTINUE <span>&rsaquo;</span></button></div>
+      <button id="btn-newgame" class="pixel-btn login-new">CREATE NEW TRAVELER <span>&rsaquo;</span></button>
+      <div class="login-divider"><span>QUICK NAMES</span></div><div class="login-quick"><button class="quick-btn" data-name="Akira">Akira</button><button class="quick-btn" data-name="Yuki">Yuki</button><button class="quick-btn" data-name="Hana">Hana</button><button class="quick-btn" data-name="Kai">Kai</button></div>
+      <p class="login-note"><i></i> Progress auto-saves on this device. Onchain identity is reserved for a future realm update.</p>
+    </section>
   </div>
 </div>
 
 <div id="creator" class="hidden">
+  <div class="creator-backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
   <div class="creator-card">
-    <h2 class="pixel-h2">CREATE YOUR TRAVELER</h2>
+    <header class="creator-head"><div><span class="creator-step">CHRONICLE GENESIS / 02</span><h2 class="pixel-h2">CREATE YOUR TRAVELER</h2><p>Build a silhouette that feels unmistakably yours.</p></div><div class="creator-progress"><i class="done"></i><i class="active"></i><i></i><span>IDENTITY</span></div></header>
     <div class="creator-body">
       <div class="creator-preview">
-        <canvas id="char-preview" width="128" height="160"></canvas>
+        <div class="preview-stage"><span class="preview-zone">CAMP / NIGHTFALL</span><div class="preview-moon"></div><div class="preview-shrine"></div><canvas id="char-preview" width="192" height="220"></canvas><div class="preview-ground"></div></div>
+        <div class="preview-summary"><span id="preview-class-kicker">VANGUARD PATH</span><strong id="preview-class-name">Warrior</strong><p id="preview-class-desc">Tough melee bruiser. High HP, hits hard up close.</p><div id="preview-traits"><span>70 HP</span><span>MELEE</span><span>GUARD</span></div></div>
+        <div class="preview-motion"><span>POSE</span><button data-preview-state="idle" class="preview-state active">IDLE</button><button data-preview-state="attack" class="preview-state">ACTION</button><button data-preview-state="arcana" class="preview-state">ARCANA</button></div>
         <div class="preview-rot">
-          <button data-rot="down" class="rot-btn active">↓</button>
-          <button data-rot="left" class="rot-btn">←</button>
-          <button data-rot="right" class="rot-btn">→</button>
-          <button data-rot="up" class="rot-btn">↑</button>
+          <button data-rot="down" class="rot-btn active" aria-label="Face down">&darr;</button><button data-rot="left" class="rot-btn" aria-label="Face left">&larr;</button><button data-rot="right" class="rot-btn" aria-label="Face right">&rarr;</button><button data-rot="up" class="rot-btn" aria-label="Face up">&uarr;</button>
         </div>
       </div>
       <div class="creator-opts">
-        <label class="opt-name">NAME<input id="opt-name" maxlength="14" value="Anasta" /></label>
-        <div class="opt-row" data-part="gender">
-          <span>GENDER</span>
-          <div class="class-pick" id="pick-gender">
-            <button data-gender="male" class="cls-btn sel">♂ Male</button>
-            <button data-gender="female" class="cls-btn">♀ Female</button>
-          </div>
-        </div>
-        <div class="opt-row" data-part="class">
-          <span>CLASS</span>
-          <div class="class-pick" id="pick-class">
-            <button data-cls="warrior" class="cls-btn sel">⚔ Warrior</button>
-            <button data-cls="mage" class="cls-btn">✦ Mage</button>
-            <button data-cls="archer" class="cls-btn">➶ Archer</button>
-          </div>
-        </div>
-        <div class="opt-row" data-part="style"><span>HAIR STYLE</span><div class="swatches" id="sw-style"></div></div>
-        <div class="opt-row" data-part="hair"><span>HAIR</span><div class="swatches" id="sw-hair"></div></div>
-        <div class="opt-row" data-part="eyes"><span>EYES</span><div class="swatches" id="sw-eyes"></div></div>
-        <div class="opt-row" data-part="skin"><span>SKIN</span><div class="swatches" id="sw-skin"></div></div>
-        <div class="opt-row" data-part="shirt"><span>SHIRT</span><div class="swatches" id="sw-shirt"></div></div>
-        <div class="opt-row" data-part="pants"><span>PANTS</span><div class="swatches" id="sw-pants"></div></div>
-        <div class="opt-row" data-part="boots"><span>BOOTS</span><div class="swatches" id="sw-boots"></div></div>
+        <nav class="creator-tabs" aria-label="Character customization categories"><button class="creator-tab active" data-creator-tab="identity">01 IDENTITY</button><button class="creator-tab" data-creator-tab="appearance">02 APPEARANCE</button><button class="creator-tab" data-creator-tab="gear">03 GEAR</button><button class="creator-tab" data-creator-tab="arcana">04 ARCANA</button></nav>
+        <section class="creator-panel active" data-creator-panel="identity">
+          <label class="opt-name"><span>TRAVELER NAME</span><input id="opt-name" maxlength="14" value="Anasta" /></label>
+          <div class="opt-row" data-part="gender"><span>BODY</span><div class="class-pick" id="pick-gender"><button data-gender="male" class="cls-btn sel">Type A</button><button data-gender="female" class="cls-btn">Type B</button></div></div>
+          <div class="opt-row class-choice-row" data-part="class"><span>COMBAT PATH</span><div class="class-pick" id="pick-class"><button data-cls="warrior" class="cls-btn sel"><i>W</i><b>Warrior</b><small>Vanguard</small></button><button data-cls="mage" class="cls-btn"><i>M</i><b>Mage</b><small>Arcanist</small></button><button data-cls="archer" class="cls-btn"><i>A</i><b>Archer</b><small>Ranger</small></button></div></div>
+        </section>
+        <section class="creator-panel" data-creator-panel="appearance">
+          <div class="opt-row" data-part="style"><span>HAIR STYLE</span><div class="swatches" id="sw-style"></div></div><div class="opt-row" data-part="hair"><span>HAIR COLOR</span><div class="swatches" id="sw-hair"></div></div><div class="opt-row" data-part="eyes"><span>EYES</span><div class="swatches" id="sw-eyes"></div></div><div class="opt-row" data-part="skin"><span>SKIN</span><div class="swatches" id="sw-skin"></div></div><div class="opt-row" data-part="mark"><span>FACE MARK</span><div class="swatches" id="sw-mark"></div></div><div class="opt-row" data-part="accessory"><span>ACCESSORY</span><div class="swatches" id="sw-accessory"></div></div>
+        </section>
+        <section class="creator-panel" data-creator-panel="gear">
+          <div class="opt-row" data-part="outfit"><span>ARMOR CUT</span><div class="swatches" id="sw-outfit"></div></div><div class="opt-row" data-part="accent"><span>CLASS TRIM</span><div class="swatches" id="sw-accent"></div></div><div class="opt-row" data-part="shirt"><span>INNER LAYER</span><div class="swatches" id="sw-shirt"></div></div><div class="opt-row" data-part="pants"><span>LOWER LAYER</span><div class="swatches" id="sw-pants"></div></div><div class="opt-row" data-part="boots"><span>BOOTS</span><div class="swatches" id="sw-boots"></div></div>
+        </section>
+        <section class="creator-panel" data-creator-panel="arcana"><div class="arcana-intro"><i></i><div><span>SOUL SIGNATURE</span><strong>Your aura is cosmetic.</strong><p>Choose the ambient energy that trails your traveler through the realm.</p></div></div><div class="opt-row aura-row" data-part="aura"><span>AURA</span><div class="swatches" id="sw-aura"></div></div><div class="creator-proof"><span>FUTURE REALM PASSPORT</span><b>Appearance metadata reserved</b><small>Onchain-ready UI only &middot; gameplay remains local</small></div></section>
       </div>
     </div>
     <div class="creator-foot">
-      <button id="btn-random" class="btn-ghost">🎲 RANDOM</button>
-      <button id="btn-enter" class="pixel-btn small">ENTER ▶</button>
+      <button id="btn-random" class="btn-ghost">SHUFFLE LOOK</button><div class="creator-foot-copy"><span>Every layer is generated from code.</span><button id="btn-enter" class="pixel-btn small">BEGIN CHRONICLE <b>&rsaquo;</b></button></div>
     </div>
   </div>
 </div>
@@ -108,7 +101,7 @@
       <div class="bar-row"><span class="bar-label">HP</span><div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div><span class="bar-val" id="hp-text">50</span></div>
       <div class="bar-row"><span class="bar-label">SP</span><div class="bar sp"><div class="bar-fill" id="stamina-fill"></div></div><span class="bar-val" id="stamina-text">100</span></div>
       <div class="bar-row xp-row"><div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div></div>
-      <div class="clock-row"><span id="clock">Day 06:00</span><span id="pet-chip" class="hidden">Pet: —</span></div>
+      <div class="clock-row"><span id="clock">Day 06:00</span><button id="pet-chip" class="hidden" type="button" aria-label="Open companion collection"><span class="pet-chip-orb"></span><b id="pet-chip-name">No companion</b><small id="pet-chip-count">0/14</small></button></div>
     </div>
 
     <div id="boss-hud" class="hidden" aria-live="polite">
@@ -155,6 +148,12 @@
     <div id="toast"></div>
     <div id="dmg-layer"></div>
     <div id="interact-prompt" class="hidden"><kbd>F</kbd> <span id="interact-label">Open</span></div>
+
+    <section id="arrival-banner" class="arrival-banner hidden" aria-live="polite">
+      <div class="arrival-sigil"><span>A</span></div>
+      <div class="arrival-copy"><span id="arrival-kicker">THE FOREST AGE</span><strong id="arrival-title">Welcome to Anasta</strong><p>Follow the lantern road, claim the nearby supply cache, then meet the camp smith.</p><div class="arrival-actions"><span><kbd>WASD</kbd> MOVE</span><span><kbd>F</kbd> INTERACT</span><span><kbd>1</kbd> ATTACK</span></div></div>
+      <button id="arrival-dismiss" type="button" aria-label="Dismiss welcome guide">&times;</button>
+    </section>
 
     <div id="fishing-hud" class="hidden" aria-live="polite">
       <div class="fishing-head"><span id="fishing-state">LINE CAST</span><b id="fishing-condition">Calm water</b></div>
@@ -214,6 +213,12 @@
     <div id="craft-list"></div>
   </div>
   <div id="panel-quest" class="panel hidden"><div class="panel-head"><h2>Quest Log</h2><button class="panel-close" data-close="quest">×</button></div><div id="quest-list"></div></div>
+  <div id="panel-companions" class="panel panel-wide companion-panel hidden">
+    <div class="panel-head"><div><span class="panel-kicker">WILD BONDS</span><h2>Companion Sanctuary</h2></div><button class="panel-close" data-close="companions">×</button></div>
+    <div class="companion-hero"><div class="companion-hero-art"><canvas id="companion-active-art" width="96" height="96"></canvas><i id="companion-element-orb"></i></div><div class="companion-hero-copy"><span id="companion-active-element">NO ACTIVE BOND</span><strong id="companion-active-name">Find your first companion</strong><p id="companion-active-desc">Rare supply caches may reveal wild spirits. Bonded companions remain in your sanctuary and can be summoned at any time.</p><div class="companion-progress"><div><i id="companion-progress-fill"></i></div><b id="companion-owned-count">0 / 14 BONDED</b></div></div><button id="btn-cycle-pet" class="companion-cycle" type="button"><span>NEXT BOND</span><kbd>P</kbd></button></div>
+    <div class="companion-grid-head"><div><span>COMPANION ARCHIVE</span><small>Tap any bonded spirit to summon it.</small></div><div class="element-key"><i class="grass"></i><i class="fire"></i><i class="water"></i><i class="arcane"></i></div></div>
+    <div id="companion-grid" class="companion-grid"></div>
+  </div>
   <div id="panel-dialog" class="panel hidden"><div class="panel-head"><h2 id="dialog-name">NPC</h2><button class="panel-close" data-close="dialog">×</button></div><p id="dialog-text"></p><div id="dialog-quests"></div></div>
   <div id="panel-settings" class="panel hidden">
     <div class="panel-head"><h2>Settings</h2><button class="panel-close" data-close="settings">×</button></div>

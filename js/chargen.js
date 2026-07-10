@@ -11,8 +11,13 @@ export const PRESETS = {
   shirt: ["#4a9678", "#3d6fa8", "#b0503f", "#8557a8", "#c9a23e", "#2f2f38", "#d8683f", "#2b8a7a", "#a03a5a", "#e0e0e8"],
   pants: ["#42486a", "#5a3f2e", "#37503a", "#6a2f3a", "#2c2c34", "#7a6a4a", "#3a3a48", "#5a2a3a"],
   boots: ["#5c3c2c", "#3a3a42", "#7a5230", "#2a2a30", "#8a6a3a"],
+  accent: ["#e8c96a", "#6ee0b0", "#65b8e8", "#a87ae0", "#e06055", "#e887bd", "#f09b4e", "#d7e2ea"],
 };
-export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail"];
+export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail", "bob", "braids", "undercut", "samurai", "waves", "twintails"];
+export const FACE_MARKS = ["none", "scar", "freckles", "warpaint", "rune", "blossom"];
+export const ACCESSORIES = ["none", "headband", "leafpin", "earring", "foxmask", "horns", "crown", "ribbon"];
+export const OUTFITS = ["wanderer", "vanguard", "mythic"];
+export const AURAS = ["none", "ember", "arcane", "verdant", "frost", "void"];
 
 export const DEFAULT_LOOK = {
   name: "Anasta",
@@ -25,7 +30,24 @@ export const DEFAULT_LOOK = {
   pants: PRESETS.pants[0],
   boots: PRESETS.boots[0],
   style: "short",
+  mark: "none",
+  accessory: "none",
+  outfit: "wanderer",
+  accent: PRESETS.accent[0],
+  aura: "none",
 };
+
+export function normalizeLook(value = {}) {
+  const input = value && typeof value === "object" ? value : {};
+  const look = { ...DEFAULT_LOOK, ...input };
+  if (!HAIRSTYLES.includes(look.style)) look.style = DEFAULT_LOOK.style;
+  if (!FACE_MARKS.includes(look.mark)) look.mark = DEFAULT_LOOK.mark;
+  if (!ACCESSORIES.includes(look.accessory)) look.accessory = DEFAULT_LOOK.accessory;
+  if (!OUTFITS.includes(look.outfit)) look.outfit = DEFAULT_LOOK.outfit;
+  if (!AURAS.includes(look.aura)) look.aura = DEFAULT_LOOK.aura;
+  if (!/^#[0-9a-f]{6}$/i.test(look.accent || "")) look.accent = DEFAULT_LOOK.accent;
+  return look;
+}
 
 function shade(hex, f) {
   const n = parseInt(hex.slice(1), 16);
@@ -52,63 +74,97 @@ function pixelLine(ctx, x0, y0, x1, y1, color, size = 1) {
   }
 }
 
-// Class equipment is deliberately separate from the selected clothing colors.
-// It keeps customization visible while giving every class a readable silhouette.
-function drawClassBack(ctx, look, dir, cx, by) {
+// Class gear keeps its silhouette, while accent and outfit make the same class
+// read as a genuinely different traveler instead of a recolored base sprite.
+function drawClassBack(ctx, look, dir, cx, by, frame = 0) {
   const cls = look.cls || "warrior";
+  const outfit = look.outfit || "wanderer";
+  const accent = look.accent || DEFAULT_LOOK.accent;
+  const deep = shade(accent, 0.36), mid = shade(accent, 0.62), hi = shade(accent, 1.18);
+  const sway = [-1, 0, 1, 0][frame % 4];
+
   if (cls === "mage") {
-    const cloak = "#352552", deep = "#241b3e", trim = "#7657a8";
+    const hem = outfit === "mythic" ? 35 : 32;
     if (dir === "left") {
-      px(ctx, cx + 1, 18 + by, 6, 14, deep); px(ctx, cx + 4, 20 + by, 4, 12, cloak);
-      px(ctx, cx + 6, 29 + by, 2, 3, trim);
+      px(ctx, cx + 1, 18 + by, 6, hem - 18, deep); px(ctx, cx + 4, 20 + by, 4, hem - 20, mid);
+      px(ctx, cx + 6, hem - 3 + by + sway, 2, 3, accent);
     } else if (dir === "right") {
-      px(ctx, cx - 7, 18 + by, 6, 14, deep); px(ctx, cx - 8, 20 + by, 4, 12, cloak);
-      px(ctx, cx - 8, 29 + by, 2, 3, trim);
+      px(ctx, cx - 7, 18 + by, 6, hem - 18, deep); px(ctx, cx - 8, 20 + by, 4, hem - 20, mid);
+      px(ctx, cx - 8, hem - 3 + by - sway, 2, 3, accent);
     } else {
-      px(ctx, cx - 7, 18 + by, 14, 13, deep);
-      px(ctx, cx - 6, 20 + by, 12, 13, cloak);
-      px(ctx, cx - 6, 31 + by, 3, 2, trim); px(ctx, cx + 3, 31 + by, 3, 2, trim);
+      px(ctx, cx - 7, 18 + by, 14, hem - 18, deep);
+      px(ctx, cx - 6, 20 + by, 12, hem - 19, mid);
+      px(ctx, cx - 6, hem - 1 + by + sway, 3, 2, accent); px(ctx, cx + 3, hem - 1 + by - sway, 3, 2, accent);
+    }
+    if (outfit === "vanguard") {
+      px(ctx, cx - 9, 17 + by, 5, 4, deep); px(ctx, cx + 4, 17 + by, 5, 4, deep);
+      px(ctx, cx - 8, 17 + by, 3, 2, hi); px(ctx, cx + 5, 17 + by, 3, 2, hi);
+    } else if (outfit === "mythic") {
+      px(ctx, cx - 5, 23 + by, 2, 2, hi); px(ctx, cx + 3, 27 + by, 2, 2, hi);
+      px(ctx, cx - 1, 31 + by, 2, 2, accent);
     }
   } else if (cls === "archer") {
-    const leather = "#583b27", rim = "#8b6238", feather = "#d8e8c8";
+    const leather = "#583b27", rim = outfit === "mythic" ? accent : "#8b6238";
     const qx = dir === "left" ? cx + 3 : dir === "right" ? cx - 6 : dir === "up" ? cx + 4 : cx - 7;
     px(ctx, qx, 13 + by, 4, 15, leather); px(ctx, qx + 1, 15 + by, 2, 11, rim);
     px(ctx, qx - 1, 12 + by, 6, 2, "#2d241e");
-    pixelLine(ctx, qx + 1, 12 + by, qx + 1, 7 + by, "#b7c0a8");
-    pixelLine(ctx, qx + 3, 12 + by, qx + 4, 8 + by, "#b7c0a8");
-    px(ctx, qx, 7 + by, 2, 2, feather); px(ctx, qx + 3, 7 + by, 2, 2, "#b7d7bd");
+    pixelLine(ctx, qx + 1, 12 + by, qx + 1 + sway, 7 + by, hi);
+    pixelLine(ctx, qx + 3, 12 + by, qx + 4 - sway, 8 + by, hi);
+    px(ctx, qx + sway, 7 + by, 2, 2, accent); px(ctx, qx + 3 - sway, 7 + by, 2, 2, shade(accent, 0.9));
+    if (outfit === "vanguard" && (dir === "up" || dir === "down")) {
+      px(ctx, cx - 6, 18 + by, 12, 7, deep); px(ctx, cx - 4, 19 + by, 8, 5, mid);
+    } else if (outfit === "mythic") {
+      const capeX = dir === "right" ? cx - 7 : cx + 3;
+      px(ctx, capeX, 20 + by, 4, 12 + sway, deep); px(ctx, capeX + 1, 22 + by, 2, 8 + sway, accent);
+    }
   } else if (cls === "warrior") {
-    // Warrior scabbard sits behind the layered plate silhouette.
     const x = dir === "right" ? cx - 7 : cx + 4;
     if (dir === "left" || dir === "right" || dir === "up") {
-      px(ctx, x, 21 + by, 3, 13, "#503226"); px(ctx, x + 1, 23 + by, 1, 9, "#95643a");
-      px(ctx, x - 1, 20 + by, 5, 2, "#b28a4e");
+      px(ctx, x, 21 + by, 3, 13, "#503226"); px(ctx, x + 1, 23 + by, 1, 9, accent);
+      px(ctx, x - 1, 20 + by, 5, 2, hi);
+    }
+    if (outfit === "vanguard") {
+      const sx = dir === "right" ? cx - 8 : cx - 6;
+      px(ctx, sx, 18 + by, 12, 10, "#394650"); px(ctx, sx + 1, 19 + by, 10, 8, mid);
+      px(ctx, sx + 4, 20 + by, 4, 6, deep); px(ctx, sx + 5, 22 + by, 2, 2, hi);
+    } else if (outfit === "mythic") {
+      px(ctx, cx - 6, 18 + by, 12, 15, deep); px(ctx, cx - 4, 20 + by, 8, 13, mid);
+      px(ctx, cx - 4, 31 + by + sway, 3, 2, accent); px(ctx, cx + 1, 31 + by - sway, 3, 2, accent);
     }
   }
 }
 
-function drawClassFront(ctx, look, dir, cx, by) {
+function drawClassFront(ctx, look, dir, cx, by, frame = 0) {
   const cls = look.cls || "warrior";
+  const outfit = look.outfit || "wanderer";
+  const accent = look.accent || DEFAULT_LOOK.accent;
+  const deep = shade(accent, 0.36), mid = shade(accent, 0.62), hi = shade(accent, 1.2);
   const tTop = 16 + by, tBot = 27 + by;
+
   if (cls === "mage") {
-    const robe = "#4b3372", robeHi = "#7957aa", robeDeep = "#2b2048", rune = "#9de8ef";
     if (dir === "left" || dir === "right") {
       const edge = dir === "left" ? cx - 5 : cx + 3;
-      px(ctx, edge, tTop + 1, 3, 9, robeDeep); px(ctx, edge, tTop + 1, 2, 3, robeHi);
-      px(ctx, edge, tBot - 1, 4, 6, robe); px(ctx, edge, tBot + 3, 2, 2, robeHi);
+      px(ctx, edge, tTop + 1, 3, 9, deep); px(ctx, edge, tTop + 1, 2, 3, hi);
+      px(ctx, edge, tBot - 1, 4, outfit === "mythic" ? 8 : 6, mid); px(ctx, edge, tBot + 3, 2, 2, accent);
     } else {
-      px(ctx, cx - 6, tTop, 12, 3, robeDeep); // broad cowl
-      px(ctx, cx - 4, tTop + 1, 8, 2, robeHi);
-      px(ctx, cx - 4, tBot - 1, 8, 6, robe);
-      px(ctx, cx - 4, tBot + 4, 3, 2, robeDeep); px(ctx, cx + 1, tBot + 4, 3, 2, robeDeep);
+      px(ctx, cx - 6, tTop, 12, 3, deep);
+      px(ctx, cx - 4, tTop + 1, 8, 2, hi);
+      px(ctx, cx - 4, tBot - 1, 8, outfit === "mythic" ? 8 : 6, mid);
+      px(ctx, cx - 4, tBot + 4, 3, 2, deep); px(ctx, cx + 1, tBot + 4, 3, 2, deep);
       if (dir === "down") {
-        px(ctx, cx - 1, tTop + 5, 2, 2, rune); px(ctx, cx - 2, tTop + 6, 4, 1, rune);
-        px(ctx, cx - 1, tTop + 7, 2, 2, "#d7fbff");
+        px(ctx, cx - 1, tTop + 5, 2, 2, accent); px(ctx, cx - 2, tTop + 6, 4, 1, hi);
+        px(ctx, cx - 1, tTop + 7, 2, 2, "#ecffff");
       }
     }
+    if (outfit === "vanguard") {
+      px(ctx, cx - 8, tTop, 4, 4, deep); px(ctx, cx + 4, tTop, 4, 4, deep);
+      px(ctx, cx - 7, tTop, 3, 2, hi); px(ctx, cx + 4, tTop, 3, 2, hi);
+    } else if (outfit === "mythic" && dir === "down") {
+      px(ctx, cx - 4, tBot + 2, 2, 2, hi); px(ctx, cx + 2, tBot + 4, 2, 2, hi);
+    }
   } else if (cls === "archer") {
-    const green = "#284d3b", light = "#4f8060", leather = "#805638", buckle = "#d0aa58";
-    px(ctx, cx - 6, tTop, 12, 2, green); // short mantle
+    const leather = "#805638", buckle = accent;
+    px(ctx, cx - 6, tTop, 12, outfit === "vanguard" ? 3 : 2, deep);
     if (dir === "down") {
       pixelLine(ctx, cx - 5, tTop + 1, cx + 3, tBot - 2, leather, 2);
       px(ctx, cx + 2, tBot - 3, 3, 3, buckle);
@@ -116,29 +172,126 @@ function drawClassFront(ctx, look, dir, cx, by) {
       pixelLine(ctx, cx + 4, tTop + 1, cx - 3, tBot - 2, leather, 2);
     } else {
       const front = dir === "left" ? cx - 5 : cx + 3;
-      px(ctx, front, tTop + 2, 3, 7, light); px(ctx, front, tTop + 5, 3, 2, leather);
+      px(ctx, front, tTop + 2, 3, 7, mid); px(ctx, front, tTop + 5, 3, 2, leather);
     }
     px(ctx, cx - 5, tBot - 1, 10, 2, leather); px(ctx, cx - 1, tBot - 1, 2, 2, buckle);
+    if (outfit === "vanguard") {
+      px(ctx, cx - 7, tTop + 2, 3, 7, mid); px(ctx, cx + 4, tTop + 2, 3, 7, mid);
+      px(ctx, cx - 7, tTop + 4, 2, 2, hi); px(ctx, cx + 5, tTop + 4, 2, 2, hi);
+    } else if (outfit === "mythic") {
+      px(ctx, cx - 6, tTop, 3, 5, mid); px(ctx, cx + 3, tTop, 3, 5, mid);
+      if (dir === "down") px(ctx, cx - 1, tTop + 3 + (frame % 2), 2, 2, hi);
+    }
   } else if (cls === "warrior") {
-    const iron = "#687783", steel = "#a9bac2", dark = "#3e4952", gold = "#caa455";
+    const iron = outfit === "mythic" ? mid : "#687783";
+    const steel = outfit === "mythic" ? hi : "#a9bac2", dark = outfit === "mythic" ? deep : "#3e4952";
     if (dir === "left" || dir === "right") {
       const front = dir === "left" ? cx - 7 : cx + 4;
-      px(ctx, front, tTop, 4, 4, dark); px(ctx, front, tTop, 3, 2, steel);
+      px(ctx, front, tTop, 4, outfit === "vanguard" ? 5 : 4, dark); px(ctx, front, tTop, 3, 2, steel);
       px(ctx, dir === "left" ? cx - 5 : cx + 2, tTop + 3, 4, 8, iron);
     } else {
-      px(ctx, cx - 8, tTop, 4, 4, dark); px(ctx, cx + 4, tTop, 4, 4, dark);
+      px(ctx, cx - 8, tTop, 4, outfit === "vanguard" ? 5 : 4, dark); px(ctx, cx + 4, tTop, 4, outfit === "vanguard" ? 5 : 4, dark);
       px(ctx, cx - 7, tTop, 3, 2, steel); px(ctx, cx + 4, tTop, 3, 2, steel);
       px(ctx, cx - 4, tTop + 2, 8, 8, iron);
       px(ctx, cx - 3, tTop + 3, 6, 2, steel);
       px(ctx, cx - 1, tTop + 5, 2, 4, dark);
-      if (dir === "down") px(ctx, cx - 1, tTop + 5, 2, 2, gold);
+      if (dir === "down") px(ctx, cx - 1, tTop + 5, 2, 2, accent);
+    }
+    if (outfit === "vanguard") {
+      px(ctx, cx - 8, tTop + 4, 3, 5, iron); px(ctx, cx + 5, tTop + 4, 3, 5, iron);
+      px(ctx, cx - 7, tTop + 5, 2, 2, accent); px(ctx, cx + 5, tTop + 5, 2, 2, accent);
+    } else if (outfit === "mythic" && dir === "down") {
+      px(ctx, cx - 3, tBot - 1, 6, 7, deep); px(ctx, cx - 1, tBot, 2, 6, accent);
     }
   }
 }
 
-// Draw one body frame. phase: walk bob index; atk: 0..1 swing progress (or null)
-// Top-down 3/4 RPG proportions: distinct head, shouldered torso, two legs.
-function drawBody(ctx, look, dir, frame, atkPhase) {
+const AURA_PALETTES = {
+  ember: ["#ff5a2d", "#ffc05a"],
+  arcane: ["#8c65e8", "#e6c7ff"],
+  verdant: ["#3fd68d", "#bcff8a"],
+  frost: ["#6fdcff", "#e7fbff"],
+  void: ["#6b3c9b", "#ef69d5"],
+};
+
+function drawAura(ctx, look, frame, energy = 0) {
+  const pal = AURA_PALETTES[look.aura];
+  if (!pal) return;
+  const phase = frame % 4;
+  const sparks = [[4, 29], [27, 25], [6, 15], [25, 9], [11, 5], [22, 33], [3, 21], [29, 18]];
+  ctx.save();
+  ctx.globalAlpha = 0.3 + Math.min(0.22, energy * 0.22);
+  for (let i = 0; i < 5; i++) {
+    const p = sparks[(i + phase * 2) % sparks.length];
+    const lift = (phase + i) % 4;
+    px(ctx, p[0], p[1] - lift, i % 3 === 0 ? 2 : 1, i % 3 === 0 ? 2 : 1, pal[i % 2]);
+  }
+  ctx.globalAlpha *= 0.55;
+  px(ctx, 8 - phase % 2, 35, 6, 1, pal[0]);
+  px(ctx, 18 + phase % 2, 35, 6, 1, pal[1]);
+  ctx.restore();
+}
+
+function drawFaceMark(ctx, look, dir, cx, hy, skinShade) {
+  const mark = look.mark || "none";
+  const accent = look.accent || DEFAULT_LOOK.accent;
+  if (mark === "none" || dir === "up") return;
+  const side = dir === "left" ? -1 : 1;
+  if (mark === "scar") {
+    const x = dir === "down" ? cx + 3 : cx + side * 4;
+    px(ctx, x, hy, 1, 1, "#7d3b36"); px(ctx, x - side, hy + 2, 1, 1, "#7d3b36");
+  } else if (mark === "freckles") {
+    if (dir === "down") { px(ctx, cx - 4, hy + 3, 1, 1, skinShade); px(ctx, cx + 3, hy + 3, 1, 1, skinShade); px(ctx, cx, hy + 3, 1, 1, skinShade); }
+    else { px(ctx, cx + side * 4, hy + 3, 1, 1, skinShade); px(ctx, cx + side * 2, hy + 4, 1, 1, skinShade); }
+  } else if (mark === "warpaint") {
+    if (dir === "down") { px(ctx, cx - 5, hy + 2, 2, 1, accent); px(ctx, cx + 3, hy + 2, 2, 1, accent); px(ctx, cx - 4, hy + 4, 1, 1, accent); px(ctx, cx + 3, hy + 4, 1, 1, accent); }
+    else px(ctx, cx + side * 3, hy + 2, 2, 1, accent);
+  } else if (mark === "rune") {
+    px(ctx, cx - 1, hy - 2, 2, 1, accent); px(ctx, cx, hy - 3, 1, 3, shade(accent, 1.2));
+  } else if (mark === "blossom") {
+    const x = dir === "right" ? cx + 3 : cx - 4;
+    px(ctx, x, hy + 2, 2, 2, "#ef8db0"); px(ctx, x + 1, hy + 1, 1, 4, "#ffd0df");
+  }
+}
+
+function drawAccessory(ctx, look, dir, cx, hy, frame) {
+  const accessory = look.accessory || "none";
+  const accent = look.accent || DEFAULT_LOOK.accent;
+  const hi = shade(accent, 1.22), deep = shade(accent, 0.52);
+  const sway = [-1, 0, 1, 0][frame % 4];
+  if (accessory === "none") return;
+
+  if (accessory === "headband") {
+    px(ctx, cx - 6, hy - 2, 12, 2, deep); px(ctx, cx - 4, hy - 2, 8, 1, accent);
+    if (dir === "left") px(ctx, cx + 5, hy - 1, 3, 3, hi);
+    else if (dir === "right") px(ctx, cx - 8, hy - 1, 3, 3, hi);
+  } else if (accessory === "leafpin") {
+    const x = dir === "left" ? cx - 6 : cx + 4;
+    px(ctx, x, hy - 4, 2, 4, "#63b75c"); px(ctx, x + (dir === "left" ? -1 : 1), hy - 3, 2, 2, hi);
+  } else if (accessory === "earring") {
+    if (dir !== "up") {
+      const x = dir === "right" ? cx + 5 : cx - 6;
+      px(ctx, x, hy + 3, 1, 3, hi); px(ctx, x - 1, hy + 5, 3, 2, accent);
+    }
+  } else if (accessory === "foxmask") {
+    const x = dir === "left" ? cx + 3 : cx - 8;
+    px(ctx, x, hy - 4, 5, 6, "#f0e8dc"); px(ctx, x, hy - 6, 2, 3, "#f0e8dc"); px(ctx, x + 3, hy - 6, 2, 3, "#f0e8dc");
+    px(ctx, x + 1, hy - 2, 1, 1, "#d65349"); px(ctx, x + 3, hy - 2, 1, 1, "#d65349"); px(ctx, x + 2, hy, 1, 1, deep);
+  } else if (accessory === "horns") {
+    px(ctx, cx - 5, hy - 9, 3, 5, deep); px(ctx, cx + 2, hy - 9, 3, 5, deep);
+    px(ctx, cx - 4, hy - 10, 2, 3, hi); px(ctx, cx + 2, hy - 10, 2, 3, hi);
+  } else if (accessory === "crown") {
+    px(ctx, cx - 5, hy - 8, 10, 3, deep); px(ctx, cx - 4, hy - 10, 2, 4, hi); px(ctx, cx - 1, hy - 11, 2, 5, accent); px(ctx, cx + 3, hy - 10, 2, 4, hi);
+  } else if (accessory === "ribbon") {
+    const x = dir === "right" ? cx - 8 : cx + 5;
+    px(ctx, x, hy - 2, 3, 3, accent); px(ctx, x + (dir === "right" ? -2 : 2), hy - 3, 3, 3, hi);
+    px(ctx, x + sway, hy + 1, 2, 6, deep); px(ctx, x + 2 - sway, hy + 1, 2, 5, accent);
+  }
+}
+
+// Draw one body frame. Existing callers keep walk/attack behavior; optional poses
+// let previews and skills use richer motion without changing that public API.
+function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0) {
   const O = "#211d26";
   const sk = look.skin, sk2 = shade(look.skin, 0.86), sk3 = shade(look.skin, 0.72);
   const hr = look.hair, hr2 = shade(look.hair, 1.22), hr3 = shade(look.hair, 0.72);
@@ -148,19 +301,26 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
   const eyeCol = look.eyes || "#26222a";
   const st = look.style;
 
-  const walking = atkPhase == null;
-  const attackBeat = walking ? 0 : Math.sin(Math.PI * atkPhase);
-  const bob = walking ? [0, -1, 0, -1][frame % 4] : -Math.round(attackBeat); // planted attack dip
-  const step = walking ? [0, 1, 0, -1][frame % 4] : 0;       // leg stride
+  const attacking = atkPhase != null;
+  const walking = !attacking && pose === "walk";
+  const idle = !attacking && pose === "idle";
+  const actionBeat = attacking ? Math.sin(Math.PI * atkPhase) : Math.sin(Math.PI * posePhase);
+  const attackBeat = attacking ? actionBeat : 0;
+  const bob = walking ? [0, -1, 0, -1][frame % 4]
+    : idle ? [0, 0, -1, 0][frame % 4]
+      : pose === "cast" ? -Math.round(actionBeat) : 0;
+  const step = walking ? [0, 1, 0, -1][frame % 4] : pose === "dash" ? (frame % 2 ? 1 : 0) : 0;
   const by = bob;
-  const lunge = Math.round(attackBeat * 2);
+  const lunge = attacking ? Math.round(attackBeat * 2) : pose === "dash" ? Math.round(actionBeat * 3) : 0;
   const cx = 16 + (dir === "right" ? lunge : dir === "left" ? -lunge : 0);
+
+  drawAura(ctx, look, frame, Math.max(attackBeat, pose === "cast" ? actionBeat : 0));
 
   // ground shadow
   ctx.fillStyle = "rgba(18,16,20,0.30)";
   ctx.beginPath(); ctx.ellipse(cx, 37, 7, 2.2, 0, 0, 7); ctx.fill();
 
-  drawClassBack(ctx, look, dir, cx, by);
+  drawClassBack(ctx, look, dir, cx, by, frame);
 
   // ================= LEGS (distinct, with stride) =================
   const legTop = 27 + by, legLen = 7;
@@ -219,7 +379,23 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
 
   // ================= ARMS (at the sides, swing while walking) ==============
   const armSw = walking ? [0, 1, 0, -1][frame % 4] : 0;
-  if (!walking) {
+  if (pose === "cast" && !attacking) {
+    const lift = 2 + Math.round(actionBeat * 4);
+    if (dir === "down" || dir === "up") {
+      pixelLine(ctx, cx - 5, tTop + 3, cx - 8, tTop + 3 - lift, sh2, 2);
+      pixelLine(ctx, cx + 4, tTop + 3, cx + 7, tTop + 3 - lift, sh2, 2);
+      px(ctx, cx - 9, tTop + 2 - lift, 2, 2, sk); px(ctx, cx + 7, tTop + 2 - lift, 2, 2, sk);
+    } else {
+      const front = dir === "left" ? -1 : 1;
+      pixelLine(ctx, cx, tTop + 3, cx + front * (7 + lift), tTop - lift, sh2, 2);
+      px(ctx, cx + front * (7 + lift), tTop - lift, 2, 2, sk);
+      pixelLine(ctx, cx - front * 3, tTop + 4, cx - front * 5, tTop + 7, sh2, 2);
+    }
+  } else if (pose === "dash" && !attacking) {
+    const trail = dir === "left" || dir === "right" ? (dir === "left" ? 1 : -1) : 0;
+    pixelLine(ctx, cx - 5, tTop + 2, cx - 5 + trail * 4, tTop + 7, sh2, 2);
+    pixelLine(ctx, cx + 4, tTop + 2, cx + 4 + trail * 4, tTop + 7, sh2, 2);
+  } else if (attacking) {
     const reach = 1 + Math.round(attackBeat * 4);
     if (dir === "down") {
       pixelLine(ctx, cx - 6, tTop + 2, cx - 2, tTop + 5, sh2, 2);
@@ -252,7 +428,7 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
     px(ctx, cx + 3, tTop + 9 - armSw, 2, 2, sk);
   }
 
-  drawClassFront(ctx, look, dir, cx, by);
+  drawClassFront(ctx, look, dir, cx, by, frame);
 
   // ================= HEAD (defined, slightly large but not a blob) =========
   const hy = 10 + by;
@@ -266,14 +442,20 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
   ctx.fillStyle = sk3; px(ctx, cx - 5, hy + 4, 10, 1, sk3); // jaw shade
 
   // ---- hair by style ----
+  const hairSway = [-1, 0, 1, 0][frame % 4];
   if (st !== "bald") {
     if (dir === "up") {
       // back of head fully covered
       ctx.fillStyle = hr; roundRect(ctx, cx - 5, hy - 6, 10, 9, 3); ctx.fill();
       ctx.fillStyle = hr2; px(ctx, cx - 5, hy - 6, 10, 2, hr2);
-      if (st === "long") { px(ctx, cx - 5, hy, 2, 10, hr); px(ctx, cx + 3, hy, 2, 10, hr); }
-      if (st === "ponytail") { px(ctx, cx - 1, hy + 3, 2, 8, hr); px(ctx, cx - 1, hy + 9, 2, 2, hr2); }
+      if (st === "long" || st === "waves") { px(ctx, cx - 6, hy, 3, 10 + hairSway, hr); px(ctx, cx + 3, hy, 3, 10 - hairSway, hr); }
+      if (st === "ponytail") { px(ctx, cx - 1 + hairSway, hy + 3, 2, 8, hr); px(ctx, cx - 1 + hairSway, hy + 9, 2, 2, hr2); }
       if (st === "mohawk") { px(ctx, cx - 1, hy - 7, 2, 8, hr2); }
+      if (st === "bob") { px(ctx, cx - 6, hy - 1, 3, 8, hr); px(ctx, cx + 3, hy - 1, 3, 8, hr); px(ctx, cx - 4, hy + 5, 8, 2, hr3); }
+      if (st === "braids") { pixelLine(ctx, cx - 5, hy, cx - 7 + hairSway, hy + 10, hr, 2); pixelLine(ctx, cx + 4, hy, cx + 6 - hairSway, hy + 10, hr, 2); px(ctx, cx - 8 + hairSway, hy + 9, 3, 2, hr2); px(ctx, cx + 5 - hairSway, hy + 9, 3, 2, hr2); }
+      if (st === "undercut") { px(ctx, cx - 5, hy - 1, 2, 4, sk2); px(ctx, cx + 3, hy - 1, 2, 4, sk2); px(ctx, cx - 2, hy - 8, 7, 4, hr); }
+      if (st === "samurai") { px(ctx, cx - 3, hy - 9, 6, 4, hr3); px(ctx, cx - 2, hy - 11, 4, 3, hr); }
+      if (st === "twintails") { px(ctx, cx - 8, hy - 1, 4, 4, hr); px(ctx, cx + 4, hy - 1, 4, 4, hr); px(ctx, cx - 8 + hairSway, hy + 2, 2, 8, hr); px(ctx, cx + 6 - hairSway, hy + 2, 2, 8, hr); }
     } else {
       // top + sides fringe
       ctx.fillStyle = hr; roundRect(ctx, cx - 6, hy - 6, 12, 6, 3); ctx.fill();
@@ -285,8 +467,14 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
       for (let x = cx - 4; x < cx + 5; x += 2) px(ctx, x, hy - 1, 1, 2, hr3);
       if (st === "spiky") { for (let i = 0; i < 5; i++) { px(ctx, cx - 5 + i * 2.4, hy - 9, 2, 4, hr); px(ctx, cx - 5 + i * 2.4, hy - 9, 1, 2, hr2); } }
       if (st === "mohawk") { px(ctx, cx - 1, hy - 10, 3, 6, hr); px(ctx, cx - 1, hy - 10, 3, 2, hr2); }
-      if (st === "long") { px(ctx, cx - 7, hy - 2, 2, 12, hr); px(ctx, cx + 5, hy - 2, 2, 12, hr); px(ctx, cx - 7, hy + 8, 2, 2, hr3); px(ctx, cx + 5, hy + 8, 2, 2, hr3); }
-      if (st === "ponytail") { px(ctx, cx + 5, hy - 3, 3, 3, hr); px(ctx, cx + 6, hy, 2, 8, hr); }
+      if (st === "long") { px(ctx, cx - 7, hy - 2, 2, 12 + hairSway, hr); px(ctx, cx + 5, hy - 2, 2, 12 - hairSway, hr); px(ctx, cx - 7, hy + 8 + hairSway, 2, 2, hr3); px(ctx, cx + 5, hy + 8 - hairSway, 2, 2, hr3); }
+      if (st === "ponytail") { px(ctx, cx + 5, hy - 3, 3, 3, hr); px(ctx, cx + 6 + hairSway, hy, 2, 8, hr); }
+      if (st === "bob") { px(ctx, cx - 7, hy - 2, 3, 9, hr); px(ctx, cx + 4, hy - 2, 3, 9, hr); px(ctx, cx - 5, hy + 5, 10, 2, hr3); }
+      if (st === "braids") { pixelLine(ctx, cx - 6, hy, cx - 8 + hairSway, hy + 10, hr, 2); pixelLine(ctx, cx + 5, hy, cx + 7 - hairSway, hy + 10, hr, 2); px(ctx, cx - 9 + hairSway, hy + 9, 3, 2, hr2); px(ctx, cx + 6 - hairSway, hy + 9, 3, 2, hr2); }
+      if (st === "undercut") { px(ctx, cx - 6, hy - 2, 2, 4, sk2); px(ctx, cx + 4, hy - 2, 2, 4, sk2); pixelLine(ctx, cx - 4, hy - 6, cx + 5, hy - 3, hr2, 2); }
+      if (st === "samurai") { px(ctx, cx - 3, hy - 9, 6, 4, hr3); px(ctx, cx - 2, hy - 11, 4, 3, hr); px(ctx, cx + 4, hy - 2, 3, 5, hr); }
+      if (st === "waves") { px(ctx, cx - 7, hy - 2, 3, 5, hr); px(ctx, cx - 8, hy + 2, 3, 4 + hairSway, hr3); px(ctx, cx + 4, hy - 2, 3, 5, hr); px(ctx, cx + 5, hy + 2, 3, 4 - hairSway, hr3); }
+      if (st === "twintails") { px(ctx, cx - 9, hy - 2, 4, 4, hr); px(ctx, cx + 5, hy - 2, 4, 4, hr); px(ctx, cx - 9 + hairSway, hy + 1, 2, 9, hr); px(ctx, cx + 7 - hairSway, hy + 1, 2, 9, hr); }
     }
   }
 
@@ -303,6 +491,8 @@ function drawBody(ctx, look, dir, frame, atkPhase) {
     px(ctx, cx + 2, hy + 1, 2, 2, "#fff"); px(ctx, cx + 3, hy + 1, 1, 2, eyeCol);
     px(ctx, cx + 4, hy + 3, 1, 1, "#e89aa0");
   }
+  drawFaceMark(ctx, look, dir, cx, hy, sk3);
+  drawAccessory(ctx, look, dir, cx, hy, frame);
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -441,15 +631,43 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   }
 }
 
-// Build a cache of canvases for a given look. Returns { walk:{dir:[canvas..]}, atk:{dir:[canvas..]} }
+function buildPoseSet(look, pose, count) {
+  const out = {};
+  for (const dir of DIRS) {
+    out[dir] = [];
+    for (let f = 0; f < count; f++) {
+      const cv = document.createElement("canvas"); cv.width = CW; cv.height = CH;
+      const c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
+      drawBody(c, look, dir, f, null, pose, count > 1 ? f / (count - 1) : 0);
+      out[dir].push(cv);
+    }
+  }
+  return out;
+}
+
+function addLazyPose(cache, look, pose, count) {
+  Object.defineProperty(cache, pose, {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const frames = buildPoseSet(look, pose, count);
+      Object.defineProperty(cache, pose, { configurable: true, enumerable: true, value: frames });
+      return frames;
+    },
+  });
+}
+
+// Existing walk/atk fields remain unchanged. New poses are lazy so older screens
+// that rebuild previews frequently do not allocate unused canvases.
 export function buildCharacter(look) {
+  const resolved = normalizeLook(look);
   const cache = { walk: {}, atk: {}, weaponWalk: {}, weaponAtk: {} };
   for (const dir of DIRS) {
     cache.walk[dir] = [];
     for (let f = 0; f < 4; f++) {
       const cv = document.createElement("canvas"); cv.width = CW; cv.height = CH;
       const c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
-      drawBody(c, look, dir, f, null);
+      drawBody(c, resolved, dir, f, null);
       cache.walk[dir].push(cv);
     }
     // attack: 5 frames of swing
@@ -458,11 +676,14 @@ export function buildCharacter(look) {
       const cv = document.createElement("canvas"); cv.width = CW; cv.height = CH;
       const c = cv.getContext("2d"); c.imageSmoothingEnabled = false;
       const phase = s / 4;
-      drawBody(c, look, dir, 0, phase);
+      drawBody(c, resolved, dir, 0, phase);
       cache.atk[dir].push(cv);
     }
   }
-  cache.look = look;
+  addLazyPose(cache, resolved, "idle", 4);
+  addLazyPose(cache, resolved, "cast", 6);
+  addLazyPose(cache, resolved, "dash", 4);
+  cache.look = resolved;
   return cache;
 }
 

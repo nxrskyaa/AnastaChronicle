@@ -4,10 +4,14 @@ import "./logic.js";
 import "./interactions.js";
 import "./render.js";
 import { UI } from "./ui.js";
-import { buildCharacter, PRESETS, HAIRSTYLES, DEFAULT_LOOK } from "./chargen.js";
+import {
+  buildCharacter, buildWeapon, PRESETS, HAIRSTYLES, FACE_MARKS,
+  ACCESSORIES, OUTFITS, AURAS, DEFAULT_LOOK, normalizeLook,
+} from "./chargen.js";
 import { audio } from "./audio.js";
 import { computeView } from "./view.js";
 import { connectMultiplayer, net } from "./net.js";
+import { CLASSES } from "./classes.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -67,67 +71,169 @@ initBootFx();
 
 async function preload() {
   try {
-    // Simulated load steps for visual feedback (loading bar animation)
-    const steps = ["Init engine", "Generating terrain", "Spawning creatures", "Tuning audio", "Ready"];
-    for (let i = 0; i < steps.length; i++) {
-      bootStatus.textContent = `Loading… ${steps[i]}`;
-      if (loadingBar) loadingBar.style.width = `${((i + 1) / steps.length) * 100}%`;
-      await loadAll((d, t) => { bootStatus.textContent = `Loading… ${d}/${t}`; });
-      await new Promise(r => setTimeout(r, 200));
-    }
+    const started = performance.now();
+    bootStatus.textContent = "Forging code-born sprites";
+    await loadAll((done, total) => {
+      const pct = Math.round(done / total * 100);
+      if (loadingBar) loadingBar.style.width = `${pct}%`;
+      const label = pct < 35 ? "Forging code-born sprites" : pct < 70 ? "Growing the forest realm" : "Binding wild spirits";
+      bootStatus.textContent = label;
+      const meter = document.getElementById("boot-percent"); if (meter) meter.textContent = `${pct}% GENERATED`;
+    });
+    const remaining = Math.max(0, 650 - (performance.now() - started));
+    if (remaining) await new Promise(r => setTimeout(r, remaining));
     if (loadingBar) loadingBar.style.width = "100%";
-    bootStatus.textContent = "Ready";
+    bootStatus.textContent = "Realm ready";
+    const meter = document.getElementById("boot-percent"); if (meter) meter.textContent = "100% READY";
     startBtn.disabled = false;
   } catch (e) { bootStatus.textContent = "Load error: " + e.message; console.error(e); }
 }
 
 let rotDir = "down";
-function drawPreview() {
+let previewState = "idle";
+let previewCache = null;
+let previewWeapon = null;
+let previewLookKey = "";
+let previewRAF = null;
+
+const PREVIEW_META = {
+  warrior: { kicker: "VANGUARD PATH", traits: ["70 HP", "MELEE", "GUARD"] },
+  mage: { kicker: "ARCANIST PATH", traits: ["44 HP", "RANGED", "BURST"] },
+  archer: { kicker: "RANGER PATH", traits: ["52 HP", "RANGED", "AGILE"] },
+};
+
+function invalidatePreview() { previewLookKey = ""; }
+
+function updateCreatorSummary() {
+  const cls = CLASSES[look.cls] || CLASSES.warrior;
+  const meta = PREVIEW_META[look.cls] || PREVIEW_META.warrior;
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+  set("preview-class-kicker", meta.kicker);
+  set("preview-class-name", cls.name);
+  set("preview-class-desc", cls.blurb);
+  const traits = document.getElementById("preview-traits");
+  if (traits) traits.innerHTML = meta.traits.map(v => `<span>${v}</span>`).join("");
+  document.querySelector(".preview-summary")?.style.setProperty("--preview-accent", look.accent || cls.color);
+}
+
+function drawPreview(now = performance.now()) {
   const cv = document.getElementById("char-preview");
+  if (!cv) return;
   const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, cv.width, cv.height);
-  const cache = buildCharacter(look);
-  const f = Math.floor(Date.now() / 200) % 4;
-  ctx.drawImage(cache.walk[rotDir][f], 0, 0, 32, 40, 16, 12, 96, 120);
+  const resolved = normalizeLook(look);
+  const key = JSON.stringify(resolved);
+  if (!previewCache || previewLookKey !== key) {
+    previewLookKey = key;
+    previewCache = buildCharacter(resolved);
+    previewWeapon = buildWeapon((CLASSES[resolved.cls] || CLASSES.warrior).weapon);
+  }
+  const pulse = now / 1000;
+  const phase = previewState === "attack" ? (Math.floor(now / 105) % 5) : previewState === "arcana" ? (Math.floor(now / 125) % 6) : (Math.floor(now / 230) % 4);
+  const pose = previewState === "attack" ? previewCache.atk : previewState === "arcana" ? previewCache.cast : previewCache.idle;
+  const bodyFrames = pose?.[rotDir] || previewCache.walk[rotDir];
+  const body = bodyFrames[phase % bodyFrames.length];
+  const x = 32, y = 42, scale = 4;
+  if (previewState === "arcana") {
+    ctx.save(); ctx.globalAlpha = .32 + Math.sin(pulse * 5) * .08; ctx.strokeStyle = resolved.accent; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) ctx.strokeRect(56 - i * 4, 170 - i * 3, 80 + i * 8, 20 + i * 6);
+    ctx.restore();
+  }
+  ctx.drawImage(body, 0, 0, 32, 40, x, y, 32 * scale, 40 * scale);
+  const weapon = previewState === "attack" || previewState === "arcana"
+    ? previewWeapon.atk[rotDir][phase % previewWeapon.atk[rotDir].length]
+    : previewWeapon.walk[rotDir];
+  ctx.drawImage(weapon, 0, 0, 32, 40, x, y, 32 * scale, 40 * scale);
+  if (previewState !== "idle") {
+    ctx.fillStyle = resolved.accent;
+    for (let i = 0; i < 5; i++) {
+      const a = pulse * (1.3 + i * .07) + i * 1.26;
+      ctx.fillRect(Math.round(96 + Math.cos(a) * (40 + i * 2)), Math.round(116 + Math.sin(a) * (24 + i)), 3, 3);
+    }
+  }
 }
+
+function startPreviewLoop() {
+  if (previewRAF) return;
+  const tick = (now) => {
+    if (creator.classList.contains("hidden")) { previewRAF = null; return; }
+    drawPreview(now);
+    previewRAF = requestAnimationFrame(tick);
+  };
+  previewRAF = requestAnimationFrame(tick);
+}
+
 function swatch(part) {
   const wrap = document.getElementById("sw-" + part); if (!wrap) return;
   wrap.innerHTML = "";
-  const vals = part === "style" ? HAIRSTYLES : PRESETS[part];
+  const vals = part === "style" ? HAIRSTYLES : part === "mark" ? FACE_MARKS : part === "accessory" ? ACCESSORIES : part === "outfit" ? OUTFITS : part === "aura" ? AURAS : PRESETS[part];
+  const textPart = ["style", "mark", "accessory", "outfit", "aura"].includes(part);
   for (const v of vals) {
     const b = document.createElement("button");
     b.className = "swatch" + (look[part] === v ? " sel" : "");
-    if (part === "style") { b.textContent = v.slice(0, 3); b.title = v; b.classList.add("txt"); }
+    b.type = "button";
+    b.title = `${part}: ${v}`;
+    b.setAttribute("aria-label", `${part} ${v}`);
+    b.setAttribute("aria-pressed", look[part] === v ? "true" : "false");
+    if (textPart) { b.textContent = v; b.classList.add("txt"); }
     else b.style.background = v;
-    b.addEventListener("click", () => { audio.sfx("ui"); look[part] = v; wrap.querySelectorAll(".swatch").forEach(s => s.classList.remove("sel")); b.classList.add("sel"); drawPreview(); });
+    b.addEventListener("click", () => {
+      audio.sfx("ui"); look[part] = v; invalidatePreview();
+      wrap.querySelectorAll(".swatch").forEach(s => { s.classList.remove("sel"); s.setAttribute("aria-pressed", "false"); });
+      b.classList.add("sel"); b.setAttribute("aria-pressed", "true"); drawPreview();
+    });
     wrap.appendChild(b);
   }
 }
 function initCreator() {
-  ["style", "hair", "eyes", "skin", "shirt", "pants", "boots"].forEach(swatch);
+  look = normalizeLook(look);
+  const parts = ["style", "hair", "eyes", "skin", "mark", "accessory", "outfit", "accent", "shirt", "pants", "boots", "aura"];
+  parts.forEach(swatch);
+  updateCreatorSummary();
+  if (creator.dataset.wired === "true") { startPreviewLoop(); return; }
+  creator.dataset.wired = "true";
   document.getElementById("opt-name").addEventListener("input", (e) => { look.name = e.target.value || "Anasta"; });
   // gender picker
   document.querySelectorAll("#pick-gender .cls-btn").forEach(b => b.addEventListener("click", () => {
     audio.sfx("ui"); look.gender = b.dataset.gender;
-    document.querySelectorAll("#pick-gender .cls-btn").forEach(x => x.classList.remove("sel")); b.classList.add("sel");
-    drawPreview();
+    document.querySelectorAll("#pick-gender .cls-btn").forEach(x => { x.classList.remove("sel"); x.setAttribute("aria-pressed", "false"); }); b.classList.add("sel"); b.setAttribute("aria-pressed", "true");
+    invalidatePreview(); drawPreview();
   }));
   // class picker
   document.querySelectorAll("#pick-class .cls-btn").forEach(b => b.addEventListener("click", () => {
     audio.sfx("ui"); look.cls = b.dataset.cls;
-    document.querySelectorAll("#pick-class .cls-btn").forEach(x => x.classList.remove("sel")); b.classList.add("sel");
-    drawPreview();
+    document.querySelectorAll("#pick-class .cls-btn").forEach(x => { x.classList.remove("sel"); x.setAttribute("aria-pressed", "false"); }); b.classList.add("sel"); b.setAttribute("aria-pressed", "true");
+    invalidatePreview(); updateCreatorSummary(); drawPreview();
   }));
-  document.querySelectorAll(".rot-btn").forEach(b => b.addEventListener("click", () => { audio.sfx("ui"); rotDir = b.dataset.rot; document.querySelectorAll(".rot-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); }));
+  document.querySelectorAll("#pick-gender .cls-btn, #pick-class .cls-btn").forEach(b => b.setAttribute("aria-pressed", b.classList.contains("sel") ? "true" : "false"));
+  document.querySelectorAll(".rot-btn").forEach(b => b.addEventListener("click", () => { audio.sfx("ui"); rotDir = b.dataset.rot; document.querySelectorAll(".rot-btn").forEach(x => x.classList.remove("active")); b.classList.add("active"); drawPreview(); }));
+  document.querySelectorAll("[data-preview-state]").forEach(b => b.addEventListener("click", () => {
+    previewState = b.dataset.previewState;
+    document.querySelectorAll("[data-preview-state]").forEach(x => x.classList.toggle("active", x === b));
+    audio.sfx("ui"); drawPreview();
+  }));
+  document.querySelectorAll("[data-creator-tab]").forEach(b => b.addEventListener("click", () => {
+    const tab = b.dataset.creatorTab;
+    document.querySelectorAll("[data-creator-tab]").forEach(x => x.classList.toggle("active", x === b));
+    document.querySelectorAll("[data-creator-panel]").forEach(x => x.classList.toggle("active", x.dataset.creatorPanel === tab));
+    const label = document.querySelector(".creator-progress span"); if (label) label.textContent = tab.toUpperCase();
+    audio.sfx("ui");
+  }));
   document.getElementById("btn-random").addEventListener("click", () => {
     audio.sfx("ui");
     const pick = a => a[(Math.random() * a.length) | 0];
-    look = { name: look.name, gender: look.gender, cls: look.cls, skin: pick(PRESETS.skin), hair: pick(PRESETS.hair), eyes: pick(PRESETS.eyes), shirt: pick(PRESETS.shirt), pants: pick(PRESETS.pants), boots: pick(PRESETS.boots), style: pick(HAIRSTYLES) };
-    ["style", "hair", "eyes", "skin", "shirt", "pants", "boots"].forEach(swatch); drawPreview();
+    look = normalizeLook({
+      ...look,
+      skin: pick(PRESETS.skin), hair: pick(PRESETS.hair), eyes: pick(PRESETS.eyes),
+      shirt: pick(PRESETS.shirt), pants: pick(PRESETS.pants), boots: pick(PRESETS.boots),
+      accent: pick(PRESETS.accent), style: pick(HAIRSTYLES), mark: pick(FACE_MARKS),
+      accessory: pick(ACCESSORIES), outfit: pick(OUTFITS), aura: pick(AURAS),
+    });
+    parts.forEach(swatch); invalidatePreview(); updateCreatorSummary(); drawPreview();
   });
-  document.getElementById("btn-enter").addEventListener("click", startGame);
-  setInterval(() => { if (!creator.classList.contains("hidden")) drawPreview(); }, 200);
+  document.getElementById("btn-enter").addEventListener("click", () => startGame());
   drawPreview();
+  startPreviewLoop();
 }
 
 function wireSettings() {
@@ -160,9 +266,45 @@ function wireSettings() {
   });
 }
 
+function showArrivalGuide(isReturning) {
+  const banner = document.getElementById("arrival-banner");
+  if (!banner) return;
+  const title = document.getElementById("arrival-title");
+  const kicker = document.getElementById("arrival-kicker");
+  if (title) title.textContent = isReturning ? `Chronicle resumed, ${look.name}` : `Welcome to Anasta, ${look.name}`;
+  if (kicker) kicker.textContent = isReturning ? "THE FOREST REMEMBERS" : "THE FOREST AGE";
+  banner.classList.remove("hidden", "leaving");
+  const hide = () => {
+    if (banner.classList.contains("hidden")) return;
+    banner.classList.add("leaving");
+    setTimeout(() => banner.classList.add("hidden"), 340);
+  };
+  document.getElementById("arrival-dismiss")?.addEventListener("click", hide, { once: true });
+  clearTimeout(banner._hideTimer);
+  banner._hideTimer = setTimeout(hide, isReturning ? 4200 : 8500);
+}
+
+function savePayload(g) {
+  const p = g.player;
+  return {
+    name: look.name,
+    look: normalizeLook(look),
+    stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
+    inv: p.inv,
+    fishing: g.fishingStats,
+    flags: g.flags,
+    equipped: p.equipped,
+    pets: Array.isArray(g.pets) ? [...g.pets] : [],
+    activePetId: g.activePetId || g.pet?.id || null,
+    ts: Date.now(),
+  };
+}
+
 function startGame(savedLook, savedName, saveData) {
   // Apply saved look if provided (continue scenario)
-  if (savedLook) { Object.assign(look, savedLook); }
+  if (savedLook) look = normalizeLook({ ...look, ...savedLook });
+  else look = normalizeLook(look);
+  if (!savedLook?.cls && CLASSES[saveData?.stats?.cls]) look.cls = saveData.stats.cls;
   if (savedName) { look.name = savedName; }
   creator.classList.add("hidden");
   document.getElementById("game-wrap").classList.remove("hidden");
@@ -180,7 +322,6 @@ function startGame(savedLook, savedName, saveData) {
       p.xp = saveData.stats.xp || 0;
       p.gold = saveData.stats.gold || 0;
       p.hp = saveData.stats.hp || p.maxHp;
-      if (saveData.stats.cls) { p.cls = saveData.stats.cls; }
       if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
       if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
       if (saveData.flags) {
@@ -190,38 +331,31 @@ function startGame(savedLook, savedName, saveData) {
       if (saveData.equipped) { p.equipped = saveData.equipped; }
       game.ui.toast(`Welcome back, ${look.name}!`);
     }
+    if (saveData) {
+      const roster = Array.isArray(saveData.pets) ? saveData.pets : [];
+      for (const id of roster) game.registerPet(id);
+      const activePet = saveData.activePetId || (typeof saveData.pet === "string" ? saveData.pet : null);
+      if (activePet && !game.pets.includes(activePet)) game.registerPet(activePet);
+      const selectedPet = activePet || game.pets[0] || null;
+      if (selectedPet) game.setActivePet(selectedPet);
+      game.ui.syncPet?.();
+    }
+    const persist = () => { if (game?.player) putSave(savePayload(game)); };
+    game.onCompanionChange = persist;
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
     window.__ANASTA__ = game;
     wireSettings();
     // recompute internal resolution on rotate/resize so it stays fullscreen
     addEventListener("resize", () => computeView(canvas));
     game.start();
+    showArrivalGuide(!!saveData);
     // Auto-save every 15s
-    setInterval(() => {
-      if (!game || !game.player) return;
-      const p = game.player;
-      putSave({
-        name: look.name,
-        look: look,
-        stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
-        inv: p.inv,
-        fishing: game.fishingStats,
-        flags: game.flags,
-        equipped: p.equipped,
-        ts: Date.now(),
-      });
-    }, 15000);
+    setInterval(persist, 15000);
     // Save on page hide / unload
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden && game && game.player) {
-        const p = game.player;
-        putSave({
-          name: look.name, look,
-          stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
-          inv: p.inv, fishing: game.fishingStats, flags: game.flags, equipped: p.equipped, ts: Date.now(),
-        });
-      }
+      if (document.hidden) persist();
     });
+    addEventListener("pagehide", persist);
     // Multiplayer presence (no-op unless enabled in config.js). Fire-and-forget.
     connectMultiplayer(look, look.name, { x: game.player.x, y: game.player.y })
       .then((room) => {
@@ -251,7 +385,12 @@ function startLoginFx() {
   const c = document.getElementById("login-fx");
   if (!c) return;
   const ctx = c.getContext("2d");
-  c.width = window.innerWidth; c.height = window.innerHeight;
+  const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
+  resize();
+  if (!loginScreen._resizeBound) {
+    loginScreen._resizeBound = true;
+    addEventListener("resize", () => { if (!loginScreen.classList.contains("hidden")) resize(); });
+  }
   const ps = [];
   for (let i = 0; i < 40; i++) ps.push({ x: Math.random() * c.width, y: Math.random() * c.height, vy: -0.3 - Math.random() * 0.5, r: 1 + Math.random() * 2, ph: Math.random() * 7, hue: 250 + Math.random() * 60 });
   let raf;
@@ -287,7 +426,7 @@ function showLogin() {
   } else {
     loginExisting.classList.add("hidden");
   }
-  loginName.focus();
+  if (matchMedia("(pointer:fine)").matches) loginName.focus();
 }
 
 function enterGameWithSave(save) {

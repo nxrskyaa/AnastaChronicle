@@ -355,9 +355,35 @@ Game.prototype.updateEnemies = function (dt) {
 Game.prototype.updatePet = function (dt) {
   if (!this.pet) return;
   const p = this.player, pt = this.pet;
-  const dx = p.x - pt.x, dy = p.y - pt.y, d = Math.hypot(dx, dy);
-  pt.bob = (pt.bob || 0) + dt * 5;
-  if (d > 34) { const sp = 125 * dt; pt.x += (dx / d) * sp; pt.y += (dy / d) * sp; }
+  const facing = {
+    up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0],
+  }[p.dir] || [0, 1];
+  const [fx, fy] = facing;
+  // Follow from a rear-side position so the companion does not sit inside the hero.
+  const targetX = p.x - fx * 30 - fy * 12;
+  const targetY = p.y - fy * 26 + fx * 12;
+  const dx = targetX - pt.x, dy = targetY - pt.y, d = Math.hypot(dx, dy);
+
+  pt.spawnT = Math.max(0, (pt.spawnT || 0) - dt);
+  if (d > 260) {
+    pt.x = targetX;
+    pt.y = targetY;
+    pt.moving = false;
+    pt.spawnT = .45;
+    this._summonPetFx?.(pt.x, pt.y, false);
+  } else if (d > 8) {
+    const speed = d > 110 ? 260 : d > 55 ? 185 : 120;
+    const step = Math.min(d - 8, speed * dt);
+    pt.x += (dx / d) * step;
+    pt.y += (dy / d) * step;
+    pt.moving = step > .05;
+  } else {
+    pt.moving = false;
+  }
+
+  pt.animT = (pt.animT || 0) + dt * (pt.moving ? 8 : 3.5);
+  pt.frame = Math.floor(pt.animT) % 4;
+  pt.bob = (pt.bob || 0) + dt * (pt.moving ? 9 : 4.5);
   pt.sortY = pt.y;
 };
 

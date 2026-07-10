@@ -7,10 +7,29 @@ import { net } from "./net.js";
 import { bossFrame, BOSS_SIZE } from "./boss.js";
 import { activeRod } from "./fishing.js";
 import { drawFishSprite } from "./fishart.js";
+import { MON_ELEMENT } from "./monsters.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const isGrass = (t) => t === 0 || t === 5;   // grass & forest count as grassy for fringe
+
+const PET_AURA = {
+  fire: ["#ffb14c", "#ff6338"], water: ["#9eeaff", "#4daee8"], grass: ["#c8f69a", "#66c76f"],
+  rock: ["#ead7a5", "#a88b67"], electric: ["#fff39a", "#efc83d"], bug: ["#efc5ff", "#bd83df"],
+  ice: ["#e8ffff", "#7cd8ef"], dark: ["#d4b4ff", "#7655a8"],
+};
+
+function poseFrame(cache, pose, dir, frame, fallback = "walk") {
+  const bank = cache?.[pose]?.[dir] ?? cache?.[fallback]?.[dir] ?? cache?.walk?.down;
+  if (!bank) return null;
+  if (!Array.isArray(bank)) return bank;
+  return bank[((frame % bank.length) + bank.length) % bank.length] || null;
+}
+
+function objectPhase(o, salt = 0) {
+  const x = Math.round(o.x || 0), y = Math.round(o.y || 0);
+  return ((x * 13 + y * 7 + salt * 31) % 97) / 97 * Math.PI * 2;
+}
 
 Game.prototype.render = function () {
   const ctx = this.ctx, p = this.player;
@@ -79,7 +98,8 @@ Game.prototype.render = function () {
   // flowers (flat, under everything)
   const FCOL = [["#f2d0dc", "#e88aa8"], ["#dfe8ff", "#7aa0e0"], ["#fff0c0", "#f0c040"]];
   for (const fl of this.flowers) {
-    const sx = fl.x - camx, sy = fl.y - camy;
+    const sway = Math.round(Math.sin(this.t * 1.35 + objectPhase(fl, fl.k)));
+    const sx = fl.x - camx + sway, sy = fl.y - camy;
     if (sx < -8 || sx > view.w + 8) continue;
     const c = FCOL[fl.k];
     ctx.fillStyle = "#4a8040"; ctx.fillRect(sx, sy, 1, 3);
@@ -110,7 +130,10 @@ Game.prototype.render = function () {
   for (const o of this.plants) if (o.hp > 0 && inv(o.x, o.y)) draw.push({ y: o.sortY, k: "plant", o });
   for (const o of this.chests) if (inv(o.x, o.y)) draw.push({ y: o.y, k: "chest", o });
   for (const o of this.npcs) if (inv(o.x, o.y)) draw.push({ y: o.sortY, k: "npc", o });
-  for (const e of this.enemies) if (!e.dead && inv(e.x, e.y)) draw.push({ y: e.sortY, k: "enemy", o: e });
+  for (const e of this.enemies) if (inv(e.x, e.y)) {
+    if (e.dead && e._deathSeen == null) e._deathSeen = this.t;
+    if (!e.dead || this.t - e._deathSeen < .4) draw.push({ y: e.sortY, k: "enemy", o: e });
+  }
   if (this.boss && !this.boss.dead && inv(this.boss.x, this.boss.y, 140)) draw.push({ y: this.boss.sortY, k: "boss", o: this.boss });
   if (this.pet) draw.push({ y: this.pet.sortY, k: "pet", o: this.pet });
   draw.push({ y: p.sortY, k: "player", o: p });
@@ -127,7 +150,36 @@ Game.prototype.render = function () {
 
   for (const d of draw) {
     const o = d.o, sx = Math.round(o.x - camx), sy = Math.round(o.y - camy);
-    if (d.k === "building") { const cv = this.village[o.type]; if (cv) ctx.drawImage(cv, sx - cv.width / 2, sy - cv.height + 8); }
+    if (d.k === "building") {
+      const cv = this.village[o.type];
+      if (cv) {
+        const bx = sx - cv.width / 2, by = sy - cv.height + 8;
+        ctx.drawImage(cv, bx, by);
+        const phase = objectPhase(o);
+        if (o.type === "lantern") {
+          const pulse = .55 + Math.sin(this.t * 7 + phase) * .25;
+          ctx.save(); ctx.globalCompositeOperation = "lighter";
+          ctx.fillStyle = `rgba(255,193,92,${pulse * .16})`; ctx.fillRect(sx - 8, sy - 19, 16, 16);
+          ctx.fillStyle = `rgba(255,231,157,${pulse})`; ctx.fillRect(sx - 2, sy - 13, 4, 5);
+          ctx.fillStyle = `rgba(255,255,220,${pulse})`; ctx.fillRect(sx - 1, sy - 13, 2, 2);
+          ctx.restore();
+        } else if (o.type === "sakura") {
+          for (let i = 0; i < 3; i++) {
+            const fall = (this.t * (8 + i * 1.5) + phase * 11 + i * 13) % 48;
+            const drift = Math.round(Math.sin(this.t * 1.7 + phase + i) * 5);
+            ctx.fillStyle = i === 1 ? "rgba(255,224,238,.8)" : "rgba(255,164,204,.72)";
+            ctx.fillRect(Math.round(sx - 17 + i * 16 + drift), Math.round(by + 17 + fall), i === 1 ? 2 : 3, 2);
+          }
+        } else if (o.type.startsWith("house") || o.type === "shop" || o.type === "pagoda") {
+          for (let i = 0; i < 2; i++) {
+            const rise = (this.t * (5 + i) + phase * 4 + i * 8) % 22;
+            const drift = Math.round(Math.sin(this.t * .8 + phase + i) * 3);
+            ctx.fillStyle = `rgba(193,205,211,${Math.max(0, .25 - rise / 100)})`;
+            ctx.fillRect(Math.round(bx + cv.width * .72 + drift), Math.round(by + 8 - rise), 3 + i * 2, 2 + i);
+          }
+        }
+      }
+    }
     else if (d.k === "campfire") {
       const frame = img(`fx/campfire_${Math.floor(this.t * 11) % 6}`);
       if (frame) ctx.drawImage(frame, sx - 22, sy - 38);
@@ -138,7 +190,18 @@ Game.prototype.render = function () {
         ctx.fillRect(ex, sy - 25 - travel, i === 0 ? 2 : 1, i === 0 ? 2 : 1);
       }
     }
-    else if (d.k === "tree") { const im = img(`tree_${o.v}`); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 6); }
+    else if (d.k === "tree") {
+      const im = img(`tree_${o.v}`);
+      if (im) {
+        ctx.drawImage(im, sx - im.width / 2, sy - im.height + 6);
+        const phase = objectPhase(o, o.v);
+        if (Math.sin(this.t * .7 + phase) > .94) {
+          const drift = Math.round(Math.sin(this.t * 2 + phase) * 5);
+          ctx.fillStyle = o.v === 2 ? "rgba(225,123,112,.75)" : "rgba(126,190,93,.68)";
+          ctx.fillRect(sx + drift + ((o.v * 5) % 13) - 6, sy - 34 + Math.round((this.t * 9 + phase * 3) % 18), 2, 2);
+        }
+      }
+    }
     else if (d.k === "bush") { const im = img("bush_0"); if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height + 4); }
     else if (d.k === "rock") {
       ctx.fillStyle = "rgba(20,18,22,0.25)"; ctx.beginPath(); ctx.ellipse(sx, sy, 9, 3, 0, 0, 7); ctx.fill();
@@ -204,13 +267,24 @@ Game.prototype.render = function () {
       if (!open && o.pet) { ctx.fillStyle = `rgba(255,230,120,${0.5 + 0.5 * Math.sin(this.t * 5)})`; ctx.fillRect(sx + 6, sy - 20, 2, 2); }
     }
     else if (d.k === "npc") {
-      const cv = o.cache.walk["down"][o.frame % 4];
+      const pdx = p.x - o.x, pdy = p.y - o.y, playerNear = Math.hypot(pdx, pdy) < 58;
+      let dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
+      if (playerNear) dir = Math.abs(pdx) > Math.abs(pdy) ? (pdx < 0 ? "left" : "right") : (pdy < 0 ? "up" : "down");
+      const idleFrame = Math.floor(this.t * 1.8 + objectPhase(o)) % 4;
+      const cv = poseFrame(o.cache, "idle", dir, idleFrame, "walk");
+      const breathe = Math.round(Math.sin(this.t * 1.7 + objectPhase(o, 2)) * .6);
       // exclamation marker for available quest
-      ctx.drawImage(cv, sx - 16, sy - 36);
+      if (cv) ctx.drawImage(cv, sx - 16, sy - 36 + breathe);
       const hasQuest = this.quests.forGiver(o.name, p.inv).some(x => !x.active && !x.done);
       const ready = this.quests.forGiver(o.name, p.inv).some(x => x.ready);
-      if (ready) { ctx.fillStyle = "#ffd24a"; ctx.font = "bold 14px sans-serif"; ctx.fillText("?", sx - 3, sy - 40 + Math.sin(this.t * 4) * 2); }
-      else if (hasQuest) { ctx.fillStyle = "#ffe070"; ctx.font = "bold 15px sans-serif"; ctx.fillText("!", sx - 2, sy - 40 + Math.sin(this.t * 4) * 2); }
+      if (ready) { ctx.fillStyle = "#ffd24a"; ctx.font = "bold 14px sans-serif"; ctx.fillText("?", sx - 3, sy - 40 + Math.sin(this.t * 4) * 2 + breathe); }
+      else if (hasQuest) { ctx.fillStyle = "#ffe070"; ctx.font = "bold 15px sans-serif"; ctx.fillText("!", sx - 2, sy - 40 + Math.sin(this.t * 4) * 2 + breathe); }
+      if (playerNear && this._interactTarget === o) {
+        const side = dir === "left" ? 1 : -1;
+        ctx.fillStyle = "rgba(143,224,195,.7)";
+        ctx.fillRect(sx + side * 8, sy - 27 + breathe, 2, 2);
+        ctx.fillRect(sx + side * 11, sy - 30 + breathe, 1, 1);
+      }
       // name tag
       ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
       ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 18, sy - 46, 36, 9);
@@ -236,57 +310,190 @@ Game.prototype.render = function () {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
       const bob = Math.sin(o.bob) * 2;
       if (im) {
+        const toPlayerX = p.x - o.x, toPlayerY = p.y - o.y, toPlayerD = Math.hypot(toPlayerX, toPlayerY) || 1;
+        const chase = o.state === "chase" && !o.frozen;
+        const attackAge = 1.4 - (o.atkCd || 0);
+        const attackPr = attackAge >= 0 && attackAge < .28 ? attackAge / .28 : -1;
+        const lunge = attackPr >= 0 ? Math.sin(attackPr * Math.PI) * 6 : 0;
+        const hurt = clamp((o.hurt || 0) / .2, 0, 1);
+        if (o.dead && o._deathSeen == null) o._deathSeen = this.t;
+        const death = o.dead ? clamp((this.t - o._deathSeen) / .4, 0, 1) : 0;
+        const leanX = chase ? clamp(toPlayerX / toPlayerD, -1, 1) * 2 : 0;
+        const leanY = chase ? clamp(toPlayerY / toPlayerD, -1, 1) : 0;
+        const drawX = sx + leanX + toPlayerX / toPlayerD * lunge;
+        const drawY = sy + leanY + toPlayerY / toPlayerD * lunge;
+        const squash = hurt ? .9 + (1 - hurt) * .1 : 1;
         // soft shadow
-        ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, im.width * 0.35, 3, 0, 0, 7); ctx.fill();
-        ctx.drawImage(im, sx - im.width / 2, sy - im.height + bob);
-        if (o.state === "chase" && o.angry > 0) { ctx.fillStyle = "#ff5a5a"; ctx.font = "bold 11px sans-serif"; ctx.fillText("!", sx - 2, sy - im.height + bob - 2); }
-        if (o.hp < o.maxHp) {
+        ctx.globalAlpha = 1 - death;
+        ctx.fillStyle = `rgba(0,0,0,${.2 * (1 - death)})`; ctx.beginPath(); ctx.ellipse(drawX, sy + 1, im.width * .35 * (1 - death * .5), 3, 0, 0, 7); ctx.fill();
+        ctx.save();
+        ctx.translate(Math.round(drawX), Math.round(drawY));
+        ctx.scale((1 - death * .7) * (hurt ? 1.08 : 1), (1 - death * .35) * squash);
+        if (death) ctx.rotate(death * .2 * (objectPhase(o) > Math.PI ? -1 : 1));
+        if (hurt) ctx.filter = `brightness(${1.25 + hurt * .75}) saturate(${1 + hurt * .5})`;
+        ctx.drawImage(im, -im.width / 2, -im.height + bob);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        if (!o.dead && o.state === "chase" && o.angry > 0) { ctx.fillStyle = "#ff5a5a"; ctx.font = "bold 11px sans-serif"; ctx.fillText("!", sx - 2, sy - im.height + bob - 2); }
+        if (!o.dead && o.hp < o.maxHp) {
           ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24, 3);
           ctx.fillStyle = "#e05050"; ctx.fillRect(sx - 12, sy - im.height + bob - 5, 24 * (o.hp / o.maxHp), 3);
         }
-        if (o.hurt > 0) { ctx.save(); ctx.globalAlpha = o.hurt * 3; ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "rgba(255,120,120,0.7)"; ctx.fillRect(sx - im.width / 2, sy - im.height + bob, im.width, im.height); ctx.restore(); }
-        if (o.frozen) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = "rgba(140,220,255,0.8)"; ctx.fillRect(sx - im.width / 2, sy - im.height + bob, im.width, im.height); ctx.restore(); }
+        if (!o.dead && o.frozen) {
+          const frostPulse = .55 + Math.sin(this.t * 8 + objectPhase(o)) * .2;
+          ctx.fillStyle = `rgba(178,239,255,${frostPulse})`;
+          for (let i = 0; i < 6; i++) {
+            const a = i / 6 * Math.PI * 2, rr = 12 + (i % 2) * 4;
+            const ix = Math.round(sx + Math.cos(a) * rr), iy = Math.round(sy - 18 + Math.sin(a) * rr * .7);
+            ctx.fillRect(ix - 1, iy - 3, 2, 6); ctx.fillRect(ix - 2, iy - 1, 4, 2);
+          }
+        }
       }
     }
     else if (d.k === "boss") {
       const sz = BOSS_SIZE; // native integer scale stays crisp after the canvas scales
       const frame = bossFrame(o.frame, o.rage);
+      const toPlayerX = p.x - o.x, toPlayerY = p.y - o.y, toPlayerD = Math.hypot(toPlayerX, toPlayerY) || 1;
+      const nx = toPlayerX / toPlayerD, ny = toPlayerY / toPlayerD;
+      const windupMax = o.rage ? .48 : .68;
+      const windupPr = o.breathWindup > 0 ? clamp(1 - o.breathWindup / windupMax, 0, 1) : 0;
+      const meleeMax = o.rage ? 1.4 : 2.2;
+      const meleeAge = meleeMax - (o.atkCd || 0);
+      const meleePr = o.state === "melee" && meleeAge >= 0 && meleeAge < .34 ? meleeAge / .34 : -1;
+      const meleeLunge = meleePr >= 0 ? Math.sin(meleePr * Math.PI) * 10 : 0;
+      const breathRecoilAge = o.breathWindup <= 0 ? (o.rage ? 2.8 : 4.8) - (o.breatheCd || 0) : 1;
+      const breathRecoil = breathRecoilAge >= 0 && breathRecoilAge < .28 ? (1 - breathRecoilAge / .28) * 5 : 0;
+      const hurtKick = clamp((o.hurt || 0) / .2, 0, 1) * 4;
+      const visualX = sx + nx * meleeLunge - Math.cos(o.breathAngle || 0) * breathRecoil - nx * hurtKick;
+      const visualY = sy + ny * meleeLunge - Math.sin(o.breathAngle || 0) * breathRecoil - ny * hurtKick;
+      const charge = windupPr ? Math.sin(windupPr * Math.PI) : 0;
       // large soft shadow for boss
-      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(sx, sy + 2, sz * 0.4, 6, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(visualX, sy + 2, sz * (.4 + charge * .04), 6 - charge, 0, 0, 7); ctx.fill();
       if (frame) {
         ctx.save();
+        ctx.translate(Math.round(visualX), Math.round(visualY));
+        ctx.scale(1 + charge * .09, 1 - charge * .07);
         if (o.hurt > 0) ctx.filter = "brightness(1.6)";
         // rage glow aura
         if (o.rage) { ctx.shadowColor = "rgba(255,80,20,0.8)"; ctx.shadowBlur = 20; }
-        ctx.drawImage(frame, Math.round(sx - sz / 2), Math.round(sy - sz + 8));
+        if (o.rage && (o.state === "windup" || meleePr >= 0)) {
+          ctx.save(); ctx.globalAlpha = .16 + charge * .12; ctx.filter = "saturate(1.8) brightness(1.25)";
+          ctx.drawImage(frame, -sz / 2 - 5, -sz + 8); ctx.drawImage(frame, -sz / 2 + 5, -sz + 8); ctx.restore();
+        }
+        ctx.drawImage(frame, -sz / 2, -sz + 8);
         ctx.restore();
+        if (windupPr) {
+          ctx.fillStyle = o.rage ? "rgba(255,105,55,.9)" : "rgba(255,190,92,.82)";
+          for (let i = 0; i < 8; i++) {
+            const a = i / 8 * Math.PI * 2 + this.t * (o.rage ? 5 : 3), rr = 36 - windupPr * 22 + (i % 2) * 5;
+            ctx.fillRect(Math.round(visualX + Math.cos(a) * rr) - 1, Math.round(visualY - 38 + Math.sin(a) * rr * .55) - 1, i % 2 ? 2 : 3, i % 2 ? 2 : 3);
+          }
+        }
       }
     }
-    else if (d.k === "pet") { const im = this.monCache[o.id] ? this.monCache[o.id][(Math.floor(this.t * 4)) % 4] : null; const bob = Math.sin(o.bob) * 2; if (im) ctx.drawImage(im, sx - im.width / 2, sy - im.height * 0.7 + bob, im.width * 0.7, im.height * 0.7); }
-    else if (d.k === "player") {
-      const dir = p.dir;
-      // soft shadow
-      ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12, 3.5, 0, 0, 7); ctx.fill();
-      let body, weap;
-      if (p.attackT > 0) {
-        const ph = 1 - p.attackT / p.attackDur;
-        const fi = clamp(Math.floor(ph * 5), 0, 4);
-        body = this.charCache.atk[dir][fi];
-        const wf2 = this.weaponFrames(p.equipped);
-        weap = wf2.atk[dir][fi];
-      } else {
-        body = this.charCache.walk[dir][p.frame % 4];
-        const wf2 = this.weaponFrames(p.equipped);
-        weap = wf2.walk[dir];
+    else if (d.k === "pet") {
+      const moving = o.moving ?? Math.hypot(p.x - o.x, p.y - o.y) > 34;
+      const frameIndex = Number.isFinite(o.frame) ? o.frame : Math.floor(this.t * (moving ? 7 : 3));
+      const im = this.monCache[o.id] ? this.monCache[o.id][frameIndex % 4] : null;
+      if (im) {
+        if (this._renderPetRef !== o) { this._renderPetRef = o; o._renderBirth = this.t; }
+        const summonAge = this.t - (o._renderBirth ?? this.t);
+        const summon = Math.max(clamp(1 - summonAge / .55, 0, 1), clamp((o.spawnT || 0) / .45, 0, 1));
+        const element = MON_ELEMENT[o.id] || "grass", pal = PET_AURA[element] || PET_AURA.grass;
+        const phase = objectPhase(o, o.id?.length || 0);
+        const stride = moving ? Math.sin(this.t * 14 + phase) : Math.sin(o.bob || this.t * 4);
+        const bob = moving ? Math.round(Math.abs(stride) * -3) : Math.round(stride * 1.3);
+        const dx = p.x - o.x, dy = p.y - o.y, dist = Math.hypot(dx, dy) || 1;
+        const leanX = moving ? clamp(dx / dist, -1, 1) * 2 : 0;
+        const scaleX = .72 + (moving ? Math.abs(stride) * .025 : Math.sin(this.t * 2 + phase) * .012);
+        const scaleY = .72 - (moving ? Math.abs(stride) * .025 : Math.sin(this.t * 2 + phase) * .012);
+        if (summon > 0) {
+          const radius = Math.round(10 + (1 - summon) * 15);
+          ctx.globalAlpha = summon;
+          ctx.strokeStyle = pal[0]; ctx.lineWidth = 2; ctx.strokeRect(sx - radius, sy - Math.round(radius * .35), radius * 2, Math.round(radius * .7));
+          ctx.fillStyle = pal[1];
+          for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + this.t * 4; ctx.fillRect(Math.round(sx + Math.cos(a) * radius) - 1, Math.round(sy - 10 + Math.sin(a) * radius * .65) - 1, 2, 2); }
+          ctx.globalAlpha = 1;
+        }
+        ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, im.width * .25 * scaleX / .72, 2.5, 0, 0, 7); ctx.fill();
+        ctx.save();
+        ctx.translate(Math.round(sx + leanX), Math.round(sy + bob));
+        ctx.scale(scaleX, scaleY);
+        ctx.drawImage(im, -im.width / 2, -im.height);
+        ctx.restore();
+        const mood = Math.sin(this.t * .85 + phase);
+        if (!moving && mood > .9) {
+          ctx.fillStyle = pal[0];
+          ctx.fillRect(sx + 9, sy - 27, 2, 2); ctx.fillRect(sx + 12, sy - 31, 1, 1);
+        }
       }
-      if (this.fishing) weap = null;
-      if (p.invuln > 0 && Math.floor(this.t * 20) % 2) ctx.globalAlpha = 0.5;
+    }
+    else if (d.k === "player") {
+      const dir = ["down", "up", "left", "right"].includes(p.dir) ? p.dir : "down";
+      const hurtT = p.hurtT || p.damageT || 0;
+      const attackPhase = p.attackT > 0 ? clamp(1 - p.attackT / (p.attackDur || .25), 0, 1) : 0;
+      let pose = p.moving ? "walk" : "idle", poseIndex = p.frame || 0;
+      if (this.fishing) { pose = "fishing"; poseIndex = Math.floor(this.t * 2) % 4; }
+      else if (hurtT > 0) { pose = "hurt"; poseIndex = Math.floor(this.t * 16) % 4; }
+      else if (p.evadeT > 0) { pose = "dash"; poseIndex = clamp(Math.floor((1 - p.evadeT / .16) * 4), 0, 3); }
+      else if (p.shield) { pose = "guard"; poseIndex = Math.floor(this.t * 2) % 4; }
+      else if (p.attackT > 0) {
+        pose = p.attackStyle === "cast" ? "cast" : p.attackStyle === "bow" ? "bow" : "atk";
+        poseIndex = clamp(Math.floor(attackPhase * 5), 0, 4);
+      } else if (!p.moving) poseIndex = Math.floor(this.t * 2.2) % 4;
+      if (!this.charCache?.[pose] && ["idle", "guard", "hurt", "fishing"].includes(pose)) poseIndex = 0;
+
+      const body = poseFrame(this.charCache, pose, dir, poseIndex, p.attackT > 0 ? "atk" : "walk");
+      const wf2 = this.weaponFrames(p.equipped);
+      let weap = null;
+      if (!this.fishing) {
+        const weaponBank = wf2?.[pose]?.[dir]
+          ?? (p.attackT > 0 ? wf2?.atk?.[dir] : wf2?.walk?.[dir]);
+        weap = Array.isArray(weaponBank) ? weaponBank[poseIndex % weaponBank.length] : weaponBank;
+      }
+
+      const dvec = dir === "left" ? [-1, 0] : dir === "right" ? [1, 0] : dir === "up" ? [0, -1] : [0, 1];
+      let ox = 0, oy = 0, scaleX = 1, scaleY = 1;
+      if (pose === "idle") { oy = Math.round(Math.sin(this.t * 2.2) * .55); scaleY += Math.sin(this.t * 2.2) * .012; }
+      if (pose === "guard") { ox = -dvec[0]; oy = 1 - dvec[1]; scaleX = 1.04; scaleY = .96; }
+      if (pose === "dash") { ox = dvec[0] * 3; oy = dvec[1] * 3; scaleX = dvec[0] ? 1.08 : .94; scaleY = dvec[1] ? 1.08 : .94; }
+      if (pose === "hurt") { ox = Math.round(Math.sin(this.t * 45) * 2); scaleX = 1.08; scaleY = .92; }
+      if (pose === "cast") { oy = -Math.round(Math.sin(attackPhase * Math.PI) * 2); }
+      if (pose === "bow") { ox = -dvec[0] * Math.round(Math.sin(attackPhase * Math.PI) * 2); oy = -dvec[1] * Math.round(Math.sin(attackPhase * Math.PI) * 2); }
+
+      // soft shadow
+      ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12 * scaleX, 3.5 * scaleY, 0, 0, 7); ctx.fill();
+      if (pose === "cast" && p.attackT > 0) {
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < 6; i++) {
+          const a = i / 6 * Math.PI * 2 - attackPhase * 5, rr = 9 + attackPhase * 7;
+          ctx.fillStyle = i % 2 ? "rgba(139,219,255,.82)" : "rgba(210,159,255,.9)";
+          ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 17 + Math.sin(a) * rr * .55) - 1, 2, 2);
+        }
+        ctx.restore();
+      }
       // weapon behind body when facing up/left
       const behind = dir === "up" || dir === "left";
-      if (behind && weap) ctx.drawImage(weap, sx - 16, sy - 36);
-      if (body) ctx.drawImage(body, sx - 16, sy - 36);
-      if (!behind && weap) ctx.drawImage(weap, sx - 16, sy - 36);
-      ctx.globalAlpha = 1;
+      const drawPlayerLayers = (x, y, alpha = 1) => {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(Math.round(x), Math.round(y)); ctx.scale(scaleX, scaleY);
+        if (behind && weap) ctx.drawImage(weap, -16, -36);
+        if (body) ctx.drawImage(body, -16, -36);
+        if (!behind && weap) ctx.drawImage(weap, -16, -36);
+        ctx.restore();
+      };
+      if (pose === "dash" && body) {
+        for (let i = 3; i >= 1; i--) drawPlayerLayers(sx + ox - dvec[0] * i * 5, sy + oy - dvec[1] * i * 5, .08 + i * .035);
+      }
+      const invulnAlpha = p.invuln > 0 && Math.floor(this.t * 20) % 2 ? .5 : 1;
+      drawPlayerLayers(sx + ox, sy + oy, invulnAlpha);
+      if (pose === "guard") {
+        const gx = sx + dvec[0] * 13, gy = sy - 18 + dvec[1] * 9;
+        ctx.fillStyle = "rgba(126,205,231,.16)"; ctx.fillRect(gx - 6, gy - 8, 12, 16);
+        ctx.strokeStyle = "rgba(189,239,249,.85)"; ctx.lineWidth = 1; ctx.strokeRect(gx - 6, gy - 8, 12, 16);
+        ctx.fillStyle = "rgba(231,253,255,.9)"; ctx.fillRect(gx - 1, gy - 5, 2, 10); ctx.fillRect(gx - 4, gy - 1, 8, 2);
+      }
     }
   }
 

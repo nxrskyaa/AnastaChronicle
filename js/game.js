@@ -13,6 +13,7 @@ const T = 24;
 const MAP_W = 110, MAP_H = 110;
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const PET_IDS = new Set(MON_IDS);
 
 export class Game {
   constructor(canvas, ui, look) {
@@ -41,6 +42,8 @@ export class Game {
     this.plants = [];   // harvestable plants
     this.npcs = [];
     this.pet = null;
+    this.pets = [];
+    this.activePetId = null;
     this.flags = { starterCache: false };
     this.fishingStats = { total: 0, best: 0, records: {} };
     this.catchReveal = null;
@@ -57,7 +60,6 @@ export class Game {
     this.monCache = buildMonsters();
     buildTiles();
     buildBoss();
-    this.pets = [];   // pet monster ids come from MON_IDS now
 
     this.look = look || { ...DEFAULT_LOOK };
     this.charCache = buildCharacter(this.look);
@@ -74,6 +76,80 @@ export class Game {
   weaponFrames(w) {
     if (!this.weaponCache[w]) this.weaponCache[w] = buildWeapon(w);
     return this.weaponCache[w];
+  }
+
+  registerPet(id) {
+    if (!PET_IDS.has(id)) return false;
+    if (!Array.isArray(this.pets)) this.pets = [];
+    if (this.pets.includes(id)) return false;
+    this.pets.push(id);
+    this.onCompanionChange?.();
+    return true;
+  }
+
+  setActivePet(id) {
+    if (!PET_IDS.has(id) || !Array.isArray(this.pets) || !this.pets.includes(id)) return false;
+    if (this.pet?.id === id) {
+      this.activePetId = id;
+      this.ui?.syncPet?.();
+      this.onCompanionChange?.();
+      return true;
+    }
+
+    const player = this.player;
+    if (!player) return false;
+    const oldPet = this.pet;
+    if (oldPet) this._summonPetFx(oldPet.x, oldPet.y, false);
+
+    this.activePetId = id;
+    this.pet = {
+      id,
+      x: player.x - 18,
+      y: player.y + 18,
+      bob: 0,
+      animT: 0,
+      moving: false,
+      spawnT: .45,
+      sortY: player.y + 18,
+    };
+    this._summonPetFx(this.pet.x, this.pet.y, true);
+
+    if (typeof this.ui?.syncPet === "function") {
+      this.ui.syncPet();
+    } else {
+      // Preserve the original chip behavior when the richer companion UI is absent.
+      const chip = document.getElementById("pet-chip");
+      if (chip) { chip.classList.remove("hidden"); chip.textContent = "Pet: " + id; }
+    }
+    this.onCompanionChange?.();
+    return true;
+  }
+
+  cyclePet(direction = 1) {
+    if (!Array.isArray(this.pets) || !this.pets.length) return null;
+    const valid = this.pets.filter((id, index, list) => PET_IDS.has(id) && list.indexOf(id) === index);
+    if (!valid.length) return null;
+    this.pets = valid;
+    const current = valid.indexOf(this.activePetId || this.pet?.id);
+    const step = direction < 0 ? -1 : 1;
+    const next = current < 0 ? 0 : (current + step + valid.length) % valid.length;
+    return this.setActivePet(valid[next]) ? valid[next] : null;
+  }
+
+  _summonPetFx(x, y, withSound) {
+    this.fx.push({ kind: "levelring", x, y: y - 6, t: 0, dur: .48 });
+    for (let i = 0; i < 10; i++) {
+      const angle = (Math.PI * 2 * i) / 10 + Math.random() * .25;
+      const speed = 24 + Math.random() * 34;
+      this.particles.push({
+        x, y: y - 10,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 18,
+        life: .45 + Math.random() * .25,
+        color: i % 2 ? "rgba(126,232,188,.92)" : "rgba(255,221,128,.9)",
+      });
+    }
+    if (withSound) this.audio?.sfx("pet");
   }
 
   buildWorld() {

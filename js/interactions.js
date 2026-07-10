@@ -265,9 +265,12 @@ Game.prototype.interact = function (resolved = null) {
 
   if (target.pet) {
     this.ui.showPet(target.pet, () => {
-      this.pet = { id: target.pet, x: player.x, y: player.y, bob: 0, sortY: player.y };
-      const chip = document.getElementById("pet-chip");
-      if (chip) { chip.classList.remove("hidden"); chip.textContent = "Pet: " + target.pet; }
+      const isNew = this.registerPet(target.pet);
+      if (!this.setActivePet(target.pet)) return;
+      const name = target.pet.charAt(0).toUpperCase() + target.pet.slice(1);
+      if (!isNew) { player.gold += 5; this.onCompanionChange?.(); }
+      this.ui.toast(isNew ? `${name} joined your companions!` : `${name} is already bonded · +5g bond echo.`);
+      this.ui.sync();
     });
     return;
   }
