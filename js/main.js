@@ -1,6 +1,7 @@
 import { loadAll } from "./assets.js";
 import { Game } from "./game.js";
 import "./logic.js";
+import "./interactions.js";
 import "./render.js";
 import { UI } from "./ui.js";
 import { buildCharacter, PRESETS, HAIRSTYLES, DEFAULT_LOOK } from "./chargen.js";
@@ -180,7 +181,12 @@ function startGame(savedLook, savedName, saveData) {
       p.gold = saveData.stats.gold || 0;
       p.hp = saveData.stats.hp || p.maxHp;
       if (saveData.stats.cls) { p.cls = saveData.stats.cls; }
-      if (saveData.inv) { game.inv = saveData.inv; }
+      if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
+      if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
+      if (saveData.flags) {
+        game.flags = { ...game.flags, ...saveData.flags };
+        if (game.flags.starterCache) { const cache = game.chests.find((chest) => chest.starter); if (cache) cache.opened = true; }
+      }
       if (saveData.equipped) { p.equipped = saveData.equipped; }
       game.ui.toast(`Welcome back, ${look.name}!`);
     }
@@ -198,7 +204,9 @@ function startGame(savedLook, savedName, saveData) {
         name: look.name,
         look: look,
         stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
-        inv: game.inv,
+        inv: p.inv,
+        fishing: game.fishingStats,
+        flags: game.flags,
         equipped: p.equipped,
         ts: Date.now(),
       });
@@ -210,7 +218,7 @@ function startGame(savedLook, savedName, saveData) {
         putSave({
           name: look.name, look,
           stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
-          inv: game.inv, equipped: p.equipped, ts: Date.now(),
+          inv: p.inv, fishing: game.fishingStats, flags: game.flags, equipped: p.equipped, ts: Date.now(),
         });
       }
     });

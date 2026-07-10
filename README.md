@@ -6,14 +6,15 @@
 https://anasta-chronicle.vercel.app
 
 ## Features
-- Pixel sprites (player 4-dir, tall trees, slime, tiles)
+- 100% code-generated pixel world, characters, creatures, props, and boss art
 - Depth-sorted 2.5D draw order
-- Combat · shield · evade · skills
-- Leveling · crafting · inventory · minimap
+- Class combat · nearest-target ranged aim · boss phases and telegraphs
+- Tension fishing · fish records · rod progression · guided forge
+- Leveling · quests · inventory · minimap · day/night and weather
 - Touch joystick for mobile
 
 ## Controls
-WASD · LMB attack · Shift shield · Space evade · C craft · I bag · 1–4 skills
+WASD · LMB attack · Shift shield · Space evade · F interact/fish · C forge · I bag · 1–4 skills
 
 ## Local
 ```bash

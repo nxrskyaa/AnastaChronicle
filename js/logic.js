@@ -1,8 +1,6 @@
 import { Game } from "./game.js";
-import { img, MONSTERS } from "./assets.js";
-import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
+import { ITEMS, RECIPES, doCraft, xpFor } from "./crafting.js";
 import { view } from "./view.js";
-import { CLASSES } from "./classes.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -13,13 +11,44 @@ const WEAPONS = {
   axe:    { name: "Axe",    dmg: 30, range: 38, speed: 0.62, cost: 12 },
   spear:  { name: "Spear",  dmg: 20, range: 62, speed: 0.5,  cost: 9 },
   dagger: { name: "Dagger", dmg: 14, range: 30, speed: 0.28, cost: 5 },
-  bow:    { name: "Bow",    dmg: 18, range: 95, speed: 0.55, cost: 10, ranged: true },
-  staff:  { name: "Staff",  dmg: 16, range: 90, speed: 0.5,  cost: 10, ranged: true },
+  bow:    { name: "Bow",    dmg: 18, range: 95, speed: 0.55, cost: 10, ranged: true, projectile: "arrow", pierce: true },
+  staff:  { name: "Staff",  dmg: 16, range: 90, speed: 0.5,  cost: 10, ranged: true, projectile: "fire" },
   dragonblade:  { name: "Dragon Blade", dmg: 42, range: 52, speed: 0.42, cost: 10 },
-  dragonbow:    { name: "Dragon Bow",   dmg: 34, range: 110, speed: 0.5, cost: 10, ranged: true },
-  dragonstaff:  { name: "Dragon Staff", dmg: 36, range: 100, speed: 0.48, cost: 10, ranged: true },
+  dragonbow:    { name: "Dragon Bow",   dmg: 34, range: 110, speed: 0.5, cost: 10, ranged: true, projectile: "arrow", pierce: true },
+  dragonstaff:  { name: "Dragon Staff", dmg: 36, range: 100, speed: 0.48, cost: 10, ranged: true, projectile: "fire" },
 };
 Game.prototype.WEAPONS = WEAPONS;
+
+const PROJECTILE_SPEED = { arrow: 280, bossfire: 150, fire: 200 };
+const PROJECTILE_LIFE = 1.4;
+const projectileSpeed = (kind) => PROJECTILE_SPEED[kind] || PROJECTILE_SPEED.fire;
+
+function rangedAim(game, kind) {
+  const p = game.player;
+  const ox = p.x, oy = p.y - 14;
+  const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
+  const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
+  const fallback = fx || fy ? { dx: fx, dy: fy } : { dx: 0, dy: 1 };
+  const maxD2 = (projectileSpeed(kind) * PROJECTILE_LIFE) ** 2;
+  const margin = 24;
+  let best = null, bestD2 = Infinity;
+
+  const consider = (x, y) => {
+    if (x < game.cam.x - margin || x > game.cam.x + view.w + margin ||
+        y < game.cam.y - margin || y > game.cam.y + view.h + margin) return;
+    const dx = x - ox, dy = y - oy, d2 = dx * dx + dy * dy;
+    if (d2 <= 0.001 || d2 > maxD2 || d2 >= bestD2) return;
+    best = { dx, dy }; bestD2 = d2;
+  };
+
+  for (const e of game.enemies) if (!e.dead) consider(e.x, e.y - e.h * 0.4);
+  if (game.boss && !game.boss.dead) consider(game.boss.x, game.boss.y - 30);
+  if (!best) return fallback;
+
+  const d = Math.sqrt(bestD2);
+  game.aimAssist = { x: ox + best.dx, y: oy + best.dy, until: game.t + .32 };
+  return { dx: best.dx / d, dy: best.dy / d };
+}
 
 Game.prototype.update = function (dt) {
   // hit-stop: freeze action briefly on big hits
@@ -68,8 +97,8 @@ Game.prototype.update = function (dt) {
     this.updateFishing(dt);
     p.vx = 0; p.vy = 0; p.moving = false;
     // any movement input cancels the cast
-    if (this.keys.KeyW || this.keys.KeyS || this.keys.KeyA || this.keys.KeyD || (this.stick && this.stick.active)) {
-      this.fishing = null;
+    if (this.fishing && (this.keys.KeyW || this.keys.KeyS || this.keys.KeyA || this.keys.KeyD || this.keys.ArrowUp || this.keys.ArrowDown || this.keys.ArrowLeft || this.keys.ArrowRight || (this.stick && this.stick.active))) {
+      this.failFishing("Fishing cancelled — stay planted while the line is out.");
     }
   }
 
@@ -112,7 +141,7 @@ Game.prototype.update = function (dt) {
     }
   } else { p.vx *= 0.9; p.vy *= 0.9; }
 
-  if (this.mouse.down && p.attackCd <= 0) this.doAttack();
+  if (!this.fishing && this.mouse.down && p.attackCd <= 0) this.doAttack();
 
   this.moveEntity(p, p.vx * dt, p.vy * dt, 6);
   p.sortY = p.y;
@@ -198,8 +227,9 @@ Game.prototype.doAttack = function () {
   const dmg = (w.dmg + p.level * 2) * (p.dmgMul || 1);
   // ranged weapons spawn a projectile instead of melee hitbox
   if (w.ranged) {
-    const dvx = fx || 0, dvy = fy || 1;
-    this.spawnProjectile(p.x, p.y - 14, dvx, dvy, p.equipped === "staff" ? "fire" : "arrow", Math.round(dmg), p.equipped === "bow");
+    const kind = w.projectile || "arrow";
+    const { dx, dy } = rangedAim(this, kind);
+    this.spawnProjectile(p.x, p.y - 14, dx, dy, kind, Math.round(dmg), w.pierce);
     this.audio.sfx("attack"); return;
   }
   let anyHit = false;
@@ -321,122 +351,8 @@ Game.prototype.updatePet = function (dt) {
   pt.sortY = pt.y;
 };
 
-Game.prototype.updateInteract = function () {
-  const p = this.player;
-  let target = null, kind = null, label = "";
-  for (const n of this.npcs) {
-    if (Math.hypot(n.x - p.x, n.y - p.y) < 34) { target = n; kind = "npc"; label = `Talk to ${n.name}`; break; }
-  }
-  if (!target) {
-    for (const c of this.chests) {
-      if (c.opened) continue;
-      if (Math.hypot(c.x - p.x, c.y - p.y) < 30) { target = c; kind = "chest"; label = c.pet ? "Open (?)" : "Open Chest"; break; }
-    }
-  }
-  // water's edge -> fishing prompt (a water tile within reach in front/around)
-  if (!target && !this.fishing) {
-    const T = 24, MW = 110;
-    const near = [[0, -1], [0, 1], [-1, 0], [1, 0], [-1, -1], [1, 1], [1, -1], [-1, 1]];
-    const ptx = (p.x / T) | 0, pty = (p.y / T) | 0;
-    for (const [dx, dy] of near) {
-      const tx = ptx + dx, ty = pty + dy;
-      if (tx < 0 || ty < 0 || tx >= MW || ty >= 110) continue;
-      if (this.map[ty * MW + tx] === 2) { target = { x: (tx + 0.5) * T, y: (ty + 0.5) * T }; kind = "fish"; label = "Cast Line"; break; }
-    }
-  }
-  this._interactTarget = target; this._interactKind = kind;
-  this.ui.setInteract(!!target || !!this.fishing, this.fishing ? (this.fishing.state === "bite" ? "REEL! (F)" : "Fishing…") : label);
-  // mobile QoL: auto-open a chest you walk right on top of
-  if (kind === "chest" && target && !target.opened && Math.hypot(target.x - p.x, target.y - p.y) < 18) {
-    this.interact();
-  }
-};
+// Interaction, chest claiming, and fishing live in interactions.js.
 
-// Fishing mini-game: cast -> wait (random) -> bite window -> reel (F) to catch.
-Game.prototype.startFishing = function (spot) {
-  const p = this.player;
-  p.dir = spot.y < p.y ? "up" : spot.y > p.y ? "down" : (spot.x < p.x ? "left" : "right");
-  this.fishing = { state: "cast", t: 0, wait: 1.2 + Math.random() * 2.8, spot, bobX: spot.x, bobY: spot.y };
-  this.audio.sfx("ui");
-  this.ui.toast("Line cast! Wait for a bite…");
-};
-Game.prototype.updateFishing = function (dt) {
-  const f = this.fishing; if (!f) return;
-  f.t += dt;
-  if (f.state === "cast") {
-    if (f.t >= f.wait) { f.state = "bite"; f.t = 0; f.window = 1.1; this.audio.sfx("quest"); this.ui.toast("A bite! Press F to reel!"); this.shake = Math.max(this.shake, 3); }
-  } else if (f.state === "bite") {
-    if (f.t >= f.window) { // missed
-      this.fishing = null; this.ui.toast("The fish got away…"); this.audio.sfx("hurt");
-    }
-  }
-};
-Game.prototype.reelFish = function () {
-  const f = this.fishing; if (!f) return;
-  if (f.state === "bite") {
-    // caught!
-    this.fishing = null;
-    this.quests.fishCount++;
-    const p = this.player;
-    // weighted fish table: common → uncommon → rare → legendary
-    const FISH = [
-      { name: "Minnow",      gold: 5,  weight: 30, rarity: "common" },
-      { name: "Bass",        gold: 9,  weight: 24, rarity: "common" },
-      { name: "Trout",       gold: 12, weight: 18, rarity: "common" },
-      { name: "Carp",        gold: 10, weight: 16, rarity: "common" },
-      { name: "Pike",        gold: 20, weight: 10, rarity: "uncommon" },
-      { name: "Salmon",      gold: 26, weight: 8,  rarity: "uncommon" },
-      { name: "Koi",         gold: 38, weight: 5,  rarity: "rare" },
-      { name: "Catfish",     gold: 32, weight: 5,  rarity: "rare" },
-      { name: "Crystal Eel", gold: 60, weight: 2,  rarity: "rare" },
-      { name: "Golden Fish", gold: 80, weight: 1.2,rarity: "legendary" },
-      { name: "River Spirit",gold: 120,weight: 0.4,rarity: "legendary" },
-    ];
-    let total = 0; for (const fi of FISH) total += fi.weight;
-    let roll = Math.random() * total, fish = FISH[0];
-    for (const fi of FISH) { roll -= fi.weight; if (roll <= 0) { fish = fi; break; } }
-    const gold = fish.gold + ((Math.random() * 6) | 0);
-    const rare = fish.rarity === "rare" || fish.rarity === "legendary";
-    const legendary = fish.rarity === "legendary";
-    p.gold += gold;
-    p.inv.fish = (p.inv.fish || 0) + 1;
-    if (legendary) p.inv.dragonscale = (p.inv.dragonscale || 0); // no scale, but flag rarity
-    this.audio.sfx("level");
-    const col = legendary ? "rgba(255,220,120,0.95)" : rare ? "rgba(240,200,140,0.9)" : "rgba(150,220,255,0.9)";
-    for (let i = 0; i < (legendary ? 24 : 12); i++) this.particles.push({ x: f.bobX, y: f.bobY, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 40, life: 0.7, color: col });
-    this.ui.toast(`${legendary ? "✨ LEGENDARY! " : rare ? "⭐ " : ""}Caught a ${fish.name}! +${gold}g`);
-    this.ui.sync && this.ui.sync();
-  } else if (f.state === "cast") {
-    this.fishing = null; this.ui.toast("Reeled in early.");
-  }
-};
-
-Game.prototype.interact = function () {
-  // fishing takes priority: reel if a line is out
-  if (this.fishing) { this.reelFish(); return; }
-  const t = this._interactTarget, kind = this._interactKind;
-  if (!t) return;
-  if (kind === "fish") { this.startFishing(t); return; }
-  if (kind === "npc") { this.ui.showDialog(t, this); return; }
-  if (kind === "chest" && !t.opened) {
-    t.opened = true; t.openT = 0;
-    this.quests.chestCount++;
-    this.audio.sfx("chest");
-    const p = this.player;
-    for (let i = 0; i < 10; i++) this.particles.push({ x: t.x, y: t.y - 8, vx: (Math.random() - 0.5) * 50, vy: -30 - Math.random() * 40, life: 0.6, color: "rgba(255,220,120,0.9)" });
-    if (t.pet) {
-      this.ui.showPet(t.pet, () => {
-        this.pet = { id: t.pet, x: p.x, y: p.y, bob: 0, sortY: p.y };
-        const chip = document.getElementById("pet-chip"); if (chip) { chip.classList.remove("hidden"); chip.textContent = "Pet: " + t.pet; }
-      });
-    } else {
-      const g = 5 + (Math.random() * 15 | 0); p.gold += g;
-      const w = ["sword", "axe", "spear", "dagger", "bow"][Math.random() * 5 | 0];
-      p.inv[w] = (p.inv[w] || 0) + 1;
-      this.ui.toast(`Chest: +${g}g · ${ITEMS[w]?.name || w}!`);
-    }
-  }
-};
 
 Game.prototype.useSkill = function (i) {
   const p = this.player;
@@ -471,7 +387,7 @@ Game.prototype.useSkill = function (i) {
       this.ui.toast("War Cry! +60% dmg"); break;
     }
     case "fireball": {
-      p.skillCd[i] = 3; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      p.skillCd[i] = 3; const { dx, dy } = rangedAim(this, "fire");
       this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)));
       this.audio.sfx("whirl"); this.ui.toast("Fireball!"); break;
     }
@@ -482,12 +398,12 @@ Game.prototype.useSkill = function (i) {
       this.ui.toast("Frost Nova!"); break;
     }
     case "arrowshot": {
-      p.skillCd[i] = 3; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      p.skillCd[i] = 3; const { dx, dy } = rangedAim(this, "arrow");
       this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true);
       this.audio.sfx("attack"); this.ui.toast("Power Shot!"); break;
     }
     case "multishot": {
-      p.skillCd[i] = 7; const { fx, fy } = dirVec(); let dx = fx || 0, dy = fy || 1;
+      p.skillCd[i] = 7; const { dx, dy } = rangedAim(this, "arrow");
       const base = Math.atan2(dy, dx);
       for (const off of [-0.28, 0, 0.28]) { this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((16 + p.level * 2) * (p.dmgMul || 1))); }
       this.audio.sfx("attack"); this.ui.toast("Multishot!"); break;
@@ -512,24 +428,25 @@ Game.prototype.useSkill = function (i) {
 Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce) {
   const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
   this.projectiles = this.projectiles || [];
-  const speed = kind === "arrow" ? 280 : kind === "bossfire" ? 150 : 200;
-  this.projectiles.push({ x, y, dx, dy, kind, dmg, pierce: !!pierce, life: 1.4, hostile: kind === "bossfire", hits: [] });
+  this.projectiles.push({ x, y, dx, dy, kind, dmg, pierce: !!pierce, life: PROJECTILE_LIFE, hostile: kind === "bossfire", hits: [], hitBoss: false });
 };
 Game.prototype.updateProjectiles = function (dt) {
   if (!this.projectiles) return;
   const p = this.player;
   for (const pr of this.projectiles) {
-    pr.x += pr.dx * (pr.kind === "arrow" ? 280 : pr.kind === "bossfire" ? 150 : 200) * dt;
-    pr.y += pr.dy * (pr.kind === "arrow" ? 280 : pr.kind === "bossfire" ? 150 : 200) * dt;
+    const speed = projectileSpeed(pr.kind);
+    pr.x += pr.dx * speed * dt;
+    pr.y += pr.dy * speed * dt;
     pr.life -= dt;
     if (pr.kind === "fire" || pr.kind === "bossfire") this.particles.push({ x: pr.x, y: pr.y, vx: 0, vy: 0, life: 0.3, color: pr.kind === "bossfire" ? "rgba(255,120,40,0.8)" : "rgba(255,160,60,0.8)" });
     if (pr.hostile) {
       // hits player
       if (p.invuln <= 0 && Math.hypot(pr.x - p.x, pr.y - (p.y - 14)) < 16) { this.damagePlayer(pr.dmg); pr.life = 0; }
     } else {
-      for (const e of this.enemies) { if (e.dead || pr.hits.includes(e)) continue; if (Math.hypot(pr.x - e.x, pr.y - (e.y - e.h * 0.4)) < 18) { this.hurtEnemy(e, pr.dmg, true); pr.hits.push(e); if (!pr.pierce) { pr.life = 0; break; } } }
+      let consumed = false;
+      for (const e of this.enemies) { if (e.dead || pr.hits.includes(e)) continue; if (Math.hypot(pr.x - e.x, pr.y - (e.y - e.h * 0.4)) < 18) { this.hurtEnemy(e, pr.dmg, true); pr.hits.push(e); if (!pr.pierce) { pr.life = 0; consumed = true; break; } } }
       // boss hit
-      if (this.boss && !this.boss.dead && Math.hypot(pr.x - this.boss.x, pr.y - (this.boss.y - 30)) < 34) { this.hurtBossDirect(pr.dmg); if (!pr.pierce) pr.life = 0; }
+      if (!consumed && !pr.hitBoss && this.boss && !this.boss.dead && Math.hypot(pr.x - this.boss.x, pr.y - (this.boss.y - 30)) < 34) { this.hurtBossDirect(pr.dmg); pr.hitBoss = true; if (!pr.pierce) pr.life = 0; }
     }
   }
   this.projectiles = this.projectiles.filter(pr => pr.life > 0 && pr.x > 0 && pr.y > 0 && pr.x < 110 * 24 && pr.y < 110 * 24);
@@ -553,18 +470,17 @@ Game.prototype.equip = function (id) { this.player.equipped = id; this.ui.toast(
 Game.prototype.craft = function (rid) {
   const r = RECIPES.find(x => x.id === rid); if (!r) return;
   const p = this.player;
-  if (!canCraft(p.inv, r)) { this.ui.toast("Missing materials"); return; }
-  for (const [k, n] of Object.entries(r.need)) p.inv[k] -= n;
-  p.inv[r.result] = (p.inv[r.result] || 0) + 1;
-  const isDragon = r.result.startsWith("dragon");
-  this.ui.toast(isDragon ? "🔥 Forged " + (ITEMS[r.result]?.name || r.result) + "!" : "Forged " + (ITEMS[r.result]?.name || r.result));
+  if (!doCraft(p.inv, r)) { this.ui.toast("Missing materials — check the source guide"); return; }
+  const item = ITEMS[r.result] || { name: r.result };
+  const isRare = !!item.rare;
+  this.ui.toast(`${isRare ? "MYTHIC FORGE · " : "Forged · "}${item.name}${item.rod ? " is now your active rod" : ""}`);
   // forge spark particles at player
-  for (let i = 0; i < (isDragon ? 24 : 12); i++) {
-    this.particles.push({ x: p.x, y: p.y - 20, vx: (Math.random() - 0.5) * 100, vy: -40 - Math.random() * 60, life: 0.7, color: isDragon ? (Math.random() < 0.5 ? "rgba(255,140,40,0.95)" : "rgba(255,200,80,0.9)") : "rgba(200,220,255,0.85)" });
+  for (let i = 0; i < (isRare ? 24 : 12); i++) {
+    this.particles.push({ x: p.x, y: p.y - 20, vx: (Math.random() - 0.5) * 100, vy: -40 - Math.random() * 60, life: 0.7, color: isRare ? (Math.random() < 0.5 ? "rgba(255,140,40,0.95)" : "rgba(255,200,80,0.9)") : "rgba(200,220,255,0.85)" });
   }
   this.fx.push({ kind: "levelring", x: p.x, y: p.y - 10, t: 0, dur: 0.5 });
-  this.audio.sfx(isDragon ? "level" : "pickup");
-  this.shake = Math.max(this.shake, isDragon ? 6 : 2);
+  this.audio.sfx(isRare ? "level" : "pickup");
+  this.shake = Math.max(this.shake, isRare ? 6 : 2);
   this.ui.renderCraft(); this.ui.renderInv();
 };
 
@@ -591,9 +507,9 @@ Game.prototype.spawnBoss = function () {
   this.boss = {
     x, y, sortY: y, hp, maxHp: hp, dmg: 14 + p.level * 2,
     frame: 0, frameT: 0, dead: false, hurt: 0,
-    state: "chase", atkCd: 3, breatheCd: 5, t: 0, rage: false,
+    state: "chase", atkCd: 3, breatheCd: 5, breathWindup: 0, t: 0, rage: false,
   };
-  this.ui.toast("⚠ A WORLD BOSS has appeared: Infernyx the Dragon!");
+  this.ui.toast("WORLD BOSS · Infernyx, the Ashen Oni, has awakened!");
   this.audio.sfx("level"); this.shake = Math.max(this.shake, 8);
 };
 Game.prototype.updateBoss = function (dt) {
@@ -605,7 +521,13 @@ Game.prototype.updateBoss = function (dt) {
   const p = this.player;
   b.t += dt; b.hurt = Math.max(0, b.hurt - dt);
   b.frameT += dt; if (b.frameT > 0.18) { b.frameT = 0; b.frame = (b.frame + 1) % 4; }
-  b.rage = b.hp < b.maxHp * 0.4;
+  const rageNow = b.hp < b.maxHp * 0.4;
+  if (rageNow && !b.rage) {
+    this.ui.toast("PHASE II · Infernyx shattered its oni guard!");
+    this.fx.push({ kind: "levelring", x: b.x, y: b.y - 18, t: 0, dur: 1 });
+    this.shake = Math.max(this.shake, 10); this.audio.sfx("level");
+  }
+  b.rage = rageNow;
 
   const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
   // move toward player but keep some distance (ranged aggressor)
@@ -619,15 +541,24 @@ Game.prototype.updateBoss = function (dt) {
   b.atkCd -= dt;
   if (d < 60 && b.atkCd <= 0) { b.atkCd = b.rage ? 1.4 : 2.2; this.damagePlayer(b.dmg); this.shake = Math.max(this.shake, 6); this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: "down", t: 0, dur: 0.3 }); }
 
-  // fire breath: volley of fireballs toward the player
-  b.breatheCd -= dt;
-  if (b.breatheCd <= 0) {
-    b.breatheCd = b.rage ? 2.6 : 4.5;
+  // Fire breath has a visible wind-up so the volley reads as a boss mechanic.
+  if (b.breathWindup > 0) {
+    b.breathWindup -= dt;
+    if (b.breathWindup <= 0) {
+      const base = b.breathAngle;
+      const spread = b.rage ? [-0.35, -0.12, 0.12, 0.35] : [-0.18, 0, 0.18];
+      for (const off of spread) this.spawnProjectile(b.x, b.y - 30, Math.cos(base + off), Math.sin(base + off), "bossfire", b.dmg);
+      this.fx.push({ kind: "whirl", x: b.x, y: b.y - 30, t: 0, dur: 0.4 });
+    }
+  } else {
+    b.breatheCd -= dt;
+  }
+  if (b.breatheCd <= 0 && b.breathWindup <= 0) {
+    b.breatheCd = b.rage ? 2.8 : 4.8;
+    b.breathWindup = b.rage ? .48 : .68;
+    b.breathAngle = Math.atan2(dy, dx);
     this.audio.sfx("whirl"); this.shake = Math.max(this.shake, 5);
-    const base = Math.atan2(dy, dx);
-    const spread = b.rage ? [-0.35, -0.12, 0.12, 0.35] : [-0.18, 0, 0.18];
-    for (const off of spread) this.spawnProjectile(b.x, b.y - 30, Math.cos(base + off), Math.sin(base + off), "bossfire", b.dmg);
-    this.fx.push({ kind: "whirl", x: b.x, y: b.y - 30, t: 0, dur: 0.4 });
+    this.fx.push({ kind: "bosswarn", x: b.x, y: b.y - 30, angle: b.breathAngle, t: 0, dur: b.breathWindup });
   }
 };
 // AoE damage helper for player skills hitting the boss
@@ -655,7 +586,7 @@ Game.prototype.killBoss = function () {
   for (let i = 0; i < 30; i++) this.particles.push({ x: b.x, y: b.y - 30, vx: (Math.random() - 0.5) * 120, vy: -40 - Math.random() * 80, life: 1.0, color: Math.random() < 0.5 ? "rgba(255,180,60,0.95)" : "rgba(255,120,40,0.9)" });
   this.fx.push({ kind: "levelring", x: b.x, y: b.y - 20, t: 0, dur: 1.0 });
   this.shake = Math.max(this.shake, 12); this.audio.sfx("level");
-  this.ui.toast(`💀 Infernyx defeated! +${goldReward}g +${xpReward}xp +Dragon Scale!`);
+  this.ui.toast(`INFERNYX SEALED · +${goldReward}g · +${xpReward}xp · Dragon Scale`);
   while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; this.ui.showLevel(p.level); }
   this.ui.sync && this.ui.sync();
   setTimeout(() => { this.boss = null; }, 600);

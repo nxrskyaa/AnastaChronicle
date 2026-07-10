@@ -56,6 +56,15 @@ Game.prototype.render = function () {
         if (land(x, y + 1)) fm |= 4;
         if (land(x - 1, y)) fm |= 8;
         if (fm) { const f = waterFoam(fm); if (f) ctx.drawImage(f, sx, sy, T, T); }
+        // Deterministic code-generated pond life keeps water from feeling tiled.
+        const seed = (x * 37 + y * 19) % 47;
+        if (seed === 0) {
+          const bob = Math.round(Math.sin(this.t * 1.8 + x) * 1);
+          ctx.fillStyle = "#2c7259"; ctx.fillRect(sx + 7, sy + 10 + bob, 8, 4);
+          ctx.fillStyle = "#54a46b"; ctx.fillRect(sx + 8, sy + 9 + bob, 5, 2);
+          ctx.fillStyle = "#8dd27d"; ctx.fillRect(sx + 10, sy + 9 + bob, 2, 1);
+          if ((x + y) % 2 === 0) { ctx.fillStyle = "#f4d2df"; ctx.fillRect(sx + 12, sy + 7 + bob, 3, 3); ctx.fillStyle = "#fff4c8"; ctx.fillRect(sx + 13, sy + 8 + bob, 1, 1); }
+        }
       }
     }
   }
@@ -100,16 +109,16 @@ Game.prototype.render = function () {
   }
 
   const draw = [];
-  const inv = (wx) => { const sx = wx - camx; return sx > -80 && sx < view.w + 80; };
-  for (const o of this.buildings) if (inv(o.x)) draw.push({ y: o.sortY, k: "building", o });
-  for (const o of this.trees) if (inv(o.x)) draw.push({ y: o.sortY, k: "tree", o });
-  for (const o of this.bushes) if (inv(o.x)) draw.push({ y: o.sortY, k: "bush", o });
-  for (const o of this.rocks) if (inv(o.x)) draw.push({ y: o.sortY, k: "rock", o });
-  for (const o of this.plants) if (o.hp > 0 && inv(o.x)) draw.push({ y: o.sortY, k: "plant", o });
-  for (const o of this.chests) if (inv(o.x)) draw.push({ y: o.y, k: "chest", o });
-  for (const o of this.npcs) if (inv(o.x)) draw.push({ y: o.sortY, k: "npc", o });
-  for (const e of this.enemies) if (!e.dead && inv(e.x)) draw.push({ y: e.sortY, k: "enemy", o: e });
-  if (this.boss && !this.boss.dead && inv(this.boss.x)) draw.push({ y: this.boss.sortY, k: "boss", o: this.boss });
+  const inv = (wx, wy, margin = 80) => wx - camx > -margin && wx - camx < view.w + margin && wy - camy > -margin && wy - camy < view.h + margin;
+  for (const o of this.buildings) if (inv(o.x, o.y, 100)) draw.push({ y: o.sortY, k: "building", o });
+  for (const o of this.trees) if (inv(o.x, o.y, 90)) draw.push({ y: o.sortY, k: "tree", o });
+  for (const o of this.bushes) if (inv(o.x, o.y)) draw.push({ y: o.sortY, k: "bush", o });
+  for (const o of this.rocks) if (inv(o.x, o.y)) draw.push({ y: o.sortY, k: "rock", o });
+  for (const o of this.plants) if (o.hp > 0 && inv(o.x, o.y)) draw.push({ y: o.sortY, k: "plant", o });
+  for (const o of this.chests) if (inv(o.x, o.y)) draw.push({ y: o.y, k: "chest", o });
+  for (const o of this.npcs) if (inv(o.x, o.y)) draw.push({ y: o.sortY, k: "npc", o });
+  for (const e of this.enemies) if (!e.dead && inv(e.x, e.y)) draw.push({ y: e.sortY, k: "enemy", o: e });
+  if (this.boss && !this.boss.dead && inv(this.boss.x, this.boss.y, 140)) draw.push({ y: this.boss.sortY, k: "boss", o: this.boss });
   if (this.pet) draw.push({ y: this.pet.sortY, k: "pet", o: this.pet });
   draw.push({ y: p.sortY, k: "player", o: p });
   // remote players (multiplayer presence) — interpolate toward server pos
@@ -119,7 +128,7 @@ Game.prototype.render = function () {
     rp.ry += (rp.y - rp.ry) * 0.25;
     if (rp.moving) { rp.frameT += 0.016; if (rp.frameT > 0.12) { rp.frameT = 0; rp.frame = (rp.frame + 1) % 4; } }
     else rp.frame = 0;
-    if (inv(rp.rx)) draw.push({ y: rp.ry, k: "remote", o: rp });
+    if (inv(rp.rx, rp.ry)) draw.push({ y: rp.ry, k: "remote", o: rp });
   }
   draw.sort((a, b) => a.y - b.y);
 
@@ -178,6 +187,13 @@ Game.prototype.render = function () {
     else if (d.k === "chest") {
       const open = o.opened;
       const im = img(open ? "fx/chest_open" : "fx/chest");
+      if (!open && this._interactTarget === o) {
+        const pulse = Math.round(Math.sin(this.t * 5) * 2);
+        ctx.strokeStyle = o.pet ? "#f1cf63" : "#76e0b2"; ctx.lineWidth = 1;
+        ctx.strokeRect(sx - 15 - pulse, sy - 20 - pulse, 30 + pulse * 2, 23 + pulse * 2);
+        ctx.fillStyle = o.pet ? "#ffe38a" : "#a2f2cd";
+        ctx.fillRect(sx - 2, sy - 27 - pulse, 5, 2); ctx.fillRect(sx - 1, sy - 25 - pulse, 3, 2); ctx.fillRect(sx, sy - 23 - pulse, 1, 2);
+      }
       // lid lift animation
       if (open && o.openT < 1) { ctx.save(); ctx.translate(sx, sy); }
       if (im) ctx.drawImage(im, sx - 12, sy - 16 - (open ? Math.round(o.openT * 3) : 0));
@@ -230,7 +246,7 @@ Game.prototype.render = function () {
       }
     }
     else if (d.k === "boss") {
-      const sz = BOSS_SIZE * 1.4;   // bigger than native
+      const sz = BOSS_SIZE; // native integer scale stays crisp after the canvas scales
       const frame = bossFrame(o.frame, o.rage);
       // large soft shadow for boss
       ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(sx, sy + 2, sz * 0.4, 6, 0, 0, 7); ctx.fill();
@@ -239,7 +255,7 @@ Game.prototype.render = function () {
         if (o.hurt > 0) ctx.filter = "brightness(1.6)";
         // rage glow aura
         if (o.rage) { ctx.shadowColor = "rgba(255,80,20,0.8)"; ctx.shadowBlur = 20; }
-        ctx.drawImage(frame, sx - sz / 2, sy - sz + 8, sz, sz);
+        ctx.drawImage(frame, Math.round(sx - sz / 2), Math.round(sy - sz + 8));
         ctx.restore();
       }
     }
@@ -274,6 +290,17 @@ Game.prototype.render = function () {
     for (const h of this._hits) { h.t += 1 / 60; const f = Math.min(3, (h.t / 0.05) | 0); const im = img(`fx/hit_${f}`); if (im) ctx.drawImage(im, Math.round(h.x - camx) - 8, Math.round(h.y - camy) - 8); }
     this._hits = this._hits.filter(h => h.t < 0.2);
   }
+  if (this.aimAssist && this.aimAssist.until > this.t) {
+    const ax = Math.round(this.aimAssist.x - camx), ay = Math.round(this.aimAssist.y - camy);
+    const pulse = 7 + Math.round(Math.sin(this.t * 18));
+    ctx.strokeStyle = "rgba(225,255,190,.9)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ax - pulse, ay - pulse + 4); ctx.lineTo(ax - pulse, ay - pulse); ctx.lineTo(ax - pulse + 4, ay - pulse);
+    ctx.moveTo(ax + pulse - 4, ay - pulse); ctx.lineTo(ax + pulse, ay - pulse); ctx.lineTo(ax + pulse, ay - pulse + 4);
+    ctx.moveTo(ax - pulse, ay + pulse - 4); ctx.lineTo(ax - pulse, ay + pulse); ctx.lineTo(ax - pulse + 4, ay + pulse);
+    ctx.moveTo(ax + pulse - 4, ay + pulse); ctx.lineTo(ax + pulse, ay + pulse); ctx.lineTo(ax + pulse, ay + pulse - 4);
+    ctx.stroke();
+  }
   for (const pa of this.particles) { ctx.fillStyle = pa.color; ctx.globalAlpha = Math.max(0, pa.life * 2); ctx.fillRect(Math.round(pa.x - camx), Math.round(pa.y - camy), 2, 2); }
   ctx.globalAlpha = 1;
 
@@ -283,16 +310,32 @@ Game.prototype.render = function () {
     const f = this.fishing, p = this.player;
     const px = Math.round(p.x - camx), py = Math.round(p.y - camy - 20);
     const bx = Math.round(f.bobX - camx), by = Math.round(f.bobY - camy);
-    ctx.strokeStyle = "rgba(240,240,240,0.7)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(bx, by); ctx.stroke();
-    const bounce = f.state === "bite" ? Math.sin(this.t * 30) * 2 : Math.sin(this.t * 3) * 1;
+    const dx = bx - px, dy = by - py, distance = Math.hypot(dx, dy) || 1;
+    const rodTipX = Math.round(px + dx / distance * 12), rodTipY = Math.round(py + dy / distance * 12 - 6);
+    const tension = f.tension || 0;
+    // Bent rod and curved line communicate tension before the HUD is read.
+    ctx.strokeStyle = "#5a351e"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px - dx / distance * 5, py + 4); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+    ctx.strokeStyle = tension > .8 ? "rgba(255,150,120,.95)" : "rgba(235,244,238,.78)"; ctx.lineWidth = 1;
+    const sag = f.state === "hooked" ? Math.round((1 - tension) * 10) : 5;
+    ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.quadraticCurveTo((rodTipX + bx) / 2, (rodTipY + by) / 2 + sag, bx, by); ctx.stroke();
+    const bounce = f.state === "bite" ? Math.sin(this.t * 30) * 2 : f.state === "hooked" ? Math.sin(this.t * (f.surge ? 24 : 8)) * (f.surge ? 3 : 1) : Math.sin(this.t * 3);
+    if (f.state === "hooked") {
+      const dart = Math.round(Math.sin(f.totalT * (3 + f.fish.difficulty * 3) + f.phase) * (6 + f.fish.difficulty * 8));
+      ctx.fillStyle = "rgba(14,55,70,.48)";
+      ctx.fillRect(bx + dart - 7, by + 6, 12, 4); ctx.fillRect(bx + dart - 4, by + 4, 7, 8);
+      ctx.fillRect(bx + dart + 5, by + 5, 3, 2); ctx.fillRect(bx + dart + 5, by + 9, 3, 2);
+      if (f.surge) {
+        ctx.strokeStyle = "rgba(205,245,250,.8)";
+        for (let i = 0; i < 2; i++) { const radius = 5 + ((this.t * 18 + i * 6) % 13); ctx.strokeRect(bx - radius, by - Math.round(radius / 3), radius * 2, Math.round(radius / 1.5)); }
+      }
+    }
     // bobber
-    ctx.fillStyle = "#e05050"; ctx.beginPath(); ctx.arc(bx, by + bounce, 2.5, 0, 7); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.fillRect(bx - 1, by + bounce, 2, 1);
+    ctx.fillStyle = "#c83f3f"; ctx.fillRect(bx - 2, Math.round(by + bounce - 2), 5, 4);
+    ctx.fillStyle = "#fff1d2"; ctx.fillRect(bx - 1, Math.round(by + bounce - 2), 3, 1);
     if (f.state === "bite") {
       // ripple + "!" alert
       ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.5 * Math.sin(this.t * 20)})`;
-      ctx.beginPath(); ctx.arc(bx, by, 5 + Math.sin(this.t * 12) * 2, 0, 7); ctx.stroke();
+      const ripple = 5 + Math.round(Math.sin(this.t * 12) * 2); ctx.strokeRect(bx - ripple, by - Math.round(ripple / 2), ripple * 2, ripple);
       ctx.fillStyle = "#ffd24a"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
       ctx.fillText("!", bx, by - 8); ctx.textAlign = "left";
     }
@@ -431,6 +474,18 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.fillStyle = `rgba(255,255,200,${0.5 - pr * 0.5})`;
       ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 7); ctx.fill();
       ctx.restore();
+    } else if (f.kind === "bosswarn") {
+      ctx.save(); ctx.translate(sx, sy);
+      const length = 78 + pr * 28, half = .22 + pr * .08;
+      ctx.fillStyle = `rgba(255,70,35,${.08 + pr * .14})`;
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(f.angle - half) * length, Math.sin(f.angle - half) * length);
+      ctx.lineTo(Math.cos(f.angle + half) * length, Math.sin(f.angle + half) * length);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = `rgba(255,190,80,${.35 + pr * .55})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(f.angle) * length, Math.sin(f.angle) * length); ctx.stroke();
+      const pulse = 9 + Math.round(pr * 14); ctx.strokeStyle = `rgba(255,120,45,${1 - pr * .35})`;
+      ctx.strokeRect(-pulse, -pulse, pulse * 2, pulse * 2); ctx.restore();
     } else if (f.kind === "frost") {      // expanding icy ring + shards
       ctx.strokeStyle = `rgba(150,230,255,${1 - pr})`; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(sx, sy - 8, 8 + pr * 60, 0, 7); ctx.stroke();
@@ -452,22 +507,6 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.fillStyle = "#e8e0d0"; ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(1, -2.5); ctx.lineTo(1, 2.5); ctx.closePath(); ctx.fill();
       ctx.restore();
     }
-  }
-  // ---- boss HP bar (screen-space, top center) ----
-  if (this.boss && !this.boss.dead) {
-    const b = this.boss, cw = this.canvas.clientWidth;
-    const bw = Math.min(320, cw - 40), bx = (cw - bw) / 2, by = 48;
-    ctx.save();
-    ctx.fillStyle = "rgba(10,6,4,0.7)"; ctx.fillRect(bx - 3, by - 3, bw + 6, 16);
-    ctx.fillStyle = "#1a0a06"; ctx.fillRect(bx, by, bw, 10);
-    const pct = b.hp / b.maxHp;
-    const grad = ctx.createLinearGradient(bx, 0, bx + bw, 0);
-    grad.addColorStop(0, "#ff5a2a"); grad.addColorStop(1, "#ffae40");
-    ctx.fillStyle = grad; ctx.fillRect(bx, by, bw * pct, 10);
-    ctx.strokeStyle = b.rage ? "#ffce5a" : "#7a2810"; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, bw, 10);
-    ctx.fillStyle = "#ffe8c0"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText(`${b.rage ? "🔥 " : ""}Infernyx — ${Math.ceil(b.hp)}/${b.maxHp}`, bx + bw / 2, by - 6);
-    ctx.textAlign = "left"; ctx.restore();
   }
   ctx.globalAlpha = 1;
 };

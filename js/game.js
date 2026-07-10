@@ -1,11 +1,9 @@
-import { img, MONSTERS, PET_IDS } from "./assets.js";
-import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { buildCharacter, buildWeapon, DEFAULT_LOOK } from "./chargen.js";
 import { QuestLog, NPC_DEFS } from "./quests.js";
 import { buildVillage } from "./buildings.js";
 import { audio } from "./audio.js";
 import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
-import { view, computeView } from "./view.js";
+import { view } from "./view.js";
 import { buildTiles } from "./tilegen.js";
 import { buildBoss } from "./boss.js";
 import { applyClass } from "./classes.js";
@@ -43,6 +41,8 @@ export class Game {
     this.plants = [];   // harvestable plants
     this.npcs = [];
     this.pet = null;
+    this.flags = { starterCache: false };
+    this.fishingStats = { total: 0, best: 0, records: {} };
     this.time = 6 * 60;
     this.weather = "clear";     // clear | rain | snow
     this.weatherT = 30;
@@ -193,7 +193,7 @@ export class Game {
       attackT: 0, attackDur: 0.24, attackCd: 0, evadeT: 0, evadeCd: 0, invuln: 0,
       shield: false, skillCd: [0, 0, 0, 0],
       buffT: 0, buffMul: 1, dmgMul: 1, defense: 1,
-      inv: { wood: 2, ore: 0, gel: 0, herb: 1 },
+      inv: { wood: 2, ore: 0, gel: 0, herb: 1, basicrod: 1 },
       equipped: "sword", dmg: 8, sortY: 0,
       name: this.look.name || "Anasta",
       cls: this.look.cls || "warrior",
@@ -213,7 +213,9 @@ export class Game {
     }
 
     for (let k = 0; k < 46; k++) this.spawnEnemy();
-    for (let k = 0; k < 16; k++) this.spawnChest();
+    // A deliberate starter cache teaches F interaction and funds the first forge.
+    this.chests.push({ x: this.camp.x + 28, y: this.camp.y + 64, sortY: this.camp.y + 64, opened: false, openT: 0, pet: null, starter: true });
+    for (let k = 0; k < 15; k++) this.spawnChest();
 
     // ambient wildlife — butterflies (day) / fireflies (night), passive & harmless
     this.critters = [];
@@ -265,13 +267,15 @@ export class Game {
 
   bindInput() {
     addEventListener("keydown", (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       this.keys[e.code] = true;
+      if (e.repeat && ["KeyI", "KeyC", "KeyQ", "KeyM", "KeyF", "Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code)) return;
       if (e.code === "KeyI") this.ui.toggle("inv");
       if (e.code === "KeyC") this.ui.toggle("craft");
       if (e.code === "KeyQ") this.ui.toggle("quest");
       if (e.code === "KeyM") this.toggleMoveMode();
-      if (e.code === "KeyF") this.interact();
-      if (["Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code)) this.useSkill(Number(e.code.slice(5)) - 1);
+      if (e.code === "KeyF" && !e.repeat && !this.paused) this.interact();
+      if (["Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code) && !e.repeat && !this.paused) this.useSkill(Number(e.code.slice(5)) - 1);
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
     });
     addEventListener("keyup", (e) => { this.keys[e.code] = false; });
@@ -323,13 +327,16 @@ export class Game {
     }
     const hold = (id, on, off) => {
       const el = document.getElementById(id); if (!el) return;
-      el.addEventListener("touchstart", (e) => { e.preventDefault(); on(); }, { passive: false });
-      el.addEventListener("touchend", (e) => { e.preventDefault(); off && off(); }, { passive: false });
+      const end = (e) => { e.preventDefault(); off?.(); };
+      el.addEventListener("pointerdown", (e) => { e.preventDefault(); on(); });
+      el.addEventListener("pointerup", end);
+      el.addEventListener("pointercancel", end);
+      el.addEventListener("pointerleave", (e) => { if (e.buttons) end(e); });
     };
     hold("btn-attack", () => this.mouse.down = true, () => this.mouse.down = false);
     hold("btn-shield", () => this.keys.ShiftLeft = true, () => this.keys.ShiftLeft = false);
     hold("btn-evade", () => this.keys.Space = true, () => this.keys.Space = false);
-    hold("btn-interact", () => this.interact(), null);
+    hold("btn-interact", () => { this.keys.KeyF = true; if (!this.paused) this.interact(); }, () => this.keys.KeyF = false);
     this.canvas.addEventListener("touchstart", (e) => {
       const r = this.canvas.getBoundingClientRect();
       const mx = (e.touches[0].clientX - r.left) * (view.w / r.width);
@@ -341,7 +348,7 @@ export class Game {
       if (!hit) for (const n of this.npcs) { if (Math.hypot(n.x - wx, n.y - wy) < 26) { hit = { t: n, k: "npc" }; break; } }
       if (hit) {
         // if player close enough, interact immediately; else walk toward it
-        const p = this.player, near = Math.hypot(hit.t.x - p.x, hit.t.y - p.y) < 40;
+        const p = this.player, near = Math.hypot(hit.t.x - p.x, hit.t.y - p.y) <= 34;
         if (near) { this._interactTarget = hit.t; this._interactKind = hit.k; this.interact(); }
         else { this.moveTarget = { x: hit.t.x, y: hit.t.y }; this.ui.toast("Approaching…"); }
         return;

@@ -111,6 +111,25 @@
       <div class="clock-row"><span id="clock">Day 06:00</span><span id="pet-chip" class="hidden">Pet: —</span></div>
     </div>
 
+    <div id="boss-hud" class="hidden" aria-live="polite">
+      <div class="boss-hud-top">
+        <span class="boss-kicker">WORLD BOSS</span>
+        <span id="boss-phase">AWAKENED</span>
+      </div>
+      <div class="boss-title-row">
+        <strong>Infernyx, Ashen Oni</strong>
+        <span id="boss-distance">—</span>
+      </div>
+      <div class="boss-health-track">
+        <div id="boss-health-fill"></div>
+        <i class="boss-rage-mark" aria-hidden="true"></i>
+      </div>
+      <div class="boss-hud-bottom">
+        <span id="boss-health-text">0 / 0 HP</span>
+        <span id="boss-state">Hunt the marked threat</span>
+      </div>
+    </div>
+
     <div id="top-right">
       <button class="icon-btn" id="btn-settings" title="Settings">⚙</button>
       <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
@@ -130,6 +149,21 @@
     <div id="toast"></div>
     <div id="dmg-layer"></div>
     <div id="interact-prompt" class="hidden"><kbd>F</kbd> <span id="interact-label">Open</span></div>
+
+    <div id="fishing-hud" class="hidden" aria-live="polite">
+      <div class="fishing-head"><span id="fishing-state">LINE CAST</span><b id="fishing-condition">Calm water</b></div>
+      <div class="fishing-row">
+        <span>Catch</span>
+        <div class="fishing-meter catch"><div id="fishing-progress"></div></div>
+        <b id="fishing-progress-text">0%</b>
+      </div>
+      <div class="fishing-row">
+        <span>Tension</span>
+        <div class="fishing-meter tension"><i></i><div id="fishing-tension"></div></div>
+        <b id="fishing-tension-text">LOW</b>
+      </div>
+      <p id="fishing-tip">Wait for a bite…</p>
+    </div>
 
     <div id="touch-ui">
       <!-- analog stick -->
@@ -151,7 +185,19 @@
   </div>
 
   <div id="panel-inv" class="panel hidden"><div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div><div id="inv-grid"></div><div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div></div>
-  <div id="panel-craft" class="panel hidden"><div class="panel-head"><h2>Forge</h2><button class="panel-close" data-close="craft">×</button></div><div id="craft-list"></div></div>
+  <div id="panel-craft" class="panel panel-wide hidden">
+    <div class="panel-head"><div><span class="panel-kicker">CAMP SMITHY</span><h2>Forge & Arsenal</h2></div><button class="panel-close" data-close="craft">×</button></div>
+    <div class="forge-guide">
+      <div class="forge-guide-copy">
+        <span class="forge-step">01 · GATHER</span>
+        <strong>Harvest materials in the wild.</strong>
+        <p>Bamboo and trees yield Wood, crystal nodes yield Ore, slimes and vines yield Gel. Infernyx drops Dragon Scale.</p>
+      </div>
+      <div class="forge-flow" aria-label="Forge steps"><span>Gather</span><i>›</i><span>Forge</span><i>›</i><span>Equip</span></div>
+    </div>
+    <div id="forge-summary"></div>
+    <div id="craft-list"></div>
+  </div>
   <div id="panel-quest" class="panel hidden"><div class="panel-head"><h2>Quest Log</h2><button class="panel-close" data-close="quest">×</button></div><div id="quest-list"></div></div>
   <div id="panel-dialog" class="panel hidden"><div class="panel-head"><h2 id="dialog-name">NPC</h2><button class="panel-close" data-close="dialog">×</button></div><p id="dialog-text"></p><div id="dialog-quests"></div></div>
   <div id="panel-settings" class="panel hidden">

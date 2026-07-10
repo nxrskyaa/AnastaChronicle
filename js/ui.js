@@ -1,5 +1,7 @@
 import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { QUESTS } from "./quests.js";
+import { CLASSES } from "./classes.js";
+import { RODS, activeRod } from "./fishing.js";
 
 export class UI {
   constructor(audio) {
@@ -24,7 +26,21 @@ export class UI {
     this._petCb = null;
     document.getElementById("btn-pet-ok")?.addEventListener("click", () => { this.panels.pet.classList.add("hidden"); if (this.game) this.game.paused = false; if (this._petCb) this._petCb(); });
   }
-  bind(g) { this.game = g; }
+  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); }
+
+  renderSkillbar() {
+    if (!this.game) return;
+    const classId = this.game.player.cls || "warrior";
+    const loadout = CLASSES[classId] || CLASSES.warrior;
+    document.querySelectorAll("#skillbar .sk[data-i]").forEach((button) => {
+      const skill = loadout.skills[Number(button.dataset.i)];
+      const label = button.querySelector(".sk-name");
+      if (label && skill) label.textContent = skill.name;
+      if (skill) button.title = `${skill.name} — ${skill.desc}`;
+      button.dataset.class = classId;
+    });
+    this._skillClass = classId;
+  }
 
   toast(msg) {
     const el = document.getElementById("toast"); if (!el) return;
@@ -116,14 +132,50 @@ export class UI {
 
   sync() {
     const g = this.game; if (!g) return; const p = g.player;
+    if (this._skillClass !== p.cls) this.renderSkillbar();
     const clampP = v => Math.max(0, Math.min(100, v));
     const setW = (id, pct) => { const el = document.getElementById(id); if (el) el.style.width = clampP(pct) + "%"; };
     setW("hp-fill", p.hp / p.maxHp * 100); setW("stamina-fill", p.stamina / p.maxStamina * 100); setW("xp-fill", p.xp / xpFor(p.level) * 100);
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set("hp-text", Math.max(0, Math.ceil(p.hp))); set("stamina-text", Math.ceil(p.stamina));
     set("xp-text", "LV " + p.level); set("gold-text", p.gold); set("eq-text", ITEMS[p.equipped]?.name || "—");
-    const maxCd = [4, 6, 7, 5];
+    const maxCd = (CLASSES[p.cls] || CLASSES.warrior).skills.map((skill) => skill.cd);
     for (let i = 0; i < 4; i++) { const el = document.getElementById("cd" + i); if (el) { const cd = p.skillCd[i]; el.style.transform = cd > 0 ? `scaleY(${Math.min(1, cd / maxCd[i])})` : "scaleY(0)"; } }
+    this.syncBoss(g.boss);
+    this.syncFishing(g.fishing);
+  }
+
+  syncBoss(boss) {
+    const hud = document.getElementById("boss-hud"); if (!hud) return;
+    const visible = !!boss && !boss.dead;
+    hud.classList.toggle("hidden", !visible);
+    if (!visible) { hud.classList.remove("rage"); return; }
+    const pct = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+    hud.classList.toggle("rage", !!boss.rage);
+    const fill = document.getElementById("boss-health-fill"); if (fill) fill.style.width = `${pct * 100}%`;
+    const hp = document.getElementById("boss-health-text"); if (hp) hp.textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp} HP`;
+    const phase = document.getElementById("boss-phase"); if (phase) phase.textContent = boss.rage ? "PHASE II · RAGE" : "PHASE I · AWAKENED";
+    const state = document.getElementById("boss-state"); if (state) state.textContent = boss.rage ? "Firestorm active" : pct < .7 ? "Oni guard is cracking" : "Break the oni guard";
+    const distance = document.getElementById("boss-distance");
+    if (distance && this.game?.player) distance.textContent = `${Math.round(Math.hypot(boss.x - this.game.player.x, boss.y - this.game.player.y) / 24)} tiles`;
+  }
+
+  syncFishing(fishing) {
+    const hud = document.getElementById("fishing-hud"); if (!hud) return;
+    hud.classList.toggle("hidden", !fishing);
+    document.getElementById("hud")?.classList.toggle("fishing-active", !!fishing);
+    if (!fishing) return;
+    const progress = Math.max(0, Math.min(1, fishing.progress || 0));
+    const tension = Math.max(0, Math.min(1, fishing.tension || 0));
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    const state = fishing.state === "bite" ? "BITE — HOOK IT!" : fishing.state === "hooked" ? "FISH ON THE LINE" : "LINE CAST";
+    set("fishing-state", state);
+    set("fishing-condition", fishing.context?.condition || "Reading the water");
+    set("fishing-progress-text", `${Math.round(progress * 100)}%`);
+    set("fishing-tension-text", tension > .82 ? "DANGER" : tension > .62 ? "HIGH" : tension > .27 ? "STABLE" : "SLACK");
+    set("fishing-tip", fishing.tip || (fishing.state === "bite" ? "Tap F now to set the hook!" : fishing.state === "hooked" ? "Hold F to reel · release during a surge" : "Wait for the bobber to dive…"));
+    const progressEl = document.getElementById("fishing-progress"); if (progressEl) progressEl.style.width = `${progress * 100}%`;
+    const tensionEl = document.getElementById("fishing-tension"); if (tensionEl) tensionEl.style.width = `${tension * 100}%`;
   }
 
   renderInv() {
@@ -134,7 +186,8 @@ export class UI {
       const cell = document.createElement("div"); cell.className = "inv-cell";
       const id = keys[i];
       if (id) {
-        cell.innerHTML = `<span class="inv-name">${ITEMS[id]?.name || id}</span>`;
+        const item = ITEMS[id] || { name: id, glyph: "?" };
+        cell.innerHTML = `<span class="inv-glyph">${item.glyph || "?"}</span><span class="inv-name">${item.name}</span>`;
         if (p.inv[id] > 1) { const q = document.createElement("span"); q.className = "qty"; q.textContent = p.inv[id]; cell.appendChild(q); }
         if (ITEMS[id]?.weapon) { cell.classList.add("weapon"); if (p.equipped === id) cell.classList.add("equipped"); cell.addEventListener("click", () => this.game.equip(id)); }
       }
@@ -144,12 +197,37 @@ export class UI {
   renderCraft() {
     const list = document.getElementById("craft-list"); if (!list || !this.game) return;
     const p = this.game.player; list.innerHTML = "";
+    const current = this.game.WEAPONS[p.equipped];
+    const rod = activeRod(p.inv);
+    const summary = document.getElementById("forge-summary");
+    if (summary) {
+      summary.className = "forge-summary";
+      summary.innerHTML = `<div><span>Traveler class</span><b>${CLASSES[p.cls]?.name || "Warrior"}</b></div><div><span>Equipped weapon</span><b>${ITEMS[p.equipped]?.name || "Fist"}</b></div><div><span>Active fishing rod</span><b>${rod.name}</b></div>`;
+    }
+    let group = "";
     for (const r of RECIPES) {
+      if (r.group !== group) {
+        group = r.group;
+        const heading = document.createElement("h3"); heading.className = "craft-group-title"; heading.textContent = group; list.appendChild(heading);
+      }
       const ok = canCraft(p.inv, r);
-      const need = Object.entries(r.need).map(([k, n]) => { const have = p.inv[k] || 0; return `<span class="${have >= n ? "ok" : "need"}">${ITEMS[k].name} ${have}/${n}</span>`; }).join(" · ");
-      const row = document.createElement("div"); row.className = "craft-row";
-      row.innerHTML = `<div class="craft-info"><h3>${ITEMS[r.result].name}</h3><p>${r.desc}</p><p>${need}</p></div><button class="craft-btn" ${ok ? "" : "disabled"}>Forge</button>`;
-      row.querySelector("button").addEventListener("click", () => this.game.craft(r.id));
+      const item = ITEMS[r.result];
+      const recommended = r.classId === p.cls;
+      const need = Object.entries(r.need).map(([k, n]) => { const have = p.inv[k] || 0; return `<span title="${ITEMS[k].source || "Explore the wilds"}" class="${have >= n ? "ok" : "need"}">${ITEMS[k].name} ${have}/${n}</span>`; }).join(" · ");
+      const missing = Object.entries(r.need).find(([k, n]) => (p.inv[k] || 0) < n);
+      const weapon = this.game.WEAPONS[r.result];
+      const rodStats = RODS[r.result];
+      let stats = "";
+      if (weapon) {
+        const delta = current ? weapon.dmg - current.dmg : 0;
+        stats = `<p class="craft-stats"><span>DMG ${weapon.dmg}${delta ? ` (${delta > 0 ? "+" : ""}${delta})` : ""}</span><span>RNG ${weapon.range}</span><span>RATE ${(1 / weapon.speed).toFixed(1)}/s</span></p>`;
+      } else if (rodStats) stats = `<p class="craft-stats"><span>CONTROL +${Math.round(rodStats.control * 100)}</span><span>LUCK +${Math.round(rodStats.luck * 100)}</span><span>REEL ×${rodStats.reel}</span></p>`;
+      const className = r.classId === "all" ? "All classes" : CLASSES[r.classId]?.name || r.classId;
+      const owned = (p.inv[r.result] || 0) > 0;
+      const row = document.createElement("div"); row.className = `craft-row${recommended ? " recommended" : ""}`;
+      row.innerHTML = `<div class="craft-rune">${item.glyph || "?"}</div><div class="craft-info"><h3>${item.name}<span class="craft-badges"><span class="craft-badge">T${r.tier}</span><span class="craft-badge class">${className}</span></span></h3><p>${r.desc}</p>${stats}<p>${need}</p>${missing ? `<p class="missing-source">Find ${ITEMS[missing[0]].name}: ${ITEMS[missing[0]].source || "explore and hunt"}</p>` : ""}</div><div class="craft-actions"><button class="craft-btn" ${ok ? "" : "disabled"}>Forge</button>${item.weapon ? `<button class="craft-equip" ${owned && p.equipped !== r.result ? "" : "disabled"}>${p.equipped === r.result ? "Equipped" : "Equip"}</button>` : owned ? `<button class="craft-equip" disabled>Owned ×${p.inv[r.result]}</button>` : ""}</div>`;
+      row.querySelector(".craft-btn")?.addEventListener("click", () => this.game.craft(r.id));
+      row.querySelector(".craft-equip")?.addEventListener("click", () => this.game.equip(r.result));
       list.appendChild(row);
     }
   }
