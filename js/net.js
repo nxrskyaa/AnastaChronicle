@@ -1,106 +1,79 @@
-// Networking (Tier 1 presence). Connects to the Colyseus "forest" room,
-// tracks remote players, and sends this player's position at a throttled rate.
-// Loaded lazily so the game runs fine offline if multiplayer is disabled.
-//
-// The Colyseus client is loaded from a CDN ESM build pinned to 0.15 to match
-// the server's schema version. If it fails to load, multiplayer stays off and
-// the game continues as singleplayer.
+// Networking (Tier 1 presence) — plain JSON WebSocket relay.
+// Replaces the Colyseus client: colyseus.js 0.15.x binary protocol silently
+// fails to deliver state over wss:// in browsers. A raw wss:// + JSON socket
+// is 100% reliable in the browser. Keeps net.remote shaped exactly as render.js
+// expects: { x, y, rx, ry, dir, moving, name, look, frame, frameT, cache }.
 
 import { SERVER_URL, MULTIPLAYER_ENABLED } from "./config.js";
 
 export const net = {
   connected: false,
-  room: null,
-  remote: {},          // sessionId -> { x, y, dir, moving, name, look, rx, ry, frame, frameT, cache }
+  room: null,            // kept for API compat (unused)
+  ws: null,
+  remote: {},            // id -> { x, y, rx, ry, dir, moving, name, look, frame, frameT, cache }
   selfId: null,
   _lastSend: 0,
   _chat: [],
+  onChat: null,
 };
 
-let Client = null;
-
-function addRemote(p, id) {
-  net.remote[id] = {
-    x: p.x, y: p.y, rx: p.x, ry: p.y, dir: p.dir, moving: p.moving,
-    name: p.name, look: p.look, frame: 0, frameT: 0, cache: null,
-  };
-  // live updates
-  p.onChange = () => {
-    const r = net.remote[id]; if (!r) return;
-    r.x = p.x; r.y = p.y; r.dir = p.dir; r.moving = p.moving; r.name = p.name;
-  };
-}
-
-async function loadClient() {
-  if (Client) return Client;
-  // Use locally-vendored UMD build (no CDN dependency, version-pinned 0.15.26
-  // to match the server's schema). Loaded as a classic script so it exposes
-  // window.Colyseus; ESM CDN builds had unreliable onStateChange callbacks.
-  if (typeof window !== "undefined" && window.Colyseus && window.Colyseus.Client) {
-    Client = window.Colyseus.Client;
-    return Client;
-  }
-  await new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "vendor/colyseus.umd.js";
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("colyseus script load failed"));
-    document.head.appendChild(s);
-  });
-  Client = window.Colyseus.Client;
-  return Client;
+function applyState(r, s) {
+  r.x = s.x; r.y = s.y; r.dir = s.dir; r.moving = !!s.moving;
+  if (r.name === undefined) { r.name = s.name; r.look = s.look; }
 }
 
 export async function connectMultiplayer(look, name, spawn) {
   if (!MULTIPLAYER_ENABLED) return null;
   try {
-    await loadClient();
-    const client = new Client(SERVER_URL);
-    const room = await client.joinOrCreate("forest", {
+    const ws = new WebSocket(SERVER_URL);
+    net.ws = ws;
+
+    await new Promise((resolve, reject) => {
+      ws.onopen = resolve;
+      ws.onerror = (e) => reject(new Error("ws error"));
+    });
+
+    ws.onmessage = (ev) => {
+      let m;
+      try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.t === "welcome") {
+        net.selfId = m.id;
+        net.connected = true;
+      } else if (m.t === "players") {
+        for (const s of m.list) {
+          if (s.id === net.selfId) continue;
+          if (!net.remote[s.id]) net.remote[s.id] = { x: s.x, y: s.y, rx: s.x, ry: s.y, dir: s.dir, moving: s.moving, name: s.name, look: s.look, frame: 0, frameT: 0, cache: null };
+          else applyState(net.remote[s.id], s);
+        }
+      } else if (m.t === "join") {
+        const s = m.player;
+        if (s.id === net.selfId) return;
+        net.remote[s.id] = { x: s.x, y: s.y, rx: s.x, ry: s.y, dir: s.dir, moving: s.moving, name: s.name, look: s.look, frame: 0, frameT: 0, cache: null };
+      } else if (m.t === "state") {
+        if (m.id === net.selfId) return;
+        if (!net.remote[m.id]) net.remote[m.id] = { x: m.x, y: m.y, rx: m.x, ry: m.y, dir: m.dir, moving: m.moving, name: "?", look: "{}", frame: 0, frameT: 0, cache: null };
+        else applyState(net.remote[m.id], m);
+      } else if (m.t === "leave") {
+        delete net.remote[m.id];
+      } else if (m.t === "chat") {
+        net._chat.push(m);
+        if (net._chat.length > 30) net._chat.shift();
+        if (net.onChat) net.onChat(m);
+      }
+    };
+
+    ws.onclose = () => { net.connected = false; };
+    ws.onerror = () => { net.connected = false; };
+
+    // send join
+    ws.send(JSON.stringify({
+      t: "join",
       name: name || "Traveler",
       look: JSON.stringify(look || {}),
       x: spawn?.x, y: spawn?.y,
-    });
-    net.room = room;
-    net.selfId = room.sessionId;
-    net.connected = true;
+    }));
 
-    room.state.players.onAdd = (p, id) => {
-      if (id === net.selfId) return;
-      addRemote(p, id);
-    };
-    // First state sync may not have arrived when joinOrCreate resolves, so scan
-    // existing players on the first onStateChange too (covers the late-join race).
-    let _scanned = false;
-    room.onStateChange(() => {
-      // Always re-scan: onAdd is unreliable on some CDN builds, so reconcile
-      // the remote list from current state every patch.
-      room.state.players.forEach((p, id) => {
-        if (id === net.selfId) return;
-        if (!net.remote[id]) {
-          addRemote(p, id);
-        } else {
-          const r = net.remote[id];
-          r.x = p.x; r.y = p.y; r.dir = p.dir; r.moving = p.moving; r.name = p.name;
-        }
-      });
-      // prune disconnected
-      for (const id of Object.keys(net.remote)) {
-        if (!room.state.players.get(id)) delete net.remote[id];
-      }
-      if (!_scanned) { _scanned = true; console.log('[MP] first onStateChange, remote:', Object.keys(net.remote).length); }
-    });
-    room.state.players.onRemove = (p, id) => { delete net.remote[id]; };
-
-    room.onMessage("chat", (m) => {
-      net._chat.push(m);
-      if (net._chat.length > 30) net._chat.shift();
-      if (net.onChat) net.onChat(m);
-    });
-
-    room.onLeave(() => { net.connected = false; });
-
-    return room;
+    return ws;
   } catch (e) {
     console.warn("Multiplayer unavailable, running singleplayer:", e.message);
     net.connected = false;
@@ -110,14 +83,14 @@ export async function connectMultiplayer(look, name, spawn) {
 
 // Throttled position push (call every frame; sends ~12x/sec)
 export function sendMove(p, now) {
-  if (!net.connected || !net.room) return;
+  if (!net.connected || !net.ws) return;
   if (now - net._lastSend < 84) return;
   net._lastSend = now;
-  net.room.send("move", { x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, moving: !!p.moving });
+  net.ws.send(JSON.stringify({ t: "move", x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, moving: !!p.moving }));
 }
 
 export function sendChat(text) {
-  if (net.connected && net.room) net.room.send("chat", text);
+  if (net.connected && net.ws) net.ws.send(JSON.stringify({ t: "chat", text }));
 }
 
 export function remoteCount() {
