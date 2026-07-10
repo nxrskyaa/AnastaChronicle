@@ -33,8 +33,21 @@ function addRemote(p, id) {
 
 async function loadClient() {
   if (Client) return Client;
-  const mod = await import("https://cdn.jsdelivr.net/npm/colyseus.js@0.15.26/+esm");
-  Client = mod.Client;
+  // Use locally-vendored UMD build (no CDN dependency, version-pinned 0.15.26
+  // to match the server's schema). Loaded as a classic script so it exposes
+  // window.Colyseus; ESM CDN builds had unreliable onStateChange callbacks.
+  if (typeof window !== "undefined" && window.Colyseus && window.Colyseus.Client) {
+    Client = window.Colyseus.Client;
+    return Client;
+  }
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "vendor/colyseus.umd.js";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("colyseus script load failed"));
+    document.head.appendChild(s);
+  });
+  Client = window.Colyseus.Client;
   return Client;
 }
 
