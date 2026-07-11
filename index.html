@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=Cinzel:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
-<body>
+<body class="realm-ui">
 <div id="boot">
   <canvas id="boot-fx"></canvas>
   <div class="chronicle-scene" aria-hidden="true">
@@ -132,10 +132,15 @@
         </div>
         <button class="icon-btn realm-menu-trigger" id="btn-realm-menu" title="Open Realm Menu" aria-label="Open Realm Menu"><i></i><i></i><i></i><i></i><span>MENU</span></button>
       </div>
-      <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
+      <div id="minimap-wrap">
+        <div class="minimap-head" aria-hidden="true"><span>VERDANT TRAIL</span><b>N</b></div>
+        <canvas id="minimap" width="120" height="120"></canvas>
+        <div class="minimap-foot" aria-hidden="true"><i></i><span>LIVE CARTOGRAPHY</span></div>
+      </div>
     </div>
 
     <div id="skillbar">
+      <span class="skillbar-caption" aria-hidden="true"><i></i> COMBAT ARTS <i></i></span>
       <button class="sk" data-i="0"><span class="sk-key">1</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Strike</span><div class="sk-cd" id="cd0"></div></button>
       <button class="sk" data-i="1"><span class="sk-key">2</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Heal</span><div class="sk-cd" id="cd1"></div></button>
       <button class="sk" data-i="2"><span class="sk-key">3</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Whirl</span><div class="sk-cd" id="cd2"></div></button>

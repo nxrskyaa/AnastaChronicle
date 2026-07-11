@@ -31,6 +31,53 @@ function objectPhase(o, salt = 0) {
   return ((x * 13 + y * 7 + salt * 31) % 97) / 97 * Math.PI * 2;
 }
 
+function worldChatLines(ctx, text) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  const lines = [""];
+  for (const word of words) {
+    const current = lines[lines.length - 1];
+    const next = `${current} ${word}`.trim();
+    if (ctx.measureText(next).width > 84 && lines.length < 3) lines.push(word);
+    else lines[lines.length - 1] = next;
+  }
+  return lines.filter(Boolean).slice(0, 3).map((line) => {
+    if (ctx.measureText(line).width <= 84) return line;
+    let clipped = line;
+    while (clipped.length > 1 && ctx.measureText(`${clipped}…`).width > 84) clipped = clipped.slice(0, -1);
+    return `${clipped}…`;
+  });
+}
+
+function drawWorldChatBubble(ctx, text, x, headY, accent, t, born, until) {
+  if (!text || until <= t) return;
+  ctx.save();
+  ctx.font = "7px 'IBM Plex Sans',sans-serif";
+  const lines = worldChatLines(ctx, text);
+  if (!lines.length) { ctx.restore(); return; }
+  const width = Math.min(100, Math.max(44, ...lines.map(line => Math.ceil(ctx.measureText(line).width) + 14)));
+  const height = lines.length * 9 + 9;
+  const intro = clamp((t - (born ?? t)) / .14, 0, 1);
+  const outro = clamp((until - t) / .38, 0, 1);
+  const alpha = Math.min(intro, outro);
+  const bx = Math.round(clamp(x - width / 2, 2, view.w - width - 2));
+  const by = Math.round(clamp(headY - height - 7 - (1 - intro) * 4, 2, view.h - height - 8));
+  const tailX = Math.round(clamp(x, bx + 7, bx + width - 7));
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "rgba(6,15,18,.94)";
+  ctx.beginPath();
+  ctx.moveTo(bx + 4, by); ctx.lineTo(bx + width - 3, by); ctx.lineTo(bx + width, by + 3);
+  ctx.lineTo(bx + width, by + height - 3); ctx.lineTo(bx + width - 3, by + height);
+  ctx.lineTo(bx + 3, by + height); ctx.lineTo(bx, by + height - 3); ctx.lineTo(bx, by + 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = accent; ctx.fillRect(bx + 3, by, width - 6, 1); ctx.fillRect(bx, by + 4, 2, height - 8);
+  ctx.globalAlpha = alpha * .34; ctx.fillStyle = accent; ctx.fillRect(bx + 5, by + 3, width - 10, height - 6);
+  ctx.globalAlpha = alpha; ctx.fillStyle = "rgba(6,15,18,.94)";
+  ctx.beginPath(); ctx.moveTo(tailX - 4, by + height); ctx.lineTo(tailX + 4, by + height); ctx.lineTo(tailX, by + height + 6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = accent; ctx.fillRect(tailX - 1, by + height, 2, 3);
+  ctx.fillStyle = "#e6efe9"; ctx.textAlign = "center";
+  lines.forEach((line, index) => ctx.fillText(line, Math.round(bx + width / 2), by + 11 + index * 9));
+  ctx.textAlign = "left"; ctx.restore();
+}
+
 function drawNpcActivity(ctx, npc, x, y, t, dir) {
   const side = dir === "left" ? -1 : 1;
   const activity = npc.activity || npc.routine;
@@ -268,6 +315,21 @@ Game.prototype.render = function () {
             ctx.fillStyle = `rgba(193,205,211,${Math.max(0, .25 - rise / 100)})`;
             ctx.fillRect(Math.round(bx + cv.width * .72 + drift), Math.round(by + 8 - rise), 3 + i * 2, 2 + i);
           }
+        } else if (o.type === "waystone") {
+          const pulse = .34 + Math.sin(this.t * 3.1 + phase) * .2;
+          ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = `rgba(113,231,164,${pulse})`;
+          ctx.fillRect(sx - 1, sy - 24, 3, 8); ctx.fillRect(sx - 4, sy - 21, 9, 2); ctx.restore();
+        } else if (o.type === "field_shrine") {
+          const rise = (this.t * 7 + phase * 6) % 24, drift = Math.round(Math.sin(this.t * 1.5 + phase) * 3);
+          ctx.fillStyle = `rgba(206,218,211,${.3 * (1 - rise / 24)})`; ctx.fillRect(sx + 4 + drift, sy - 30 - rise, 2 + Math.round(rise / 8), 3);
+          ctx.fillStyle = `rgba(255,205,102,${.55 + Math.sin(this.t * 8 + phase) * .18})`; ctx.fillRect(sx - 1, sy - 18, 3, 3);
+        } else if (o.type === "signpost") {
+          const sway = Math.round(Math.sin(this.t * 3 + phase) * 2);
+          ctx.fillStyle = "rgba(188,80,64,.78)"; ctx.fillRect(sx + 7 + sway, sy - 26, 4, 2); ctx.fillRect(sx + 9 + sway, sy - 24, 2, 5);
+        } else if (o.type === "plank_bridge") {
+          const ripple = Math.round((this.t * 11 + phase * 5) % 18);
+          ctx.fillStyle = `rgba(190,236,245,${.34 * (1 - ripple / 18)})`;
+          ctx.fillRect(sx - 18 - ripple / 2, sy + 1, 8 + ripple, 1); ctx.fillRect(sx + 8 - ripple / 3, sy + 4, 5 + ripple / 2, 1);
         }
       }
     }
@@ -405,10 +467,13 @@ Game.prototype.render = function () {
       const rsx = Math.round(o.rx - camx), rsy = Math.round(o.ry - camy);
       if (!o.cache) {
         let lk; try { lk = JSON.parse(o.look); } catch { lk = {}; }
-        o.cache = buildCharacter({ ...DEFAULT_LOOK, ...lk, name: o.name });
+        const resolvedLook = { ...DEFAULT_LOOK, ...lk, name: o.name };
+        o.cache = buildCharacter(resolvedLook);
+        o.weaponCache = this.weaponFrames({ warrior: "sword", mage: "staff", archer: "bow" }[resolvedLook.cls] || "sword");
       }
       const dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
       const cv = o.cache.walk[dir][o.frame % 4];
+      const remoteWeapon = o.weaponCache?.walk?.[dir] || null;
       // soft shadow for remote player
       ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(rsx, rsy + 1, 12, 3.5, 0, 0, 7); ctx.fill();
       if (o.duel) {
@@ -417,28 +482,17 @@ Game.prototype.render = function () {
         ctx.beginPath(); ctx.ellipse(rsx, rsy, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.save(); ctx.translate(rsx, rsy - 51); ctx.rotate(.6); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.rotate(-1.2); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.restore();
       }
-      ctx.drawImage(cv, rsx - 16, rsy - 36);
+      ctx.save(); ctx.translate(rsx, rsy);
+      const weaponBehind = dir === "up" || dir === "left";
+      if (weaponBehind && remoteWeapon) ctx.drawImage(remoteWeapon, -16, -36);
+      ctx.drawImage(cv, -16, -36);
+      if (!weaponBehind && remoteWeapon) ctx.drawImage(remoteWeapon, -16, -36);
+      ctx.restore();
       // name tag (blue tint to distinguish other players)
       ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
       ctx.fillStyle = o.duel ? "rgba(76,25,29,.78)" : "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 20, rsy - 46, 40, 9);
       if (o.duel) { ctx.fillStyle = "#d95348"; ctx.fillRect(rsx - 20, rsy - 46, 2, 9); }
       ctx.fillStyle = o.duel ? "#ffc0ab" : "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39); ctx.textAlign = "left";
-      if (o.chatText && o.chatUntil > this.t) {
-        const words = o.chatText.split(/\s+/), lines = [""];
-        for (const word of words) {
-          const next = `${lines[lines.length - 1]} ${word}`.trim();
-          if (next.length > 25 && lines.length < 2) lines.push(word); else lines[lines.length - 1] = next;
-        }
-        if (lines[1]?.length > 28) lines[1] = `${lines[1].slice(0, 27)}…`;
-        ctx.font = "7px 'IBM Plex Sans',sans-serif";
-        const width = Math.min(92, Math.max(42, ...lines.map(line => ctx.measureText(line).width + 12)));
-        const height = lines.length * 9 + 7, bx = Math.round(rsx - width / 2), by = rsy - 56 - height;
-        ctx.fillStyle = "rgba(8,20,23,.92)"; ctx.fillRect(bx, by, width, height);
-        ctx.fillStyle = "rgba(103,195,158,.75)"; ctx.fillRect(bx, by, 2, height); ctx.fillRect(bx, by, width, 1);
-        ctx.fillStyle = "rgba(8,20,23,.92)"; ctx.fillRect(rsx - 3, by + height, 6, 4); ctx.fillRect(rsx - 1, by + height + 4, 2, 2);
-        ctx.fillStyle = "#d6e7df"; ctx.textAlign = "center";
-        lines.forEach((line, index) => ctx.fillText(line, rsx, by + 9 + index * 9)); ctx.textAlign = "left";
-      }
     }
     else if (d.k === "enemy") {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
@@ -573,9 +627,12 @@ Game.prototype.render = function () {
       else if (p.shield) { pose = "guard"; poseIndex = Math.floor(this.t * 2) % 4; }
       else if (p.attackT > 0) {
         pose = p.attackStyle === "cast" ? "cast" : p.attackStyle === "bow" ? "bow" : "atk";
-        poseIndex = clamp(Math.floor(attackPhase * 5), 0, 4);
+        poseIndex = Math.floor(attackPhase * 6);
       } else if (!p.moving) poseIndex = Math.floor(this.t * 2.2) % 4;
       if (!this.charCache?.[pose] && ["idle", "guard", "hurt", "fishing"].includes(pose)) poseIndex = 0;
+
+      const activePoseBank = this.charCache?.[pose]?.[dir];
+      if (p.attackT > 0 && Array.isArray(activePoseBank)) poseIndex = clamp(Math.floor(attackPhase * activePoseBank.length), 0, activePoseBank.length - 1);
 
       const body = poseFrame(this.charCache, pose, dir, poseIndex, p.attackT > 0 ? "atk" : "walk");
       const wf2 = this.weaponFrames(p.equipped);
@@ -583,17 +640,30 @@ Game.prototype.render = function () {
       if (!this.fishing) {
         const weaponBank = wf2?.[pose]?.[dir]
           ?? (p.attackT > 0 ? wf2?.atk?.[dir] : wf2?.walk?.[dir]);
-        weap = Array.isArray(weaponBank) ? weaponBank[poseIndex % weaponBank.length] : weaponBank;
+        if (Array.isArray(weaponBank)) {
+          const weaponIndex = p.attackT > 0
+            ? clamp(Math.floor(attackPhase * weaponBank.length), 0, weaponBank.length - 1)
+            : poseIndex % weaponBank.length;
+          weap = weaponBank[weaponIndex];
+        } else weap = weaponBank;
       }
 
       const dvec = dir === "left" ? [-1, 0] : dir === "right" ? [1, 0] : dir === "up" ? [0, -1] : [0, 1];
-      let ox = 0, oy = 0, scaleX = 1, scaleY = 1;
+      let ox = 0, oy = 0, scaleX = 1, scaleY = 1, rotation = 0;
       if (pose === "idle") { oy = Math.round(Math.sin(this.t * 2.2) * .55); scaleY += Math.sin(this.t * 2.2) * .012; }
       if (pose === "guard") { ox = -dvec[0]; oy = 1 - dvec[1]; scaleX = 1.04; scaleY = .96; }
       if (pose === "dash") { ox = dvec[0] * 3; oy = dvec[1] * 3; scaleX = dvec[0] ? 1.08 : .94; scaleY = dvec[1] ? 1.08 : .94; }
       if (pose === "hurt") { ox = Math.round(Math.sin(this.t * 45) * 2); scaleX = 1.08; scaleY = .92; }
       if (pose === "cast") { oy = -Math.round(Math.sin(attackPhase * Math.PI) * 2); }
       if (pose === "bow") { ox = -dvec[0] * Math.round(Math.sin(attackPhase * Math.PI) * 2); oy = -dvec[1] * Math.round(Math.sin(attackPhase * Math.PI) * 2); }
+      if (pose === "atk") {
+        const strike = Math.sin(attackPhase * Math.PI), anticipation = clamp(attackPhase / .24, 0, 1);
+        const travel = attackPhase < .24 ? -2 * anticipation : 1 + strike * (3 + (p.comboStep || 0));
+        ox = Math.round(dvec[0] * travel); oy = Math.round(dvec[1] * travel);
+        scaleX = dvec[0] ? 1 + strike * .07 : 1 - strike * .035;
+        scaleY = dvec[1] ? 1 + strike * .06 : 1 - strike * .025;
+        rotation = (dvec[0] || 1) * ((p.comboStep || 0) === 1 ? -.055 : .035) * strike;
+      }
 
       // soft shadow
       ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12 * scaleX, 3.5 * scaleY, 0, 0, 7); ctx.fill();
@@ -606,12 +676,26 @@ Game.prototype.render = function () {
         }
         ctx.restore();
       }
+      if (p.buffT > 0) {
+        const pulse = .4 + Math.sin(this.t * 7) * .16;
+        ctx.strokeStyle = `rgba(244,183,78,${pulse})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(sx, sy - 2, 15 + Math.sin(this.t * 5), 5, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "rgba(255,220,125,.8)";
+        for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + this.t * 1.4; ctx.fillRect(Math.round(sx + Math.cos(a) * 13), Math.round(sy - 18 + Math.sin(a) * 8), 2, 2); }
+      }
+      if (p.wardT > 0) {
+        const pulse = .44 + Math.sin(this.t * 9) * .14;
+        ctx.strokeStyle = `rgba(113,224,166,${pulse})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(sx, sy - 16, 16, 21, 0, -.55, 2.25); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(sx, sy - 16, 16, 21, 0, 2.58, 5.36); ctx.stroke();
+        for (let i = 0; i < 5; i++) { const a = this.t * 2.2 + i * Math.PI * .4; ctx.fillStyle = i % 2 ? "#bdf4b0" : "#65c998"; ctx.fillRect(Math.round(sx + Math.cos(a) * 17), Math.round(sy - 16 + Math.sin(a) * 11), 3, 2); }
+      }
       // weapon behind body when facing up/left
       const behind = dir === "up" || dir === "left";
       const drawPlayerLayers = (x, y, alpha = 1) => {
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.translate(Math.round(x), Math.round(y)); ctx.scale(scaleX, scaleY);
+        ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(rotation); ctx.scale(scaleX, scaleY);
         if (behind && weap) ctx.drawImage(weap, -16, -36);
         if (body) ctx.drawImage(body, -16, -36);
         if (!behind && weap) ctx.drawImage(weap, -16, -36);
@@ -762,7 +846,23 @@ Game.prototype.render = function () {
   this.renderDayNight(ctx, camx, camy);
   this.renderWeather(ctx);
   this.renderPostFX(ctx);
+  this.renderWorldChat(ctx, camx, camy);
   this.renderMinimap();
+};
+
+// A final overhead pass keeps speech legible above trees, weather, and night
+// grading while preserving the same pixel-art language as the world.
+Game.prototype.renderWorldChat = function (ctx, camx, camy) {
+  const p = this.player;
+  if (p?.chatText && p.chatUntil > this.t) {
+    drawWorldChatBubble(ctx, p.chatText, p.x - camx, p.y - camy - 43, "#e1bd61", this.t, p.chatBorn, p.chatUntil);
+  }
+  for (const remote of Object.values(net.remote)) {
+    if (!remote.chatText || remote.chatUntil <= this.t) continue;
+    const x = remote.rx - camx, y = remote.ry - camy;
+    if (x < -110 || x > view.w + 110 || y < -100 || y > view.h + 80) continue;
+    drawWorldChatBubble(ctx, remote.chatText, x, y - 51, remote.duel ? "#df6655" : "#63c69e", this.t, remote.chatBorn, remote.chatUntil);
+  }
 };
 
 // Post-processing: vignette + ambient color grade + depth fog + subtle bloom
@@ -811,50 +911,75 @@ Game.prototype.renderPostFX = function (ctx) {
 Game.prototype.renderFX = function (ctx, camx, camy) {
   for (const f of this.fx) {
     const sx = f.x - camx, sy = f.y - camy, pr = f.t / f.dur;
+    if (sx < -180 || sx > view.w + 180 || sy < -180 || sy > view.h + 180) continue;
     if (f.kind === "weaponslash") {
       const frame = img(`fx/slash_${clamp(Math.floor(pr * 4), 0, 3)}`);
       const rot = f.dir === "right" ? 0 : f.dir === "down" ? Math.PI / 2 : f.dir === "left" ? Math.PI : -Math.PI / 2;
       const reach = f.weapon === "spear" ? 1.35 : f.weapon === "dagger" ? .72 : f.weapon === "axe" ? 1.2 : 1;
       const dragon = String(f.weapon).startsWith("dragon");
       const trail = dragon ? "#d99cff" : f.weapon === "axe" ? "#f1a45d" : f.weapon === "spear" ? "#8fe1c0" : f.weapon === "dagger" ? "#9bd4f0" : "#f5df91";
-      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 17)); ctx.rotate(rot); ctx.scale(reach, reach);
+      const combo = Number(f.combo) || 0, mirror = combo === 1 ? -1 : 1;
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 17)); ctx.rotate(rot + (combo === 2 ? .12 : 0)); ctx.scale(reach, reach * mirror);
       ctx.globalAlpha = Math.max(0, 1 - pr * .7);
-      if (frame) { ctx.drawImage(frame, 2, -20); ctx.globalAlpha *= .3; ctx.drawImage(frame, -2, -20); }
+      if (frame) { ctx.drawImage(frame, 2 + combo, -20); ctx.globalAlpha *= .3; ctx.drawImage(frame, -3 - combo, -20); }
       ctx.globalAlpha = Math.max(0, (1 - pr) * .9); ctx.fillStyle = trail;
-      for (let i = 0; i < 7; i++) {
-        const angle = -.95 + i * .22 + pr * .28, radius = 18 + i * 1.5;
+      for (let i = 0; i < 8; i++) {
+        const angle = -.98 + i * .2 + pr * (.24 + combo * .05), radius = 17 + i * 1.7 + combo * 1.5;
         const size = i % 3 === 0 ? 3 : 2;
         ctx.fillRect(Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius) - 1, size, size);
       }
+      ctx.strokeStyle = trail; ctx.lineWidth = combo === 2 ? 2 : 1; ctx.globalAlpha *= .7;
+      ctx.beginPath(); ctx.arc(0, 0, 21 + combo * 3, -.98 + pr * .14, .48 + pr * .2); ctx.stroke();
       if (dragon) { ctx.fillStyle = "#fff0ff"; ctx.fillRect(20 + Math.round(pr * 6), -2, 5, 2); ctx.fillRect(15, -8, 2, 2); }
       ctx.restore();
     } else if (f.kind === "bowrelease") {
       ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); ctx.rotate(f.angle || 0);
-      const power = f.variant === "power" || f.variant === "dragon";
-      const color = power ? "#ffe38a" : "#bff7cf";
-      const count = f.variant === "multi" ? 3 : 1;
+      const power = ["power", "dragon", "falcon"].includes(f.variant), sakura = f.variant === "sakura";
+      const color = f.variant === "falcon" ? "#c8ffd5" : sakura ? "#ffb0cf" : power ? "#ffe38a" : "#bff7cf";
+      const count = sakura ? 5 : f.variant === "multi" ? 3 : 1;
       ctx.globalAlpha = 1 - pr;
       for (let i = 0; i < count; i++) {
-        const off = (i - (count - 1) / 2) * 5;
+        const off = (i - (count - 1) / 2) * (sakura ? 3.5 : 5);
         ctx.fillStyle = color; ctx.fillRect(5 + Math.round(pr * 18), off - 1, power ? 18 : 12, 2);
         ctx.fillStyle = "#ffffff"; ctx.fillRect(10 + Math.round(pr * 18), off - 1, power ? 8 : 4, 1);
       }
-      ctx.fillStyle = "rgba(151,242,184,.7)"; ctx.fillRect(-2, -9 - Math.round(pr * 5), 2, 19 + Math.round(pr * 10));
+      ctx.fillStyle = sakura ? "rgba(255,151,193,.7)" : "rgba(151,242,184,.7)"; ctx.fillRect(-2, -9 - Math.round(pr * 5), 2, 19 + Math.round(pr * 10));
       ctx.strokeStyle = power ? `rgba(255,222,122,${1 - pr})` : `rgba(137,229,178,${(1 - pr) * .8})`; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.ellipse(0, 0, 5 + pr * 16, 12 + pr * 9, 0, 0, Math.PI * 2); ctx.stroke();
       for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? color : "#fff"; ctx.fillRect(-5 - Math.round(pr * 12), -8 + i * 5, 2 + i % 2, 2); }
+      if (f.variant === "falcon") {
+        ctx.strokeStyle = `rgba(188,255,209,${1 - pr})`; ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(-8 - pr * 14, -10 - pr * 5); ctx.lineTo(-3, -2); ctx.lineTo(-8 - pr * 14, 10 + pr * 5); ctx.stroke();
+      } else if (sakura) {
+        for (let i = 0; i < 7; i++) { const a = i * 2.2 + pr * 4, r = 8 + i * 2 + pr * 12; ctx.fillStyle = i % 2 ? "#ffd8e8" : "#ef86b3"; ctx.fillRect(Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r * .55), 3, 2); }
+      }
       ctx.restore();
     } else if (f.kind === "castburst") {
       ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); ctx.rotate((f.angle || 0) + Math.PI / 4);
-      const dragon = f.variant === "dragon", skill = f.variant === "skill";
-      const color = dragon ? "rgba(202,125,255,A)" : skill ? "rgba(255,182,72,A)" : "rgba(129,205,255,A)";
+      const dragon = f.variant === "dragon", comet = f.variant === "comet", skill = f.variant === "skill";
+      const color = dragon ? "rgba(202,125,255,A)" : comet ? "rgba(255,174,64,A)" : skill ? "rgba(255,182,72,A)" : "rgba(129,205,255,A)";
       const radius = 6 + Math.round(pr * 20);
       ctx.strokeStyle = color.replace("A", String(1 - pr)); ctx.lineWidth = 2; ctx.strokeRect(-radius, -radius, radius * 2, radius * 2);
       ctx.save(); ctx.rotate(-pr * 2.1); ctx.strokeStyle = color.replace("A", String((1 - pr) * .58)); ctx.lineWidth = 1; ctx.strokeRect(-radius * .68, -radius * .68, radius * 1.36, radius * 1.36); ctx.restore();
       ctx.fillStyle = color.replace("A", String((1 - pr) * .85));
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.fillRect(Math.round(Math.cos(a) * (radius + 4)) - 1, Math.round(Math.sin(a) * (radius + 4)) - 1, i % 2 ? 2 : 3, i % 2 ? 2 : 3); }
-      ctx.fillStyle = dragon ? "#f7e5ff" : skill ? "#fff2ba" : "#dff5ff";
+      ctx.fillStyle = dragon ? "#f7e5ff" : comet ? "#fff4af" : skill ? "#fff2ba" : "#dff5ff";
       ctx.fillRect(-1, -radius - 8, 3, 5); ctx.fillRect(-1, radius + 3, 3, 5); ctx.fillRect(-radius - 8, -1, 5, 3); ctx.fillRect(radius + 3, -1, 5, 3);
+      if (comet) {
+        ctx.rotate(-Math.PI / 4); ctx.fillStyle = `rgba(255,220,115,${1 - pr})`;
+        for (let i = 0; i < 4; i++) ctx.fillRect(-14 - i * 6 - Math.round(pr * 8), -3 + i * 2, 8 - i, 2);
+      }
+      ctx.restore();
+    } else if (f.kind === "crescent") {
+      const rot = f.dir === "right" ? 0 : f.dir === "down" ? Math.PI / 2 : f.dir === "left" ? Math.PI : -Math.PI / 2;
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 13)); ctx.rotate(rot); ctx.globalAlpha = 1 - pr;
+      for (let band = 0; band < 3; band++) {
+        const radius = 18 + band * 5 + pr * 18;
+        ctx.strokeStyle = band === 0 ? "#fff3bd" : band === 1 ? "#e6c56a" : "#8fd1b0";
+        ctx.lineWidth = band === 0 ? 3 : 1;
+        ctx.beginPath(); ctx.arc(0, 0, radius, -.72, .72); ctx.stroke();
+      }
+      ctx.fillStyle = "#f8e7a0";
+      for (let i = 0; i < 7; i++) { const a = -.7 + i * .23, r = 24 + pr * 24 + (i % 2) * 4; ctx.fillRect(Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r), i % 2 ? 2 : 4, 2); }
       ctx.restore();
     } else if (f.kind === "warcry") {
       const radius = 10 + pr * 48;
@@ -878,12 +1003,14 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.globalAlpha = 1;
     } else if (f.kind === "projectileimpact") {
       const fire = f.element === "fire" || f.element === "bossfire";
-      const color = f.variant === "dragon" ? "#d699ff" : fire ? "#ffb14c" : "#e8ffd0";
+      const color = f.variant === "dragon" ? "#d699ff" : f.variant === "comet" ? "#ffd36a" : f.variant === "falcon" ? "#aef7c4" : f.variant === "sakura" ? "#ff9bc4" : fire ? "#ffb14c" : "#e8ffd0";
       ctx.globalAlpha = 1 - pr;
-      for (let i = 0; i < 12; i++) {
-        const a = i / 12 * Math.PI * 2 + pr, r = 3 + pr * (14 + i % 3 * 3);
+      const impactCount = ["comet", "falcon", "sakura"].includes(f.variant) ? 18 : 12;
+      for (let i = 0; i < impactCount; i++) {
+        const a = i / impactCount * Math.PI * 2 + pr, r = 3 + pr * (14 + i % 3 * 3);
         ctx.fillStyle = i % 3 === 0 ? "#ffffff" : color;
-        ctx.fillRect(Math.round(sx + Math.cos(a) * r) - 1, Math.round(sy + Math.sin(a) * r) - 1, i % 2 ? 2 : 3, i % 2 ? 2 : 3);
+        const wide = f.variant === "sakura" && i % 2 === 0;
+        ctx.fillRect(Math.round(sx + Math.cos(a) * r) - 1, Math.round(sy + Math.sin(a) * r) - 1, wide ? 4 : i % 2 ? 2 : 3, wide ? 2 : i % 2 ? 2 : 3);
       }
       ctx.globalAlpha = 1;
     } else if (f.kind === "heal") {
@@ -897,18 +1024,34 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       const healSize = 5 + Math.round(Math.sin(Math.min(1, pr) * Math.PI) * 6);
       ctx.fillStyle = "#dfffe6"; ctx.fillRect(Math.round(sx - 2), Math.round(sy - 23 - healSize), 5, healSize * 2); ctx.fillRect(Math.round(sx - healSize), Math.round(sy - 20), healSize * 2, 5);
       ctx.strokeStyle = `rgba(113,231,157,${1 - pr})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, sy - 4, 9 + pr * 28, 4 + pr * 10, 0, 0, Math.PI * 2); ctx.stroke();
+      if (f.variant === "sutra") {
+        ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 18)); ctx.rotate(pr * Math.PI * .5); ctx.globalAlpha = 1 - pr;
+        const seal = 10 + pr * 16; ctx.strokeStyle = "#caffb1"; ctx.strokeRect(-seal, -seal, seal * 2, seal * 2);
+        ctx.strokeStyle = "#71d8a0"; ctx.strokeRect(-seal * .55, -seal * .55, seal * 1.1, seal * 1.1);
+        ctx.fillStyle = "#f0ffe4"; ctx.fillRect(-1, -seal + 3, 3, seal * 2 - 6); ctx.fillRect(-seal + 3, -1, seal * 2 - 6, 3); ctx.restore();
+      }
       ctx.globalAlpha = 1;
+    } else if (f.kind === "windward") {
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 15)); ctx.globalAlpha = 1 - pr;
+      for (let ring = 0; ring < 2; ring++) {
+        const rr = 10 + ring * 10 + pr * (20 + ring * 7);
+        ctx.strokeStyle = ring ? "#74c999" : "#d9ffc4"; ctx.lineWidth = ring ? 1 : 2;
+        ctx.beginPath(); ctx.arc(0, 0, rr, -.7 + pr, 3.9 + pr); ctx.stroke();
+      }
+      for (let i = 0; i < 12; i++) { const a = i * .84 + pr * 5, rr = 8 + (i % 3) * 6 + pr * 24; ctx.fillStyle = i % 3 === 0 ? "#e7ffd1" : i % 2 ? "#6cc997" : "#9ce596"; ctx.fillRect(Math.round(Math.cos(a) * rr), Math.round(Math.sin(a) * rr * .68), 3 + i % 2, 2); }
+      ctx.restore();
     } else if (f.kind === "whirl") {
       ctx.globalAlpha = 1 - pr;
+      const steel = f.variant === "steel";
       for (let ring = 0; ring < 3; ring++) for (let i = 0; i < 14; i++) {
         if ((i + ring) % 4 === Math.floor(pr * 4)) continue;
         const a = i / 14 * Math.PI * 2 + pr * (8 + ring * 2);
         const rr = 14 + ring * 9 + pr * 24;
-        ctx.fillStyle = ring === 0 ? "#fff0a4" : ring === 1 ? "#f59a3d" : "#d94b31";
+        ctx.fillStyle = steel ? (ring === 0 ? "#fff3b0" : ring === 1 ? "#a7d9c4" : "#5e9b88") : ring === 0 ? "#fff0a4" : ring === 1 ? "#f59a3d" : "#d94b31";
         const size = ring === 0 ? 2 : 3;
         ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 14 + Math.sin(a) * rr * .65) - 1, size + (i % 3 === 0 ? 2 : 0), size);
       }
-      ctx.strokeStyle = `rgba(255,235,157,${(1 - pr) * .78})`; ctx.lineWidth = 2;
+      ctx.strokeStyle = steel ? `rgba(205,247,225,${(1 - pr) * .82})` : `rgba(255,235,157,${(1 - pr) * .78})`; ctx.lineWidth = 2;
       for (let ring = 0; ring < 2; ring++) { ctx.beginPath(); ctx.ellipse(sx, sy - 13, 23 + ring * 13 + pr * 18, 8 + ring * 5 + pr * 5, pr * (ring ? -2 : 2), .25, Math.PI * 1.55); ctx.stroke(); }
       ctx.globalAlpha = 1;
     } else if (f.kind === "slashbig") {
@@ -927,8 +1070,10 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
     } else if (f.kind === "dashline") {
       const ox = f.dir === "left" ? 1 : f.dir === "right" ? -1 : 0;
       const oy = f.dir === "up" ? 1 : f.dir === "down" ? -1 : 0;
-      ctx.strokeStyle = `rgba(200,230,255,${(1 - pr) * 0.7})`; ctx.lineWidth = 2;
-      for (let i = 1; i <= 4; i++) { ctx.beginPath(); ctx.moveTo(sx + ox * i * 6, sy - 16 + oy * i * 6 - 4); ctx.lineTo(sx + ox * i * 6, sy - 16 + oy * i * 6 + 4); ctx.stroke(); }
+      const roll = f.variant === "roll";
+      ctx.strokeStyle = roll ? `rgba(126,222,165,${(1 - pr) * .75})` : `rgba(218,230,235,${(1 - pr) * .72})`; ctx.lineWidth = 2;
+      for (let i = 1; i <= 5; i++) { ctx.beginPath(); ctx.moveTo(sx + ox * i * 6, sy - 16 + oy * i * 6 - 4); ctx.lineTo(sx + ox * i * 6, sy - 16 + oy * i * 6 + 4); ctx.stroke(); }
+      if (roll) for (let i = 0; i < 7; i++) { const a = i * 1.7 + pr * 4, r = 8 + i * 3 + pr * 10; ctx.fillStyle = i % 2 ? "#a9e99e" : "#63bd88"; ctx.fillRect(Math.round(sx + ox * r + Math.cos(a) * 5), Math.round(sy - 16 + oy * r + Math.sin(a) * 5), 3, 2); }
     } else if (f.kind === "pop") {
       ctx.strokeStyle = `rgba(255,255,255,${1 - pr})`; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(sx, sy, 4 + pr * 16, 0, 7); ctx.stroke();
@@ -977,6 +1122,7 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.strokeRect(-pulse, -pulse, pulse * 2, pulse * 2); ctx.restore();
     } else if (f.kind === "frost") {
       ctx.globalAlpha = 1 - pr;
+      const lotus = f.variant === "lotus";
       for (let i = 0; i < 24; i++) {
         const a = i / 24 * Math.PI * 2, rr = 9 + pr * 59;
         ctx.fillStyle = i % 3 === 0 ? "#efffff" : i % 2 ? "#78cbed" : "#b6efff";
@@ -987,6 +1133,14 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.strokeStyle = `rgba(177,239,255,${(1 - pr) * .78})`; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.ellipse(sx, sy - 2, 12 + pr * 55, 5 + pr * 22, 0, 0, Math.PI * 2); ctx.stroke();
       for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; const inner = 8 + pr * 20, outer = 15 + pr * 48; ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * inner, sy - 2 + Math.sin(a) * inner * .42); ctx.lineTo(sx + Math.cos(a) * outer, sy - 2 + Math.sin(a) * outer * .42); ctx.stroke(); }
+      if (lotus) {
+        for (let i = 0; i < 8; i++) {
+          const a = i / 8 * Math.PI * 2 + pr * .65, rr = 12 + pr * 31;
+          ctx.save(); ctx.translate(Math.round(sx + Math.cos(a) * rr), Math.round(sy - 7 + Math.sin(a) * rr * .45)); ctx.rotate(a);
+          ctx.fillStyle = i % 2 ? "rgba(225,251,255,.75)" : "rgba(126,209,239,.72)";
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(8 + pr * 7, -3); ctx.lineTo(12 + pr * 8, 0); ctx.lineTo(8 + pr * 7, 3); ctx.closePath(); ctx.fill(); ctx.restore();
+        }
+      }
       ctx.globalAlpha = 1;
     }
   }
@@ -994,11 +1148,11 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
   if (this.projectiles) for (const pr of this.projectiles) {
     const sx = pr.x - camx, sy = pr.y - camy;
     if (pr.kind === "fire" || pr.kind === "bossfire") {
-      const boss = pr.kind === "bossfire", dragon = pr.variant === "dragon";
-      const outer = dragon ? "#8545c7" : boss ? "#b63222" : "#df5b27";
-      const middle = dragon ? "#c475f3" : boss ? "#ff7431" : "#ff9a35";
-      const core = dragon ? "#f2d6ff" : "#fff1a6";
-      const size = boss ? 11 : pr.variant === "skill" || dragon ? 9 : 7;
+      const boss = pr.kind === "bossfire", dragon = pr.variant === "dragon", comet = pr.variant === "comet";
+      const outer = dragon ? "#8545c7" : comet ? "#8d3b2b" : boss ? "#b63222" : "#df5b27";
+      const middle = dragon ? "#c475f3" : comet ? "#ff9e38" : boss ? "#ff7431" : "#ff9a35";
+      const core = dragon ? "#f2d6ff" : comet ? "#fff4a8" : "#fff1a6";
+      const size = boss ? 11 : comet ? 10 : pr.variant === "skill" || dragon ? 9 : 7;
       for (let i = 3; i >= 1; i--) {
         const tx = Math.round(sx - pr.dx * i * 5), ty = Math.round(sy - pr.dy * i * 5);
         ctx.globalAlpha = .16 + (3 - i) * .12; ctx.fillStyle = outer; ctx.fillRect(tx - 2, ty - 2, 5, 5);
@@ -1008,11 +1162,16 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       ctx.fillStyle = middle; ctx.fillRect(Math.round(sx - size / 2 + 2), Math.round(sy - size / 2 + 1), size - 3, size - 3);
       ctx.fillStyle = core; ctx.fillRect(Math.round(sx - 1), Math.round(sy - 2), 4, 4);
       for (let i = 0; i < 4; i++) { const a = pr.age * 10 + i * Math.PI / 2; ctx.fillStyle = i % 2 ? middle : core; ctx.fillRect(Math.round(sx + Math.cos(a) * (size / 2 + 3)), Math.round(sy + Math.sin(a) * (size / 2 + 3)), 2, 2); }
+      if (comet) {
+        const nx = -pr.dy, ny = pr.dx;
+        for (let i = 1; i <= 4; i++) { ctx.globalAlpha = .62 / i; ctx.fillStyle = i % 2 ? "#ffc05b" : "#fff2a4"; ctx.fillRect(Math.round(sx - pr.dx * (7 + i * 5) + nx * (i % 2 ? 2 : -2)), Math.round(sy - pr.dy * (7 + i * 5) + ny * (i % 2 ? 2 : -2)), 6 - i, 3); }
+        ctx.globalAlpha = 1;
+      }
     } else if (pr.kind === "arrow") {
-      const power = pr.variant === "power", dragon = pr.variant === "dragon", multi = pr.variant === "multi";
-      const shaft = dragon ? "#c58aff" : power ? "#ffe07b" : multi ? "#9ce8ad" : "#c79555";
-      const head = dragon ? "#f3e0ff" : power ? "#fff8bd" : "#e9eef0";
-      const length = power || dragon ? 18 : 13;
+      const power = pr.variant === "power" || pr.variant === "falcon", dragon = pr.variant === "dragon", multi = pr.variant === "multi", sakura = pr.variant === "sakura";
+      const shaft = dragon ? "#c58aff" : pr.variant === "falcon" ? "#9df0b8" : sakura ? "#e98aae" : power ? "#ffe07b" : multi ? "#9ce8ad" : "#c79555";
+      const head = dragon ? "#f3e0ff" : pr.variant === "falcon" ? "#edfff0" : sakura ? "#ffe1eb" : power ? "#fff8bd" : "#e9eef0";
+      const length = power || dragon ? 19 : sakura ? 15 : 13;
       for (let i = 2; i >= 1; i--) {
         ctx.globalAlpha = .18 / i; ctx.fillStyle = shaft;
         const tx = sx - pr.dx * (i * 7), ty = sy - pr.dy * (i * 7);
@@ -1024,9 +1183,16 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
         ctx.fillRect(Math.round(sx + pr.dx * d) - 1, Math.round(sy + pr.dy * d) - 1, d > length / 2 - 4 ? 3 : 2, d > length / 2 - 4 ? 3 : 2);
       }
       const nx = -pr.dy, ny = pr.dx, tailX = sx - pr.dx * length / 2, tailY = sy - pr.dy * length / 2;
-      ctx.fillStyle = multi ? "#d4ffd8" : dragon ? "#e1bdff" : "#e8d4bb";
+      ctx.fillStyle = sakura ? "#ffc3d9" : pr.variant === "falcon" ? "#c8ffd3" : multi ? "#d4ffd8" : dragon ? "#e1bdff" : "#e8d4bb";
       ctx.fillRect(Math.round(tailX + nx * 3) - 1, Math.round(tailY + ny * 3) - 1, 3, 3);
       ctx.fillRect(Math.round(tailX - nx * 3) - 1, Math.round(tailY - ny * 3) - 1, 3, 3);
+      if (pr.variant === "falcon") {
+        ctx.strokeStyle = "rgba(173,255,198,.62)"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(tailX, tailY); ctx.lineTo(tailX - pr.dx * 8 + nx * 6, tailY - pr.dy * 8 + ny * 6); ctx.moveTo(tailX, tailY); ctx.lineTo(tailX - pr.dx * 8 - nx * 6, tailY - pr.dy * 8 - ny * 6); ctx.stroke();
+      } else if (sakura) {
+        const a = (pr.spin || 0) + pr.age * 8; ctx.fillStyle = "rgba(255,165,202,.82)";
+        ctx.fillRect(Math.round(sx - pr.dx * 8 + Math.cos(a) * 5), Math.round(sy - pr.dy * 8 + Math.sin(a) * 5), 3, 2);
+      }
     }
   }
   ctx.globalAlpha = 1;
@@ -1064,6 +1230,8 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     if (x < -90 || x > view.w + 90 || y < -90 || y > view.h + 90) continue;
     if (b.type === "lantern") aperture(x, y - 21, 48, .88);
     else if (b.type === "pagoda") aperture(x, y - 49, 42, .32);
+    else if (b.type === "field_shrine") aperture(x, y - 24, 34, .4);
+    else if (b.type === "waystone") aperture(x, y - 19, 24, .22);
   }
   for (const npc of this.npcs) if (npc.carriesLantern) {
     const x = npc.x - camx, y = npc.y - camy - 20;
@@ -1091,6 +1259,12 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     if (x < -60 || x > view.w + 60) continue;
     const flicker = .85 + Math.sin(this.t * 6 + b.x * .03) * .12;
     bloom(x, y, 31, "rgba(255,188,86,A)", dark * .28 * flicker);
+  }
+  for (const b of this.buildings) if (b.type === "field_shrine" || b.type === "waystone") {
+    const x = b.x - camx, y = b.y - camy - (b.type === "field_shrine" ? 24 : 19);
+    if (x < -50 || x > view.w + 50 || y < -50 || y > view.h + 50) continue;
+    const flicker = .84 + Math.sin(this.t * (b.type === "field_shrine" ? 7 : 3) + objectPhase(b)) * .1;
+    bloom(x, y, b.type === "field_shrine" ? 25 : 18, b.type === "field_shrine" ? "rgba(255,173,76,A)" : "rgba(96,232,169,A)", dark * (b.type === "field_shrine" ? .2 : .13) * flicker);
   }
   for (const npc of this.npcs) if (npc.carriesLantern) {
     const x = npc.x - camx, y = npc.y - camy - 20;

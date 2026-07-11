@@ -121,6 +121,60 @@ function fenceH(w = 24, h = 16) {
   return cv;
 }
 
+// Small trail landmarks keep the open world readable without becoming collision
+// objects. They share the village palette but use stronger silhouettes at 1x.
+function signpost(w = 34, h = 40) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,.2)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 2, 11, 3, 0, 0, 7); ctx.fill();
+  px(15, 9, 5, 28, "#4b3020", ctx); px(16, 9, 2, 27, "#9d6939", ctx); px(18, 11, 1, 24, "#c18a4a", ctx);
+  px(4, 8, 25, 8, "#3b281e", ctx); px(5, 9, 22, 6, "#a56a36", ctx); px(7, 10, 17, 1, "#d49a54", ctx);
+  px(25, 10, 6, 4, "#a56a36", ctx); px(28, 11, 4, 2, "#d49a54", ctx);
+  px(8, 19, 21, 7, "#3b281e", ctx); px(9, 20, 18, 5, "#77502f", ctx); px(4, 21, 6, 3, "#77502f", ctx);
+  px(12, 12, 2, 2, "#ece0b0", ctx); px(18, 21, 2, 2, "#7fc08b", ctx);
+  return cv;
+}
+
+function waystone(w = 24, h = 38) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,.22)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 2, 10, 3, 0, 0, 7); ctx.fill();
+  px(5, 31, 15, 5, "#5d625f", ctx); px(7, 12, 11, 21, "#616a69", ctx); px(9, 7, 7, 6, "#7e8985", ctx);
+  px(8, 11, 3, 20, "#9aa49d", ctx); px(16, 14, 2, 16, "#454d4e", ctx);
+  px(11, 14, 3, 3, "#7bd3a2", ctx); px(12, 17, 1, 8, "#64a989", ctx); px(10, 21, 5, 2, "#64a989", ctx);
+  px(5, 29, 5, 3, "#4f824c", ctx); px(7, 27, 3, 2, "#70a75c", ctx); px(16, 30, 4, 2, "#587c4b", ctx);
+  return cv;
+}
+
+function fieldShrine(w = 42, h = 54) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,.23)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 2, 18, 4, 0, 0, 7); ctx.fill();
+  px(8, 47, 26, 5, "#777d7a", ctx); px(10, 44, 22, 4, "#9aa09a", ctx);
+  px(12, 24, 18, 21, "#7f3c32", ctx); px(15, 27, 12, 17, "#d6c89f", ctx); px(18, 31, 6, 13, "#332722", ctx);
+  px(14, 37, 10, 2, "#5c3829", ctx); px(20, 34, 2, 2, "#f1cf68", ctx);
+  for (let i = 0; i < 13; i++) { const rw = 34 - i * 2; px((w - rw) / 2, 24 - i, rw, 1, i % 4 < 2 ? "#9f493b" : "#733129", ctx); }
+  px(3, 22, 36, 3, "#3b2925", ctx); px(5, 21, 32, 1, "#d15b45", ctx);
+  px(19, 5, 4, 8, "#bc8a3e", ctx); px(17, 6, 8, 2, "#e4bd61", ctx);
+  return cv;
+}
+
+function trailBench(w = 38, h = 26) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,.18)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 2, 16, 3, 0, 0, 7); ctx.fill();
+  px(5, 8, 28, 5, "#4b3020", ctx); px(6, 8, 26, 2, "#b17842", ctx); px(7, 14, 24, 4, "#39281f", ctx); px(8, 14, 22, 2, "#8f5b34", ctx);
+  px(9, 17, 4, 7, "#4a3022", ctx); px(26, 17, 4, 7, "#4a3022", ctx); px(10, 18, 2, 5, "#b07842", ctx); px(27, 18, 2, 5, "#b07842", ctx);
+  px(28, 6, 3, 3, "#709a58", ctx); px(31, 5, 3, 2, "#8abd6d", ctx);
+  return cv;
+}
+
+function plankBridge(w = 52, h = 32) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(20,18,22,.2)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 3, 24, 5, 0, 0, 7); ctx.fill();
+  px(2, 8, 48, 5, "#4a3022", ctx); px(3, 9, 46, 3, "#a36e3c", ctx);
+  px(2, 23, 48, 5, "#4a3022", ctx); px(3, 24, 46, 3, "#82522f", ctx);
+  for (let x = 5; x < 48; x += 7) { px(x, 12, 5, 12, "#4b3123", ctx); px(x + 1, 13, 3, 10, x % 3 ? "#a16a3b" : "#8b5934", ctx); px(x + 1, 14, 3, 1, "#c18a50", ctx); }
+  px(6, 4, 3, 24, "#62402a", ctx); px(43, 4, 3, 24, "#62402a", ctx); px(7, 5, 1, 21, "#ba7c42", ctx); px(44, 5, 1, 21, "#ba7c42", ctx);
+  return cv;
+}
+
 export function buildVillage() {
   return {
     house_red: house(ROOF, ROOF_D, ROOF_L),
@@ -135,6 +189,11 @@ export function buildVillage() {
     lantern: stoneLantern(),
     bamboo: bambooGrove(),
     pagoda: pagoda(),
+    signpost: signpost(),
+    waystone: waystone(),
+    field_shrine: fieldShrine(),
+    trail_bench: trailBench(),
+    plank_bridge: plankBridge(),
   };
 }
 

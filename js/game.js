@@ -171,7 +171,7 @@ export class Game {
         else if (snow) m[i] = 4;
         else if (deepForest) m[i] = 5;
         else m[i] = 0;
-        v[i] = (Math.random() * 4) | 0;
+        v[i] = (Math.random() * 8) | 0;
       }
     }
     // winding main paths + a diagonal branch + a loop
@@ -187,6 +187,32 @@ export class Game {
     for (let t2 = 0; t2 < 40; t2++) {
       const x = 55 - t2, y = 55 - t2;
       if (x > 1 && y > 1) { m[y * MAP_W + x] = 1; m[y * MAP_W + x + 1] = 1; }
+    }
+    // Authored secondary trails connect real destinations instead of leaving a
+    // decorative cross surrounded by trees. Water can only be crossed by the
+    // explicitly marked pond bridge.
+    const carveTrail = (x0, y0, x1, y1, width = 1, bend = 0, crossWater = false) => {
+      const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2;
+      for (let step = 0; step <= steps; step++) {
+        const u = step / steps, sway = Math.sin(u * Math.PI) * bend;
+        const x = Math.round(x0 + (x1 - x0) * u + sway);
+        const y = Math.round(y0 + (y1 - y0) * u - sway * .42);
+        for (let oy = -width; oy <= width; oy++) for (let ox = -width; ox <= width; ox++) {
+          if (Math.abs(ox) + Math.abs(oy) > width + .5) continue;
+          const tx = x + ox, ty = y + oy;
+          if (tx < 1 || tx >= MAP_W - 1 || ty < 1 || ty >= MAP_H - 1) continue;
+          const index = ty * MAP_W + tx;
+          if (crossWater || m[index] !== 2) m[index] = 1;
+        }
+      }
+    };
+    carveTrail(55, 57, 85, 80, 1, 2.2);       // Umbral Arena pilgrimage road
+    carveTrail(54, 52, 62, 50, 1, -.7, true); // camp fishing bridge
+    carveTrail(58, 51, 70, 36, 1, 1.4);       // lakeside route
+    carveTrail(50, 58, 29, 86, 1, -2);        // southern bamboo trail
+    for (let step = 0; step < 96; step++) {
+      const a = step / 96 * Math.PI * 2, x = Math.round(55 + Math.cos(a) * 13), y = Math.round(55 + Math.sin(a) * 9);
+      if (x > 1 && y > 1 && m[y * MAP_W + x] !== 2) m[y * MAP_W + x] = 1;
     }
     this.map = m; this.vmap = v;
     this.camp = { x: 55 * T, y: 55 * T };
@@ -234,6 +260,18 @@ export class Game {
         this.buildings.push({ type: "bamboo", x: bx * T, y: by * T, sortY: by * T });
     }
 
+    // Trail furniture creates navigation rhythm and visual stories outside the
+    // basecamp: crossroads, rest points, shrines, bridge, and arena markers.
+    const trailLandmarks = [
+      ["signpost", 48, 55], ["signpost", 61, 49], ["signpost", 67, 65],
+      ["waystone", 38, 59], ["waystone", 73, 69], ["waystone", 82, 78],
+      ["field_shrine", 32, 79], ["field_shrine", 68, 38], ["field_shrine", 78, 73],
+      ["trail_bench", 42, 61], ["trail_bench", 65, 55], ["trail_bench", 72, 68],
+      ["plank_bridge", 62, 50],
+      ["lantern", 45, 58], ["lantern", 64, 62], ["lantern", 74, 70], ["lantern", 80, 76],
+    ];
+    for (const [type, tx, ty] of trailLandmarks) this.buildings.push({ type, x: tx * T, y: ty * T, sortY: ty * T });
+
     // decorations: trees, bushes, rocks, flowers by biome
     for (let y = 3; y < MAP_H - 3; y++) {
       for (let x = 3; x < MAP_W - 3; x++) {
@@ -241,7 +279,8 @@ export class Game {
         if (t === 1 || t === 2) continue;
         const nearCamp = Math.hypot(x - 55, y - 55) < 10;
         const nearBossArena = Math.hypot(x - 87, y - 82) < 6;
-        if (nearCamp || nearBossArena) continue;
+        const nearLandmark = trailLandmarks.some(([, tx, ty]) => Math.hypot(x - tx, y - ty) < 2.3);
+        if (nearCamp || nearBossArena || nearLandmark) continue;
         const edge = Math.min(x, y, MAP_W - x, MAP_H - y);
         const wx = x * T + T / 2, wy = y * T + T / 2;
         let treeDens = 0.05 + (edge < 12 ? 0.13 : 0) + (t === 5 ? 0.1 : 0);
@@ -272,7 +311,8 @@ export class Game {
       level: 1, xp: 0, gold: 0,
       attackT: 0, attackDur: 0.24, attackCd: 0, evadeT: 0, evadeCd: 0, invuln: 0,
       shield: false, skillCd: [0, 0, 0, 0],
-      buffT: 0, buffMul: 1, dmgMul: 1, defense: 1,
+      buffT: 0, buffMul: 1, wardT: 0, dmgMul: 1, defense: 1,
+      comboStep: 0, lastAttackAt: -99, hurtT: 0,
       inv: { wood: 2, ore: 0, gel: 0, herb: 1, basicrod: 1 },
       equipped: "sword", dmg: 8, sortY: 0,
       name: this.look.name || "Anasta",

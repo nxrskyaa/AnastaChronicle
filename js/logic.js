@@ -3,6 +3,7 @@ import { ITEMS, RECIPES, doCraft, xpFor } from "./crafting.js";
 import { view } from "./view.js";
 import { updateNpcWorld } from "./npcworld.js";
 import { net, sendBossHit, sendPvpHit } from "./net.js";
+import { CLASSES } from "./classes.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -103,6 +104,7 @@ Game.prototype.update = function (dt) {
   p.evadeT = Math.max(0, p.evadeT - dt);
   p.evadeCd = Math.max(0, p.evadeCd - dt);
   p.invuln = Math.max(0, p.invuln - dt);
+  p.hurtT = Math.max(0, (p.hurtT || 0) - dt);
   for (let i = 0; i < 4; i++) p.skillCd[i] = Math.max(0, p.skillCd[i] - dt);
 
   p.shield = !this.fishing && !!(this.keys.ShiftLeft || this.keys.ShiftRight);
@@ -190,6 +192,7 @@ Game.prototype.update = function (dt) {
   this.updateInteract();
   // buff timer (War Cry etc.)
   if (p.buffT > 0) { p.buffT -= dt; if (p.buffT <= 0) { p.buffT = 0; p.buffMul = 1; } }
+  p.wardT = Math.max(0, (p.wardT || 0) - dt);
 
   for (const pa of this.particles) { pa.x += pa.vx * dt; pa.y += pa.vy * dt; pa.vy += 40 * dt; pa.life -= dt; }
   this.particles = this.particles.filter(pa => pa.life > 0);
@@ -237,19 +240,26 @@ Game.prototype.moveEntity = function (e, dx, dy, r) {
   if (!solid(e.x, ny + Math.sign(dy) * r)) e.y = clamp(ny, r, MAP_H * T - r); else e.vy = 0;
 };
 
-Game.prototype.doAttack = function () {
+Game.prototype.doAttack = function (damageMul = 1) {
   const p = this.player;
   const w = WEAPONS[p.equipped] || WEAPONS.fist;
-  if (p.stamina < w.cost * 0.4) return;
+  if (p.stamina < w.cost * 0.4) return false;
   p.stamina = Math.max(0, p.stamina - w.cost);
   const durations = { dagger: .18, sword: .28, axe: .42, spear: .34, dragonblade: .36, bow: .34, staff: .38, dragonbow: .4, dragonstaff: .42 };
+  const chained = this.t - (p.lastAttackAt ?? -99) < .68;
+  p.comboStep = chained ? ((p.comboStep || 0) + 1) % 3 : 0;
+  p.lastAttackAt = this.t;
   p.attackDur = durations[p.equipped] || .26;
   p.attackT = p.attackDur; p.attackCd = w.speed;
   p.attackStyle = w.ranged ? (w.projectile === "arrow" ? "bow" : "cast") : "melee";
   this.audio.sfx("attack");
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
   const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
-  const dmg = (w.dmg + p.level * 2) * (p.dmgMul || 1);
+  const activeBuff = p.buffT > 0 ? (p.buffMul || 1) : 1;
+  const rawDmg = (w.dmg + p.level * 2) * (p.dmgMul || 1) * Math.max(.1, Number(damageMul) || 1);
+  // Projectiles flow through hurtEnemy()/hurtBossDirect(), which apply buffs;
+  // direct melee paths resolve the active buff here exactly once.
+  const dmg = w.ranged ? rawDmg : rawDmg * activeBuff;
   // ranged weapons spawn a projectile instead of melee hitbox
   if (w.ranged) {
     const kind = w.projectile || "arrow";
@@ -261,7 +271,7 @@ Game.prototype.doAttack = function () {
     return;
   }
   p.vx += fx * 55; p.vy += fy * 55;
-  this.fx.push({ kind: "weaponslash", x: p.x, y: p.y, dir: p.dir, weapon: p.equipped, t: 0, dur: p.attackDur });
+  this.fx.push({ kind: "weaponslash", x: p.x, y: p.y, dir: p.dir, weapon: p.equipped, combo: p.comboStep, t: 0, dur: p.attackDur });
   let anyHit = false;
   for (const e of this.enemies) {
     if (e.dead) continue;
@@ -287,7 +297,9 @@ Game.prototype.doAttack = function () {
     const dx = b.x - p.x, dy = b.y - p.y, d = Math.hypot(dx, dy);
     if (d < w.range + 34) {
       const dot = d > 0 ? (dx / d) * fx + (dy / d) * fy : 1;
-      if (!(fx || fy) || dot > 0.1) { this.hurtBossDirect(Math.round(dmg * (Math.random() < 0.2 ? 1.8 : 1))); }
+      // hurtBossDirect applies Oni Resolve itself; pass the unbuffed attack value
+      // so boss hits match the same single multiplier as ordinary enemies.
+      if (!(fx || fy) || dot > 0.1) { this.hurtBossDirect(Math.round(rawDmg * (Math.random() < 0.2 ? 1.8 : 1))); }
     }
   }
   const duelCrit = Math.random() < .16;
@@ -306,6 +318,7 @@ Game.prototype.doAttack = function () {
     this.audio.sfx("hit");
     if (pl.hp <= 0) this.harvestPlant(pl);
   }
+  return true;
 };
 
 Game.prototype.killEnemy = function (e) {
@@ -419,76 +432,82 @@ Game.prototype.useSkill = function (i) {
   if (p.skillCd[i] > 0) return;
   const cls = p.cls || "warrior";
   const dirVec = () => ({ fx: p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0, fy: p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0 });
-
-  // resolve skill id from class loadout
-  const CLS_SKILLS = {
-    warrior: ["powerstrike", "whirlwind", "warcry", "dash"],
-    mage:    ["fireball", "frostnova", "heal", "blink"],
-    archer:  ["arrowshot", "multishot", "heal", "roll"],
-  };
-  const skillId = (CLS_SKILLS[cls] || CLS_SKILLS.warrior)[i];
+  const skill = (CLASSES[cls] || CLASSES.warrior).skills[i];
+  if (!skill) return;
+  const skillId = skill.id, cooldown = skill.cd;
 
   switch (skillId) {
     case "powerstrike": {
-      p.skillCd[i] = 4; this._nextDuelKind = "skill"; this.mouse.down = true; this.doAttack(); this.mouse.down = false;
-      this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.3 });
-      this.shake = Math.max(this.shake, 3); this.ui.toast("Power Strike!"); break;
+      this._nextDuelKind = "skill";
+      if (!this.doAttack(1.65)) { this._nextDuelKind = null; this.ui.toast("Not enough stamina"); break; }
+      p.skillCd[i] = cooldown;
+      const { fx, fy } = dirVec();
+      this.fx.push({ kind: "crescent", x: p.x + fx * 20, y: p.y + fy * 20, dir: p.dir, t: 0, dur: .42 });
+      this.shake = Math.max(this.shake, 2); this.ui.toast("Moon Cleave!"); break;
     }
     case "whirlwind": {
-      p.skillCd[i] = 7; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackT = p.attackDur;
-      this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, t: 0, dur: 0.48 }); this.shake = Math.max(this.shake, 4);
+      p.skillCd[i] = cooldown; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackDur = .56; p.attackT = p.attackDur; p.attackStyle = "melee";
+      this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, variant: "steel", t: 0, dur: .62 }); this.shake = Math.max(this.shake, 3);
       for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 70) { const hit = Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)); this.hurtEnemy(e, hit, true); } }
       this.hurtBoss(p.x, p.y, 70, Math.round(40 * (p.dmgMul || 1)));
       this.tryDuelStrike(p.x, p.y, 82, Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)), "skill");
-      this.ui.toast("Whirlwind!"); break;
+      this.ui.toast("Tempest Wheel!"); break;
     }
     case "warcry": {
-      p.skillCd[i] = 12; p.buffT = 6; p.buffMul = 1.6;
-      this.audio.sfx("level"); this.fx.push({ kind: "warcry", x: p.x, y: p.y, t: 0, dur: 0.8 });
-      this.ui.toast("War Cry! +60% dmg"); break;
+      p.skillCd[i] = cooldown; p.buffT = 6; p.buffMul = 1.6; p.wardT = Math.max(p.wardT || 0, 1.4);
+      this.audio.sfx("level"); this.fx.push({ kind: "warcry", x: p.x, y: p.y, variant: "resolve", t: 0, dur: .9 });
+      this.ui.toast("Oni Resolve · damage up"); break;
     }
     case "fireball": {
-      p.skillCd[i] = 3; const { dx, dy } = rangedAim(this, "fire");
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "fire");
       p.attackDur = .42; p.attackT = p.attackDur; p.attackStyle = "cast";
-      this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)), false, "skill");
-      this.fx.push({ kind: "castburst", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "skill", t: 0, dur: .42 });
-      this.audio.sfx("whirl"); this.ui.toast("Fireball!"); break;
+      this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)), false, "comet");
+      this.fx.push({ kind: "castburst", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "comet", t: 0, dur: .5 });
+      this.audio.sfx("whirl"); this.ui.toast("Ember Comet!"); break;
     }
     case "frostnova": {
-      p.skillCd[i] = 8; this.fx.push({ kind: "frost", x: p.x, y: p.y, t: 0, dur: 0.72 }); this.shake = Math.max(this.shake, 3); this.audio.sfx("crit");
+      p.skillCd[i] = cooldown; p.attackDur = .48; p.attackT = p.attackDur; p.attackStyle = "cast";
+      this.fx.push({ kind: "frost", x: p.x, y: p.y, variant: "lotus", t: 0, dur: .82 }); this.shake = Math.max(this.shake, 2); this.audio.sfx("crit");
       for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 80) { this.hurtEnemy(e, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), true); e.frozen = 2.2; } }
       this.hurtBoss(p.x, p.y, 80, Math.round(30 * (p.dmgMul || 1)));
       this.tryDuelStrike(p.x, p.y, 92, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), "skill");
-      this.ui.toast("Frost Nova!"); break;
+      this.ui.toast("Winter Lotus!"); break;
     }
     case "arrowshot": {
-      p.skillCd[i] = 3; const { dx, dy } = rangedAim(this, "arrow");
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow");
       p.attackDur = .4; p.attackT = p.attackDur; p.attackStyle = "bow";
-      this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true, "power");
-      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "power", t: 0, dur: .36 });
-      this.audio.sfx("attack"); this.ui.toast("Power Shot!"); break;
+      this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true, "falcon");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "falcon", t: 0, dur: .42 });
+      this.audio.sfx("attack"); this.ui.toast("Falcon Pierce!"); break;
     }
     case "multishot": {
-      p.skillCd[i] = 7; const { dx, dy } = rangedAim(this, "arrow");
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow");
       const base = Math.atan2(dy, dx);
       p.attackDur = .44; p.attackT = p.attackDur; p.attackStyle = "bow";
-      for (const off of [-0.28, 0, 0.28]) { this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((16 + p.level * 2) * (p.dmgMul || 1)), false, "multi"); }
-      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: base, variant: "multi", t: 0, dur: .42 });
-      this.audio.sfx("attack"); this.ui.toast("Multishot!"); break;
+      for (const off of [-.34, -.17, 0, .17, .34]) this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((13 + p.level * 1.7) * (p.dmgMul || 1)), false, "sakura");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: base, variant: "sakura", t: 0, dur: .5 });
+      this.audio.sfx("attack"); this.ui.toast("Sakura Volley!"); break;
     }
     case "heal": {
-      if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[i] = 6; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, t: 0, dur: 0.8 }); this.ui.toast("Healed +30"); }
+      if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[i] = cooldown; p.attackDur = .52; p.attackT = p.attackDur; p.attackStyle = "cast"; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, variant: "sutra", t: 0, dur: .9 }); this.ui.toast("Verdant Sutra · +30 HP"); }
       else this.ui.toast("No herbs"); break;
     }
+    case "windward": {
+      if (p.stamina < 22) { this.ui.toast("Not enough stamina"); break; }
+      p.stamina -= 22; p.skillCd[i] = cooldown; p.wardT = 4; p.hp = Math.min(p.maxHp, p.hp + 12);
+      p.attackDur = .4; p.attackT = p.attackDur; p.attackStyle = "bow";
+      this.addFloater(p.x, p.y - 36, 12, false, false, true); this.audio.sfx("heal");
+      this.fx.push({ kind: "windward", x: p.x, y: p.y, t: 0, dur: .9 }); this.ui.toast("Wind Ward · damage reduced"); break;
+    }
     case "blink": {
-      p.skillCd[i] = 6; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
-      this.fx.push({ kind: "blink", x: p.x, y: p.y, t: 0, dur: .45 });
+      p.skillCd[i] = cooldown; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
+      this.fx.push({ kind: "blink", x: p.x, y: p.y, variant: "rift", t: 0, dur: .5 });
       p.x = clamp(p.x + dx * 90, 8, 110 * 24 - 8); p.y = clamp(p.y + dy * 90, 8, 110 * 24 - 8);
-      p.invuln = 0.3; this.fx.push({ kind: "blink", x: p.x, y: p.y, t: 0, dur: .45, arrive: true }); this.audio.sfx("dash"); this.ui.toast("Blink!"); break;
+      p.invuln = 0.3; this.fx.push({ kind: "blink", x: p.x, y: p.y, variant: "rift", t: 0, dur: .5, arrive: true }); this.audio.sfx("dash"); this.ui.toast("Rift Step!"); break;
     }
     case "dash":
     case "roll": {
-      if (p.stamina >= 16) { p.evadeT = 0.16; p.evadeCd = 0.4; p.stamina -= 16; p.invuln = 0.25; p.skillCd[i] = skillId === "roll" ? 4 : 5; this.audio.sfx("dash"); this.fx.push({ kind: "dashline", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.25 }); const { fx, fy } = dirVec(); p.vx = fx * 340; p.vy = fy * 340; if (!fx && !fy) p.vy = 340; } break;
+      if (p.stamina >= 16) { p.evadeT = 0.16; p.evadeCd = 0.4; p.stamina -= 16; p.invuln = 0.25; p.skillCd[i] = cooldown; this.audio.sfx("dash"); this.fx.push({ kind: "dashline", x: p.x, y: p.y, dir: p.dir, variant: skillId, t: 0, dur: .32 }); const { fx, fy } = dirVec(); p.vx = fx * 340; p.vy = fy * 340; if (!fx && !fy) p.vy = 340; } break;
     }
   }
 };
@@ -497,8 +516,9 @@ Game.prototype.useSkill = function (i) {
 Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce, variant = "basic", options = null) {
   const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
   this.projectiles = this.projectiles || [];
-  const maxLife = variant === "power" || variant === "dragon" ? PROJECTILE_LIFE * 1.15 : PROJECTILE_LIFE;
-  this.projectiles.push({ x, y, dx, dy, kind, variant, dmg, pierce: !!pierce, life: maxLife, maxLife, age: 0, trailT: 0, hostile: kind === "bossfire" && !options?.visualOnly, visualOnly: !!options?.visualOnly, targetId: options?.targetId || null, hits: [], hitsRemote: [], hitBoss: false });
+  const longRange = ["power", "dragon", "falcon", "comet"].includes(variant);
+  const maxLife = longRange ? PROJECTILE_LIFE * 1.15 : PROJECTILE_LIFE;
+  this.projectiles.push({ x, y, dx, dy, kind, variant, dmg, pierce: !!pierce, life: maxLife, maxLife, age: 0, trailT: 0, spin: Math.random() * Math.PI * 2, hostile: kind === "bossfire" && !options?.visualOnly, visualOnly: !!options?.visualOnly, targetId: options?.targetId || null, hits: [], hitsRemote: [], hitBoss: false });
 };
 Game.prototype.updateProjectiles = function (dt) {
   if (!this.projectiles) return;
@@ -510,10 +530,14 @@ Game.prototype.updateProjectiles = function (dt) {
     pr.life -= dt; pr.age += dt; pr.trailT -= dt;
     if ((pr.kind === "fire" || pr.kind === "bossfire") && pr.trailT <= 0) {
       pr.trailT = pr.variant === "dragon" || pr.variant === "boss" ? .025 : .045;
-      const color = pr.kind === "bossfire" ? "rgba(255,93,35,.85)" : pr.variant === "dragon" ? "rgba(174,105,255,.86)" : "rgba(255,165,58,.82)";
+      const color = pr.kind === "bossfire" ? "rgba(255,93,35,.85)" : pr.variant === "dragon" ? "rgba(174,105,255,.86)" : pr.variant === "comet" ? "rgba(255,196,84,.9)" : "rgba(255,165,58,.82)";
       this.particles.push({ x: pr.x - pr.dx * 4, y: pr.y - pr.dy * 4, vx: -pr.dx * 18 + (Math.random() - .5) * 9, vy: -pr.dy * 18 + (Math.random() - .5) * 9, life: .28, color });
+    } else if (pr.kind === "arrow" && ["falcon", "sakura", "dragon"].includes(pr.variant) && pr.trailT <= 0) {
+      pr.trailT = pr.variant === "sakura" ? .06 : .04;
+      const color = pr.variant === "sakura" ? "rgba(255,157,197,.78)" : pr.variant === "dragon" ? "rgba(203,148,255,.82)" : "rgba(178,255,198,.8)";
+      this.particles.push({ x: pr.x - pr.dx * 7 + (Math.random() - .5) * 3, y: pr.y - pr.dy * 7 + (Math.random() - .5) * 3, vx: -pr.dx * 8, vy: -pr.dy * 8 - 3, life: .22, color });
     }
-    const impact = () => this.fx.push({ kind: "projectileimpact", x: pr.x, y: pr.y, element: pr.kind, variant: pr.variant, t: 0, dur: .3 });
+    const impact = () => this.fx.push({ kind: "projectileimpact", x: pr.x, y: pr.y, element: pr.kind, variant: pr.variant, t: 0, dur: ["comet", "falcon", "sakura"].includes(pr.variant) ? .42 : .3 });
     if (pr.visualOnly) continue;
     if (pr.hostile) {
       // hits player
@@ -525,7 +549,7 @@ Game.prototype.updateProjectiles = function (dt) {
         for (const [id, remote] of Object.entries(net.remote)) {
           if (!remote.duel || pr.hitsRemote.includes(id)) continue;
           if (Math.hypot(pr.x - remote.rx, pr.y - (remote.ry - 18)) >= 17) continue;
-          const combatKind = pr.variant === "skill" || pr.variant === "power" || pr.variant === "multi" ? "skill" : "projectile";
+          const combatKind = ["skill", "power", "multi", "comet", "falcon", "sakura"].includes(pr.variant) ? "skill" : "projectile";
           if (sendPvpHit(id, Math.min(120, Math.max(1, Math.round(pr.dmg))), combatKind)) {
             impact(); pr.hitsRemote.push(id);
             if (!pr.pierce) { pr.life = 0; consumed = true; }
@@ -584,7 +608,7 @@ Game.prototype.applySharedBoss = function (state) {
   if (!state?.active) {
     if (this.boss?.shared) { this.boss.hp = 0; this.boss.dead = true; this.boss.respawnAt = state?.respawnAt || 0; }
     this.ui.syncBoss?.(this.boss);
-    return;
+    return true;
   }
   const isNew = !this.boss?.shared || this.boss.serverId !== state.id;
   if (isNew) {
@@ -861,14 +885,16 @@ Game.prototype.damagePlayer = function (raw) {
   const p = this.player;
   if (p.invuln > 0) return;
   if (p.shield) { p.stamina = Math.max(0, p.stamina - 6); if (p.stamina > 0) { p.invuln = 0.2; return; } }
-  const dmg = Math.max(1, Math.round(raw * (p.defense || 1)));
+  const ward = p.wardT > 0 ? .62 : 1;
+  const dmg = Math.max(1, Math.round(raw * (p.defense || 1) * ward));
   p.hp -= dmg; p.invuln = 0.6;
   this.addFloater(p.x, p.y - 36, dmg, false, true);
   this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 5);
 };
 Game.prototype.damagePlayerPvp = function (acceptedDamage) {
   const p = this.player;
-  const dmg = Math.max(1, Math.round(Number(acceptedDamage) || 0));
+  const ward = p.wardT > 0 ? .62 : 1;
+  const dmg = Math.max(1, Math.round((Number(acceptedDamage) || 0) * ward));
   p.hp -= dmg;
   p.hurtT = Math.max(p.hurtT || 0, .2);
   this.addFloater(p.x, p.y - 36, dmg, false, true);

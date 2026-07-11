@@ -308,10 +308,12 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
   const attackBeat = attacking ? actionBeat : 0;
   const bob = walking ? [0, -1, 0, -1][frame % 4]
     : idle ? [0, 0, -1, 0][frame % 4]
-      : pose === "cast" ? -Math.round(actionBeat) : 0;
+      : pose === "cast" || pose === "bow" ? -Math.round(actionBeat) : pose === "hurt" ? Math.round(actionBeat) : 0;
   const step = walking ? [0, 1, 0, -1][frame % 4] : pose === "dash" ? (frame % 2 ? 1 : 0) : 0;
   const by = bob;
-  const lunge = attacking ? Math.round(attackBeat * 2) : pose === "dash" ? Math.round(actionBeat * 3) : 0;
+  const lunge = attacking ? Math.round(attackBeat * 2)
+    : pose === "dash" ? Math.round(actionBeat * 3)
+      : pose === "hurt" ? -Math.round(actionBeat * 2) : 0;
   const cx = 16 + (dir === "right" ? lunge : dir === "left" ? -lunge : 0);
 
   drawAura(ctx, look, frame, Math.max(attackBeat, pose === "cast" ? actionBeat : 0));
@@ -379,7 +381,40 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
 
   // ================= ARMS (at the sides, swing while walking) ==============
   const armSw = walking ? [0, 1, 0, -1][frame % 4] : 0;
-  if (pose === "cast" && !attacking) {
+  if (pose === "bow" && !attacking) {
+    const draw = Math.round(actionBeat * 5);
+    if (dir === "left" || dir === "right") {
+      const side = dir === "left" ? -1 : 1;
+      pixelLine(ctx, cx + side * 2, tTop + 3, cx + side * 8, tTop + 4, sh, 2);
+      px(ctx, cx + side * 8 - (side < 0 ? 1 : 0), tTop + 4, 2, 2, sk);
+      pixelLine(ctx, cx - side * 3, tTop + 3, cx - side * (3 + draw), tTop + 1, sh2, 2);
+      px(ctx, cx - side * (4 + draw), tTop, 2, 2, sk);
+    } else {
+      pixelLine(ctx, cx - 5, tTop + 3, cx - 8 - draw, tTop + 2, sh2, 2);
+      pixelLine(ctx, cx + 4, tTop + 3, cx + 8, tTop + 2, sh, 2);
+      px(ctx, cx - 9 - draw, tTop + 1, 2, 2, sk); px(ctx, cx + 8, tTop + 1, 2, 2, sk);
+    }
+  } else if (pose === "guard" && !attacking) {
+    const brace = Math.round(actionBeat * 2);
+    if (dir === "left" || dir === "right") {
+      const side = dir === "left" ? -1 : 1;
+      pixelLine(ctx, cx, tTop + 3, cx + side * (6 + brace), tTop + 6, sh2, 3);
+      px(ctx, cx + side * (6 + brace), tTop + 6, 2, 2, sk);
+    } else {
+      pixelLine(ctx, cx - 5, tTop + 3, cx + 3, tTop + 7 - brace, sh2, 2);
+      pixelLine(ctx, cx + 4, tTop + 3, cx - 3, tTop + 7 - brace, sh, 2);
+    }
+  } else if (pose === "hurt" && !attacking) {
+    const recoil = 3 + Math.round(actionBeat * 3);
+    pixelLine(ctx, cx - 5, tTop + 3, cx - recoil - 5, tTop + 1, sh2, 2);
+    pixelLine(ctx, cx + 4, tTop + 3, cx + recoil + 4, tTop + 1, sh, 2);
+    px(ctx, cx - recoil - 6, tTop, 2, 2, sk); px(ctx, cx + recoil + 4, tTop, 2, 2, sk);
+  } else if (pose === "fishing" && !attacking) {
+    const reel = frame % 2;
+    pixelLine(ctx, cx - 5, tTop + 3, cx - 1 - reel, tTop + 7, sh2, 2);
+    pixelLine(ctx, cx + 4, tTop + 3, cx + 1 + reel, tTop + 7, sh, 2);
+    px(ctx, cx - 2 - reel, tTop + 7, 2, 2, sk); px(ctx, cx + 1 + reel, tTop + 7, 2, 2, sk);
+  } else if (pose === "cast" && !attacking) {
     const lift = 2 + Math.round(actionBeat * 4);
     if (dir === "down" || dir === "up") {
       pixelLine(ctx, cx - 5, tTop + 3, cx - 8, tTop + 3 - lift, sh2, 2);
@@ -429,6 +464,19 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
   }
 
   drawClassFront(ctx, look, dir, cx, by, frame);
+
+  // A readable class insignia survives outfit recolors at native pixel scale.
+  if (dir === "down") {
+    const accent = look.accent || DEFAULT_LOOK.accent;
+    if (look.cls === "mage") {
+      px(ctx, cx - 1, tTop + 4, 2, 5, accent); px(ctx, cx - 3, tTop + 6, 6, 1, shade(accent, 1.28));
+      px(ctx, cx - 1, tTop + 5, 2, 2, "#e9fbff");
+    } else if (look.cls === "archer") {
+      px(ctx, cx - 2, tTop + 5, 4, 4, shade(accent, .72)); px(ctx, cx - 1, tTop + 4, 2, 5, shade(accent, 1.25));
+    } else if (look.cls === "warrior") {
+      px(ctx, cx - 3, tTop + 4, 6, 4, shade(accent, .55)); px(ctx, cx - 1, tTop + 4, 2, 4, shade(accent, 1.24));
+    }
+  }
 
   // ================= HEAD (defined, slightly large but not a blob) =========
   const hy = 10 + by;
@@ -523,6 +571,8 @@ function drawPixelBow(ctx, dragon, atkPhase) {
   pixelLine(ctx, 2, -6, 5, -10, shine); pixelLine(ctx, 2, 6, 5, 10, shine);
   px(ctx, -3, -3, 4, 6, edge); px(ctx, -2, -2, 3, 4, dragon ? "#7e2c20" : "#765033");
   px(ctx, -1, -2, 1, 3, shine); px(ctx, -4, -1, 2, 2, dragon ? "#ffcc59" : "#c9a66a");
+  px(ctx, -3, -4, 2, 2, edge); px(ctx, -3, 3, 2, 2, edge);
+  px(ctx, -2, -4, 1, 1, dragon ? "#ff9f3e" : "#7eaa78"); px(ctx, -2, 4, 1, 1, dragon ? "#ffd96b" : "#b7d49b");
   pixelLine(ctx, 6, -11, pull, 0, string); pixelLine(ctx, pull, 0, 6, 11, string);
   px(ctx, 5, -12, 3, 2, dragon ? "#ff7131" : "#c5d4c2");
   px(ctx, 5, 10, 3, 2, dragon ? "#ff7131" : "#c5d4c2");
@@ -542,6 +592,8 @@ function drawPixelBow(ctx, dragon, atkPhase) {
     px(ctx, 11, -2, 3, 5, edge); px(ctx, 12, -1, 2, 3, dragon ? "#ff6a32" : "#edf4f1");
     px(ctx, pull, -3, 4, 2, dragon ? "#ff7733" : "#52785a");
     px(ctx, pull, 2, 4, 2, dragon ? "#ffb84d" : "#6f9d6e");
+    const bead = Math.round(Math.sin(atkPhase * Math.PI) * 3);
+    px(ctx, -7 - bead, -1, 2, 2, dragon ? "#fff09a" : "#d9ffd2");
   }
 }
 
@@ -579,6 +631,15 @@ function drawPixelStaff(ctx, dragon, atkPhase) {
     px(ctx, -3, -14, 2, 3, "#8065b3"); px(ctx, 1, -6, 2, 3, "#55bdd0");
     px(ctx, -3, -4, 2, 2, "#c7f6ff");
   }
+  // A cloth sutra and discrete orbiting motes give the staff a caster identity.
+  px(ctx, 2, -8, 3, 6, dragon ? "#8d2b24" : "#d6c683"); px(ctx, 3, -7, 1, 4, dragon ? "#ffc35b" : "#735b8e");
+  if (atkPhase != null) {
+    const orbit = atkPhase * Math.PI * 2;
+    for (let i = 0; i < 3; i++) {
+      const a = orbit + i * Math.PI * 2 / 3;
+      px(ctx, Math.round(Math.cos(a) * (8 + pulse)) - 1, -21 + Math.round(Math.sin(a) * (5 + pulse)), 2, 2, i === 0 ? core : crystal);
+    }
+  }
 }
 
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)
@@ -597,12 +658,19 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   else if (dir === "up") { hx = 9; hy = 20; baseAng = -Math.PI * 0.5; }
   else if (dir === "left") { hx = 9; hy = 22; baseAng = Math.PI; }
   else { hx = 23; hy = 22; baseAng = 0; }
+  const phase = atkPhase == null ? null : Math.max(0, Math.min(1, atkPhase));
+  const meleeSweep = phase == null ? -0.55
+    : weapon === "dagger" ? -1.05 + Math.min(1, phase / .48) * 2.05
+      : weapon === "axe" ? (phase < .42 ? -1.18 + phase * .45 : -.99 + ((phase - .42) / .58) * 2.18)
+        : weapon === "spear" ? -.08 + Math.sin(phase * Math.PI) * .12
+          : -0.86 + 1.78 * phase;
   const sweep = isBow ? 0
-    : isStaff ? (atkPhase == null ? 0 : Math.sin(Math.PI * atkPhase) * (dir === "up" || dir === "left" ? -.12 : .12))
-      : atkPhase == null ? -0.55 : -0.8 + 1.6 * atkPhase;
+    : isStaff ? (phase == null ? 0 : Math.sin(Math.PI * phase) * (dir === "up" || dir === "left" ? -.16 : .16))
+      : meleeSweep;
   const ang = baseAng + sweep;
   ctx.save();
-  ctx.translate(hx, hy);
+  const thrust = weapon === "spear" && phase != null ? Math.sin(phase * Math.PI) * 8 : 0;
+  ctx.translate(hx + Math.cos(baseAng) * thrust, hy + Math.sin(baseAng) * thrust);
   ctx.rotate(ang);
   const O = "#2a2630";
 
@@ -737,6 +805,10 @@ export function buildCharacter(look) {
   addLazyPose(cache, resolved, "idle", 4);
   addLazyPose(cache, resolved, "cast", 6);
   addLazyPose(cache, resolved, "dash", 4);
+  addLazyPose(cache, resolved, "bow", 6);
+  addLazyPose(cache, resolved, "guard", 3);
+  addLazyPose(cache, resolved, "hurt", 4);
+  addLazyPose(cache, resolved, "fishing", 4);
   cache.look = resolved;
   return cache;
 }

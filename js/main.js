@@ -318,8 +318,19 @@ function wireMultiplayer(g, ui) {
   };
   net.onChat = (message) => {
     ui.receiveChat(message, message.id === net.selfId);
-    const remote = net.remote[message.id];
-    if (remote) { remote.chatText = String(message.text || "").slice(0, 64); remote.chatUntil = g.t + 5; }
+    const text = String(message.text || "").slice(0, 96);
+    if (message.id === net.selfId) {
+      g.player.chatText = text;
+      g.player.chatBorn = g.t;
+      g.player.chatUntil = g.t + 5.5;
+    } else {
+      const remote = net.remote[message.id];
+      if (remote) {
+        remote.chatText = text;
+        remote.chatBorn = g.t;
+        remote.chatUntil = g.t + 5.5;
+      }
+    }
   };
   net.onDuel = (message) => {
     if (message.id === net.selfId) {

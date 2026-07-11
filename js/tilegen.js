@@ -36,6 +36,24 @@ function scatter(ctx, seed, color, count, size) {
   }
 }
 
+// Tiny authored primitives keep the ground readable as pixel art instead of noise.
+// They are baked once into the tile cache, so none of this work happens per frame.
+function groundStone(ctx, x, y, variant = 0) {
+  const body = ["#92724f", "#807257", "#8a7662"][variant % 3];
+  const light = ["#c6a477", "#b5a17f", "#b7a38f"][variant % 3];
+  ctx.fillStyle = "rgba(88,61,39,0.32)"; ctx.fillRect(x + 1, y + 3, 4, 1);
+  ctx.fillStyle = body; ctx.fillRect(x, y + 1, 5, 2); ctx.fillRect(x + 1, y, 3, 1);
+  ctx.fillStyle = light; ctx.fillRect(x + 1, y, 3, 1); ctx.fillRect(x, y + 1, 1, 1);
+  ctx.fillStyle = "#70583f"; ctx.fillRect(x + 4, y + 2, 1, 1);
+}
+
+function groundTuft(ctx, x, y, dark = false) {
+  ctx.fillStyle = dark ? "#376f3a" : "#4f9843";
+  ctx.fillRect(x + 2, y + 2, 1, 3); ctx.fillRect(x, y + 3, 1, 2); ctx.fillRect(x + 4, y + 3, 1, 2);
+  ctx.fillStyle = dark ? "#70ad58" : "#86c969";
+  ctx.fillRect(x + 1, y + 1, 1, 3); ctx.fillRect(x + 3, y, 1, 4);
+}
+
 function grassTile(variant, dark) {
   const cv = C(); const ctx = cv.getContext("2d");
   const base = (dark ? PAL.forest : PAL.grass)[variant % (dark ? PAL.forest.length : PAL.grass.length)];
@@ -79,27 +97,101 @@ function grassTile(variant, dark) {
       ctx.fillStyle = "#8a5739"; ctx.fillRect(5, 12, 5, 2); ctx.fillRect(9, 13, 5, 1);
       ctx.fillStyle = "#bb8150"; ctx.fillRect(6, 12, 3, 1);
     }
-  } else if (variant % 4 === 3) {
-    ctx.fillStyle = "#4f9f46"; ctx.fillRect(15, 16, 5, 1); ctx.fillRect(17, 14, 1, 4);
-    ctx.fillStyle = "#a4e08d"; ctx.fillRect(16, 15, 1, 1); ctx.fillRect(19, 15, 1, 1);
+  } else {
+    // Meadow landmarks: clover, loose stone, fallen leaves and low herbs.
+    // Each is small enough to preserve walkability while breaking up tree-only scenery.
+    const motif = variant % 8;
+    if (motif === 1) {
+      ctx.fillStyle = "#3f8e45"; ctx.fillRect(16, 15, 1, 5);
+      ctx.fillStyle = "#9bd57b"; ctx.fillRect(14, 14, 2, 2); ctx.fillRect(17, 13, 2, 2); ctx.fillRect(17, 16, 2, 2);
+      ctx.fillStyle = "#d7ef9b"; ctx.fillRect(16, 15, 1, 1);
+    } else if (motif === 2) {
+      groundStone(ctx, 15, 16, 1);
+      ctx.fillStyle = "#5ba34c"; ctx.fillRect(14, 19, 2, 1); ctx.fillRect(19, 17, 1, 2);
+    } else if (motif === 3) {
+      groundTuft(ctx, 15, 14);
+      ctx.fillStyle = "#d7b956"; ctx.fillRect(19, 18, 2, 1); ctx.fillStyle = "#a96d3f"; ctx.fillRect(20, 19, 1, 1);
+    } else if (motif === 5) {
+      ctx.fillStyle = "#80553a"; ctx.fillRect(3, 17, 7, 1); ctx.fillRect(7, 15, 1, 3);
+      ctx.fillStyle = "#b2784b"; ctx.fillRect(4, 16, 4, 1);
+      ctx.fillStyle = "#d89952"; ctx.fillRect(10, 18, 2, 1);
+    } else if (motif === 6) {
+      ctx.fillStyle = "#4b9144"; ctx.fillRect(16, 16, 5, 1); ctx.fillRect(18, 14, 1, 4);
+      ctx.fillStyle = "#a7df8f"; ctx.fillRect(17, 15, 1, 1); ctx.fillRect(20, 15, 1, 1);
+    } else if (motif === 7) {
+      ctx.fillStyle = "#c9704d"; ctx.fillRect(4, 15, 2, 2); ctx.fillStyle = "#e5a35e"; ctx.fillRect(5, 15, 2, 1);
+      ctx.fillStyle = "#70472f"; ctx.fillRect(7, 18, 2, 1); ctx.fillRect(9, 17, 1, 1);
+    }
   }
   return cv;
 }
 
 function dirtTile(variant) {
   const cv = C(); const ctx = cv.getContext("2d");
-  ctx.fillStyle = PAL.dirt[variant % PAL.dirt.length]; ctx.fillRect(0, 0, TS, TS);
-  scatter(ctx, variant * 13 + 2, PAL.dirtHi, 12, 2);
-  scatter(ctx, variant * 13 + 6, PAL.dirtLo, 14, 2);
-  scatter(ctx, variant * 13 + 9, "#8f6a42", 10, 1);   // pebbles
-  // small stones
-  ctx.fillStyle = "#9a8058";
-  for (let i = 0; i < 2; i++) { const sx = 4 + ((noise(variant + i * 4) * 16) | 0); const sy = 4 + ((noise(variant + i * 8) * 16) | 0); ctx.fillRect(sx, sy, 3, 2); ctx.fillStyle = "#b89a6e"; ctx.fillRect(sx, sy, 3, 1); ctx.fillStyle = "#9a8058"; }
-  if (variant % 3 === 0) {
-    ctx.fillStyle = "#a77649"; ctx.fillRect(2, 17, 8, 1); ctx.fillRect(5, 19, 10, 1);
-    ctx.fillStyle = "#d5ab78"; ctx.fillRect(3, 16, 5, 1);
-  } else if (variant % 3 === 1) {
-    ctx.fillStyle = "#806244"; ctx.fillRect(16, 6, 4, 3); ctx.fillStyle = "#c4a276"; ctx.fillRect(17, 6, 3, 1);
+  const base = PAL.dirt[variant % PAL.dirt.length];
+  const grad = ctx.createLinearGradient(0, 0, 0, TS);
+  grad.addColorStop(0, base); grad.addColorStop(1, variant % 2 ? "#ae8053" : "#b7895b");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, TS, TS);
+
+  // Packed-earth islands give the road a worn center instead of uniform static.
+  ctx.fillStyle = "rgba(224,184,139,0.28)";
+  ctx.fillRect(4, 5 + (variant % 3), 12, 2); ctx.fillRect(8, 7 + (variant % 3), 11, 1);
+  ctx.fillStyle = "rgba(126,85,49,0.20)";
+  ctx.fillRect(2, 15 - (variant % 2), 9, 2); ctx.fillRect(12, 16 - (variant % 2), 8, 1);
+  scatter(ctx, variant * 13 + 2, PAL.dirtHi, 8, 1);
+  scatter(ctx, variant * 13 + 6, PAL.dirtLo, 9, 1);
+  scatter(ctx, variant * 13 + 9, "#80603e", 7, 1);
+
+  // Broken wheel ruts and foot-worn lines rotate between variants, avoiding a
+  // directional pattern while still reading as a travelled open-world path.
+  ctx.fillStyle = "#9b7048";
+  if (variant % 4 === 0) {
+    ctx.fillRect(1, 10, 7, 1); ctx.fillRect(10, 11, 9, 1); ctx.fillRect(4, 14, 8, 1); ctx.fillRect(15, 15, 7, 1);
+    ctx.fillStyle = "#d2a574"; ctx.fillRect(2, 9, 5, 1); ctx.fillRect(11, 10, 6, 1);
+  } else if (variant % 4 === 1) {
+    ctx.fillRect(8, 1, 1, 6); ctx.fillRect(9, 9, 1, 8); ctx.fillRect(15, 5, 1, 7); ctx.fillRect(14, 15, 1, 7);
+    ctx.fillStyle = "#d2a574"; ctx.fillRect(7, 2, 1, 4); ctx.fillRect(14, 6, 1, 5);
+  } else if (variant % 4 === 2) {
+    for (let i = 0; i < 5; i++) ctx.fillRect(2 + i * 4, 4 + i * 3, 4, 1);
+    ctx.fillStyle = "#d2a574"; ctx.fillRect(3, 3, 3, 1); ctx.fillRect(11, 9, 3, 1);
+  } else {
+    ctx.fillRect(3, 18, 5, 1); ctx.fillRect(7, 15, 1, 4); ctx.fillRect(8, 13, 7, 1); ctx.fillRect(14, 9, 1, 5); ctx.fillRect(15, 8, 6, 1);
+    ctx.fillStyle = "#d2a574"; ctx.fillRect(4, 17, 3, 1); ctx.fillRect(9, 12, 5, 1);
+  }
+
+  // A restrained authored motif per tile: cobbles, prints, moss, a shallow
+  // puddle or travel debris. These remain purely visual and never affect collision.
+  const motif = variant % 8;
+  if (motif === 0) {
+    groundStone(ctx, 3, 4, 0); groundStone(ctx, 15, 17, 1);
+  } else if (motif === 1) {
+    ctx.fillStyle = "#765437"; ctx.fillRect(17, 4, 2, 3); ctx.fillRect(13, 10, 2, 3);
+    ctx.fillStyle = "#d2a878"; ctx.fillRect(17, 4, 1, 1); ctx.fillRect(13, 10, 1, 1);
+  } else if (motif === 2) {
+    groundStone(ctx, 3, 16, 2);
+    ctx.fillStyle = "#5b9144"; ctx.fillRect(1, 19, 8, 3); ctx.fillStyle = "#86bd61"; ctx.fillRect(2, 19, 5, 1);
+    groundTuft(ctx, 0, 17);
+  } else if (motif === 3) {
+    ctx.fillStyle = "#714b31"; ctx.fillRect(4, 17, 11, 1); ctx.fillRect(11, 14, 1, 4); ctx.fillRect(14, 18, 4, 1);
+    ctx.fillStyle = "#b77948"; ctx.fillRect(5, 16, 6, 1);
+    ctx.fillStyle = "#d88a4e"; ctx.fillRect(18, 7, 2, 2); ctx.fillStyle = "#f0b25e"; ctx.fillRect(19, 7, 1, 1);
+  } else if (motif === 4) {
+    ctx.fillStyle = "#7f7158"; ctx.fillRect(4, 17, 13, 3); ctx.fillRect(7, 15, 8, 1);
+    ctx.fillStyle = "#9e9272"; ctx.fillRect(6, 16, 9, 2);
+    ctx.fillStyle = "#c3bb92"; ctx.fillRect(8, 16, 5, 1);
+    ctx.fillStyle = "rgba(173,221,218,0.65)"; ctx.fillRect(9, 17, 3, 1);
+  } else if (motif === 5) {
+    groundStone(ctx, 16, 4, 0);
+    ctx.fillStyle = "#4f8642"; ctx.fillRect(17, 7, 6, 2); ctx.fillRect(20, 5, 3, 2);
+    ctx.fillStyle = "#82b95e"; ctx.fillRect(18, 7, 4, 1); ctx.fillRect(21, 5, 2, 1);
+  } else if (motif === 6) {
+    ctx.fillStyle = "#887054"; ctx.fillRect(3, 5, 5, 4); ctx.fillStyle = "#b79b73"; ctx.fillRect(4, 5, 3, 1);
+    ctx.fillStyle = "#73573c"; ctx.fillRect(9, 16, 3, 2); ctx.fillRect(14, 13, 2, 2);
+    ctx.fillStyle = "#d5ad77"; ctx.fillRect(10, 16, 1, 1); ctx.fillRect(14, 13, 1, 1);
+  } else {
+    groundStone(ctx, 4, 4, 2);
+    ctx.fillStyle = "#8e5836"; ctx.fillRect(16, 17, 2, 2); ctx.fillStyle = "#d58a4b"; ctx.fillRect(17, 17, 2, 1);
+    ctx.fillStyle = "#6d4b32"; ctx.fillRect(19, 15, 3, 1);
   }
   return cv;
 }
@@ -173,6 +265,7 @@ function edgeOverlay(dirMask, dark = false) {
   const gEdge = dark ? "#315f35" : PAL.grassLo;
   const gTop = dark ? PAL.forest[1] : PAL.grass[0];
   const gHi = dark ? "#68ad5c" : PAL.grassHi;
+  const gShade = dark ? "rgba(31,67,37,0.45)" : "rgba(61,113,48,0.38)";
   // depth of fringe (deeper = more visible)
   const D = 7;
   const lump = (i) => 3 + Math.round(Math.sin(i * 1.7) * 2.2 + Math.cos(i * 0.9) * 1.8);
@@ -191,6 +284,25 @@ function edgeOverlay(dirMask, dark = false) {
   if (dirMask & 2) { // east
     for (let y = 0; y < TS; y++) { const w = D - lump(y + 7); ctx.fillStyle = gTop; ctx.fillRect(TS - w, y, w, 1); ctx.fillStyle = gEdge; ctx.fillRect(TS - w, y, 1, 1); }
     for (let y = 2; y < TS; y += 4) { ctx.fillStyle = gHi; ctx.fillRect(TS - 2, y, 2, 1); }
+  }
+
+  // Hand-placed shadow pixels and blade tips make the transition feel like an
+  // authored path edge. The detail follows the same topology mask as before.
+  if (dirMask & 1) {
+    ctx.fillStyle = gShade; ctx.fillRect(4, 4, 3, 1); ctx.fillRect(15, 3, 4, 1);
+    ctx.fillStyle = gHi; ctx.fillRect(6, 3, 1, 3); ctx.fillRect(17, 2, 1, 3); ctx.fillRect(20, 3, 1, 2);
+  }
+  if (dirMask & 4) {
+    ctx.fillStyle = gShade; ctx.fillRect(3, 19, 4, 1); ctx.fillRect(14, 20, 4, 1);
+    ctx.fillStyle = gHi; ctx.fillRect(5, 19, 1, 3); ctx.fillRect(15, 20, 1, 3); ctx.fillRect(18, 19, 1, 2);
+  }
+  if (dirMask & 8) {
+    ctx.fillStyle = gShade; ctx.fillRect(3, 5, 1, 4); ctx.fillRect(4, 16, 1, 3);
+    ctx.fillStyle = gHi; ctx.fillRect(2, 7, 3, 1); ctx.fillRect(3, 17, 3, 1); ctx.fillRect(2, 20, 2, 1);
+  }
+  if (dirMask & 2) {
+    ctx.fillStyle = gShade; ctx.fillRect(20, 4, 1, 4); ctx.fillRect(19, 15, 1, 4);
+    ctx.fillStyle = gHi; ctx.fillRect(20, 6, 3, 1); ctx.fillRect(19, 17, 3, 1); ctx.fillRect(20, 20, 2, 1);
   }
   return cv;
 }
