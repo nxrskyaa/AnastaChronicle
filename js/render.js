@@ -31,6 +31,74 @@ function objectPhase(o, salt = 0) {
   return ((x * 13 + y * 7 + salt * 31) % 97) / 97 * Math.PI * 2;
 }
 
+function drawNpcActivity(ctx, npc, x, y, t, dir) {
+  const side = dir === "left" ? -1 : 1;
+  const activity = npc.activity || npc.routine;
+  if (activity === "fish") {
+    const handX = x + side * 5, handY = y - 19;
+    const vertical = dir === "up" || dir === "down";
+    const tipX = vertical ? x + side * 8 : x + side * 19;
+    const tipY = vertical ? handY + (dir === "down" ? 12 : -14) : y - 32;
+    const floatX = vertical ? tipX : x + side * 27;
+    const floatY = (vertical ? tipY + (dir === "down" ? 17 : -13) : y - 5) + Math.round(Math.sin(t * 3 + objectPhase(npc)));
+    ctx.strokeStyle = "#4a301f"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(handX, handY); ctx.lineTo(tipX, tipY); ctx.stroke();
+    ctx.strokeStyle = "rgba(205,232,238,.78)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(floatX, floatY); ctx.stroke();
+    ctx.fillStyle = "#f4ede0"; ctx.fillRect(floatX - 1, floatY, 3, 2);
+    ctx.fillStyle = "#e15b45"; ctx.fillRect(floatX, floatY - 2, 1, 2);
+  } else if (activity === "gather") {
+    const bx = x + side * 8, by = y - 10;
+    ctx.fillStyle = "#4d301d"; ctx.fillRect(bx - 4, by - 5, 8, 7);
+    ctx.fillStyle = "#a8753d"; ctx.fillRect(bx - 3, by - 4, 6, 5);
+    ctx.strokeStyle = "#c89a5b"; ctx.lineWidth = 1;
+    ctx.strokeRect(bx - 2, by - 7, 4, 4);
+    ctx.fillStyle = "#75b95a"; ctx.fillRect(bx - 2, by - 6, 2, 2); ctx.fillRect(bx + 1, by - 7, 2, 3);
+  } else if (activity === "work") {
+    const lift = npc.emoteT > 0 ? Math.sin((1 - npc.emoteT) * Math.PI * 4) * 5 : Math.sin(t * 1.4 + objectPhase(npc)) * 1.5;
+    const hx = x + side * 7, hy = y - 18 - Math.round(lift);
+    ctx.strokeStyle = "#704725"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + side * 5, hy - 9); ctx.stroke();
+    ctx.fillStyle = "#65717a"; ctx.fillRect(hx + side * 4 - (side < 0 ? 5 : 0), hy - 11, 6, 4);
+    ctx.fillStyle = "#aeb9bd"; ctx.fillRect(hx + side * 4 - (side < 0 ? 4 : -1), hy - 11, 4, 1);
+  } else if (activity === "patrol") {
+    const px = x + side * 8;
+    ctx.fillStyle = "#382a20"; ctx.fillRect(px, y - 34, 2, 34);
+    ctx.fillStyle = npc.look?.accent || "#d9b95f"; ctx.fillRect(px + (side < 0 ? -5 : 2), y - 34, 5, 4);
+    ctx.fillStyle = "#e7edf0"; ctx.fillRect(px - 1, y - 38, 4, 5); ctx.fillRect(px, y - 41, 2, 3);
+  }
+
+  if (npc.carriesLantern) {
+    const lx = x - side * 8, ly = y - 12;
+    const flicker = Math.floor(t * 10 + objectPhase(npc)) % 2;
+    ctx.fillStyle = "#3a2b24"; ctx.fillRect(lx - 3, ly - 8, 7, 9);
+    ctx.fillStyle = "#b85b2d"; ctx.fillRect(lx - 2, ly - 7, 5, 6);
+    ctx.fillStyle = "#ffd36b"; ctx.fillRect(lx - 1, ly - 7 - flicker, 3, 5 + flicker);
+    ctx.fillStyle = "#fff0a0"; ctx.fillRect(lx, ly - 5, 1, 2);
+  }
+}
+
+function drawNpcEmote(ctx, npc, x, y, t) {
+  if (!(npc.emoteT > 0)) return;
+  const rise = Math.round((1.25 - Math.min(1.25, npc.emoteT)) * 2);
+  const bx = x + 9, by = y - 49 - rise;
+  ctx.fillStyle = "rgba(28,35,39,.86)"; ctx.fillRect(bx - 5, by - 5, 11, 9);
+  ctx.fillStyle = "rgba(241,239,220,.95)"; ctx.fillRect(bx - 4, by - 4, 9, 7); ctx.fillRect(bx - 2, by + 3, 2, 2);
+  ctx.fillStyle = npc.emote === "gather" ? "#5da957" : npc.emote === "work" ? "#87959c" : npc.emote === "rest" ? "#7588b5" : "#d69c45";
+  if (npc.emote === "rest") {
+    ctx.font = "bold 7px sans-serif"; ctx.textAlign = "center"; ctx.fillText("Z", bx, by + 2); ctx.textAlign = "left";
+  } else if (npc.emote === "gather") {
+    ctx.fillRect(bx - 2, by - 2, 5, 3); ctx.fillStyle = "#397944"; ctx.fillRect(bx, by + 1, 1, 2);
+  } else if (npc.emote === "work") {
+    ctx.fillRect(bx - 2, by - 2, 5, 2); ctx.fillRect(bx, by, 1, 3);
+  } else if (npc.emote === "fish") {
+    ctx.fillRect(bx - 3, by - 1, 6, 3); ctx.fillRect(bx + 3, by - 2, 2, 2); ctx.fillStyle = "#f2eee2"; ctx.fillRect(bx - 1, by - 1, 1, 1);
+  } else {
+    const wave = Math.floor(t * 7) % 2;
+    ctx.fillRect(bx - 2, by - 2 - wave, 2, 4); ctx.fillRect(bx + 1, by - 3 + wave, 2, 5);
+  }
+}
+
 Game.prototype.render = function () {
   const ctx = this.ctx, p = this.player;
   ctx.imageSmoothingEnabled = false;
@@ -92,6 +160,29 @@ Game.prototype.render = function () {
           if ((x + y) % 2 === 0) { ctx.fillStyle = "#f4d2df"; ctx.fillRect(sx + 12, sy + 7 + bob, 3, 3); ctx.fillStyle = "#fff4c8"; ctx.fillRect(sx + 13, sy + 8 + bob, 1, 1); }
         }
       }
+    }
+  }
+
+  // Infernyx arena is a permanent code-drawn landmark, kept clear of random props.
+  if (this.bossArena) {
+    const ax = this.bossArena.x - camx, ay = this.bossArena.y - camy;
+    if (ax > -150 && ax < view.w + 150 && ay > -100 && ay < view.h + 100) {
+      const awake = !!this.boss && !this.boss.dead;
+      const pulse = .45 + Math.sin(this.t * 2.3) * .12;
+      ctx.save(); ctx.translate(Math.round(ax), Math.round(ay));
+      ctx.fillStyle = "rgba(19,14,22,.2)"; ctx.beginPath(); ctx.ellipse(0, 7, 116, 57, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = awake ? `rgba(215,91,54,${pulse})` : "rgba(121,96,89,.38)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, 7, 110, 52, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = awake ? `rgba(239,174,80,${pulse * .62})` : "rgba(91,116,99,.3)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(0, 7, 80, 36, 0, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 12; i++) {
+        const angle = i / 12 * Math.PI * 2, x = Math.round(Math.cos(angle) * 108), y = Math.round(7 + Math.sin(angle) * 51);
+        ctx.fillStyle = "#342e31"; ctx.fillRect(x - 4, y - 3, 8, 6);
+        ctx.fillStyle = awake ? (i % 3 === 0 ? "#f0b85e" : "#a64d39") : "#657469"; ctx.fillRect(x - 2, y - 4, 4, 2); ctx.fillRect(x - 1, y - 2, 2, 4);
+      }
+      ctx.fillStyle = awake ? `rgba(232,104,55,${pulse * .48})` : "rgba(91,113,101,.26)";
+      for (let i = 0; i < 8; i++) { const angle = i / 8 * Math.PI * 2 + Math.PI / 8; const x = Math.round(Math.cos(angle) * 48), y = Math.round(7 + Math.sin(angle) * 21); ctx.fillRect(x - 2, y - 2, 4, 4); ctx.fillRect(x - 5, y, 10, 1); }
+      ctx.restore();
     }
   }
 
@@ -214,7 +305,18 @@ Game.prototype.render = function () {
       ctx.save(); ctx.translate(sx + swayX, sy);
       // shadow
       ctx.fillStyle = "rgba(20,18,22,0.2)"; ctx.beginPath(); ctx.ellipse(0, 0, 8, 3, 0, 0, 7); ctx.fill();
-      if (o.kind === "bamboo_shoot") {
+      const resource = img(`resource/${o.kind}`);
+      if (resource) {
+        ctx.drawImage(resource, -Math.floor(resource.width / 2), -resource.height + 2);
+        if (o.kind === "crystal_ore") {
+          const glint = .28 + Math.sin(this.t * 3.2 + o.sway) * .22;
+          ctx.fillStyle = `rgba(214,247,255,${glint})`; ctx.fillRect(-2, -29, 2, 2); ctx.fillRect(7, -18, 1, 1);
+        } else if (o.kind === "glow_vine") {
+          const glow = .16 + Math.sin(this.t * 2.4 + o.sway) * .08;
+          ctx.fillStyle = `rgba(100,255,176,${glow})`; ctx.beginPath(); ctx.arc(0, -16, 13, 0, Math.PI * 2); ctx.fill();
+          ctx.drawImage(resource, -Math.floor(resource.width / 2), -resource.height + 2);
+        }
+      } else if (o.kind === "bamboo_shoot") {
         ctx.fillStyle = "#5a9a48"; ctx.fillRect(-2, -18, 4, 16);
         ctx.fillStyle = "#7abf60"; ctx.fillRect(-2, -18, 1, 16);
         ctx.fillStyle = "#3a7a30"; ctx.fillRect(0, -14, 4, 1); ctx.fillRect(0, -8, 4, 1);
@@ -252,7 +354,7 @@ Game.prototype.render = function () {
     }
     else if (d.k === "chest") {
       const open = o.opened;
-      const im = img(open ? "fx/chest_open" : "fx/chest");
+      const im = img(open ? (o.pet ? "fx/chest_pet_open" : "fx/chest_open") : (o.pet ? "fx/chest_pet" : "fx/chest"));
       if (!open && this._interactTarget === o) {
         const pulse = Math.round(Math.sin(this.t * 5) * 2);
         ctx.strokeStyle = o.pet ? "#f1cf63" : "#76e0b2"; ctx.lineWidth = 1;
@@ -269,12 +371,16 @@ Game.prototype.render = function () {
     else if (d.k === "npc") {
       const pdx = p.x - o.x, pdy = p.y - o.y, playerNear = Math.hypot(pdx, pdy) < 58;
       let dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
-      if (playerNear) dir = Math.abs(pdx) > Math.abs(pdy) ? (pdx < 0 ? "left" : "right") : (pdy < 0 ? "up" : "down");
-      const idleFrame = Math.floor(this.t * 1.8 + objectPhase(o)) % 4;
-      const cv = poseFrame(o.cache, "idle", dir, idleFrame, "walk");
-      const breathe = Math.round(Math.sin(this.t * 1.7 + objectPhase(o, 2)) * .6);
+      if (playerNear && !o.moving) dir = Math.abs(pdx) > Math.abs(pdy) ? (pdx < 0 ? "left" : "right") : (pdy < 0 ? "up" : "down");
+      const pose = o.moving ? "walk" : "idle";
+      const frame = o.moving ? o.frame : Math.floor(this.t * 1.8 + objectPhase(o)) % 4;
+      const cv = poseFrame(o.cache, pose, dir, frame, "walk");
+      const breathe = o.moving ? (o.frame % 2 ? -1 : 0) : Math.round(Math.sin(this.t * 1.7 + objectPhase(o, 2)) * .6);
+      ctx.fillStyle = "rgba(18,25,24,.22)";
+      ctx.beginPath(); ctx.ellipse(sx, sy + 1, o.moving ? 10 : 9, o.moving ? 3 : 2.5, 0, 0, Math.PI * 2); ctx.fill();
       // exclamation marker for available quest
       if (cv) ctx.drawImage(cv, sx - 16, sy - 36 + breathe);
+      drawNpcActivity(ctx, o, sx, sy + breathe, this.t, dir);
       const hasQuest = this.quests.forGiver(o.name, p.inv).some(x => !x.active && !x.done);
       const ready = this.quests.forGiver(o.name, p.inv).some(x => x.ready);
       if (ready) { ctx.fillStyle = "#ffd24a"; ctx.font = "bold 14px sans-serif"; ctx.fillText("?", sx - 3, sy - 40 + Math.sin(this.t * 4) * 2 + breathe); }
@@ -285,10 +391,15 @@ Game.prototype.render = function () {
         ctx.fillRect(sx + side * 8, sy - 27 + breathe, 2, 2);
         ctx.fillRect(sx + side * 11, sy - 30 + breathe, 1, 1);
       }
-      // name tag
-      ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(sx - 18, sy - 46, 36, 9);
-      ctx.fillStyle = "#e8ecf2"; ctx.fillText(o.name, sx, sy - 39); ctx.textAlign = "left";
+      if (o.ambient || (!hasQuest && !ready)) drawNpcEmote(ctx, o, sx, sy, this.t);
+      // Ambient residents reveal their tag only up close, keeping busy regions readable.
+      if (!o.ambient || playerNear || this._interactTarget === o) {
+        const tagW = o.ambient ? 42 : 36;
+        ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
+        ctx.fillStyle = o.ambient ? "rgba(20,35,31,.72)" : "rgba(0,0,0,0.5)"; ctx.fillRect(sx - tagW / 2, sy - 46, tagW, 9);
+        if (o.ambient) { ctx.fillStyle = o.look?.accent || "#79c9a4"; ctx.fillRect(sx - tagW / 2, sy - 46, 2, 9); }
+        ctx.fillStyle = "#e8ecf2"; ctx.fillText(o.name, sx, sy - 39); ctx.textAlign = "left";
+      }
     }
     else if (d.k === "remote") {
       const rsx = Math.round(o.rx - camx), rsy = Math.round(o.ry - camy);
@@ -300,11 +411,34 @@ Game.prototype.render = function () {
       const cv = o.cache.walk[dir][o.frame % 4];
       // soft shadow for remote player
       ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(rsx, rsy + 1, 12, 3.5, 0, 0, 7); ctx.fill();
+      if (o.duel) {
+        const pulse = .52 + Math.sin(this.t * 5 + objectPhase(o)) * .18;
+        ctx.strokeStyle = `rgba(239,92,73,${pulse})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(rsx, rsy, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.save(); ctx.translate(rsx, rsy - 51); ctx.rotate(.6); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.rotate(-1.2); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.restore();
+      }
       ctx.drawImage(cv, rsx - 16, rsy - 36);
       // name tag (blue tint to distinguish other players)
       ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 18, rsy - 46, 36, 9);
-      ctx.fillStyle = "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39); ctx.textAlign = "left";
+      ctx.fillStyle = o.duel ? "rgba(76,25,29,.78)" : "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 20, rsy - 46, 40, 9);
+      if (o.duel) { ctx.fillStyle = "#d95348"; ctx.fillRect(rsx - 20, rsy - 46, 2, 9); }
+      ctx.fillStyle = o.duel ? "#ffc0ab" : "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39); ctx.textAlign = "left";
+      if (o.chatText && o.chatUntil > this.t) {
+        const words = o.chatText.split(/\s+/), lines = [""];
+        for (const word of words) {
+          const next = `${lines[lines.length - 1]} ${word}`.trim();
+          if (next.length > 25 && lines.length < 2) lines.push(word); else lines[lines.length - 1] = next;
+        }
+        if (lines[1]?.length > 28) lines[1] = `${lines[1].slice(0, 27)}…`;
+        ctx.font = "7px 'IBM Plex Sans',sans-serif";
+        const width = Math.min(92, Math.max(42, ...lines.map(line => ctx.measureText(line).width + 12)));
+        const height = lines.length * 9 + 7, bx = Math.round(rsx - width / 2), by = rsy - 56 - height;
+        ctx.fillStyle = "rgba(8,20,23,.92)"; ctx.fillRect(bx, by, width, height);
+        ctx.fillStyle = "rgba(103,195,158,.75)"; ctx.fillRect(bx, by, 2, height); ctx.fillRect(bx, by, width, 1);
+        ctx.fillStyle = "rgba(8,20,23,.92)"; ctx.fillRect(rsx - 3, by + height, 6, 4); ctx.fillRect(rsx - 1, by + height + 4, 2, 2);
+        ctx.fillStyle = "#d6e7df"; ctx.textAlign = "center";
+        lines.forEach((line, index) => ctx.fillText(line, rsx, by + 9 + index * 9)); ctx.textAlign = "left";
+      }
     }
     else if (d.k === "enemy") {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
@@ -681,9 +815,18 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       const frame = img(`fx/slash_${clamp(Math.floor(pr * 4), 0, 3)}`);
       const rot = f.dir === "right" ? 0 : f.dir === "down" ? Math.PI / 2 : f.dir === "left" ? Math.PI : -Math.PI / 2;
       const reach = f.weapon === "spear" ? 1.35 : f.weapon === "dagger" ? .72 : f.weapon === "axe" ? 1.2 : 1;
+      const dragon = String(f.weapon).startsWith("dragon");
+      const trail = dragon ? "#d99cff" : f.weapon === "axe" ? "#f1a45d" : f.weapon === "spear" ? "#8fe1c0" : f.weapon === "dagger" ? "#9bd4f0" : "#f5df91";
       ctx.save(); ctx.translate(Math.round(sx), Math.round(sy - 17)); ctx.rotate(rot); ctx.scale(reach, reach);
       ctx.globalAlpha = Math.max(0, 1 - pr * .7);
       if (frame) { ctx.drawImage(frame, 2, -20); ctx.globalAlpha *= .3; ctx.drawImage(frame, -2, -20); }
+      ctx.globalAlpha = Math.max(0, (1 - pr) * .9); ctx.fillStyle = trail;
+      for (let i = 0; i < 7; i++) {
+        const angle = -.95 + i * .22 + pr * .28, radius = 18 + i * 1.5;
+        const size = i % 3 === 0 ? 3 : 2;
+        ctx.fillRect(Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius) - 1, size, size);
+      }
+      if (dragon) { ctx.fillStyle = "#fff0ff"; ctx.fillRect(20 + Math.round(pr * 6), -2, 5, 2); ctx.fillRect(15, -8, 2, 2); }
       ctx.restore();
     } else if (f.kind === "bowrelease") {
       ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); ctx.rotate(f.angle || 0);
@@ -697,6 +840,9 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
         ctx.fillStyle = "#ffffff"; ctx.fillRect(10 + Math.round(pr * 18), off - 1, power ? 8 : 4, 1);
       }
       ctx.fillStyle = "rgba(151,242,184,.7)"; ctx.fillRect(-2, -9 - Math.round(pr * 5), 2, 19 + Math.round(pr * 10));
+      ctx.strokeStyle = power ? `rgba(255,222,122,${1 - pr})` : `rgba(137,229,178,${(1 - pr) * .8})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(0, 0, 5 + pr * 16, 12 + pr * 9, 0, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 4; i++) { ctx.fillStyle = i % 2 ? color : "#fff"; ctx.fillRect(-5 - Math.round(pr * 12), -8 + i * 5, 2 + i % 2, 2); }
       ctx.restore();
     } else if (f.kind === "castburst") {
       ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); ctx.rotate((f.angle || 0) + Math.PI / 4);
@@ -704,8 +850,11 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
       const color = dragon ? "rgba(202,125,255,A)" : skill ? "rgba(255,182,72,A)" : "rgba(129,205,255,A)";
       const radius = 6 + Math.round(pr * 20);
       ctx.strokeStyle = color.replace("A", String(1 - pr)); ctx.lineWidth = 2; ctx.strokeRect(-radius, -radius, radius * 2, radius * 2);
+      ctx.save(); ctx.rotate(-pr * 2.1); ctx.strokeStyle = color.replace("A", String((1 - pr) * .58)); ctx.lineWidth = 1; ctx.strokeRect(-radius * .68, -radius * .68, radius * 1.36, radius * 1.36); ctx.restore();
       ctx.fillStyle = color.replace("A", String((1 - pr) * .85));
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.fillRect(Math.round(Math.cos(a) * (radius + 4)) - 1, Math.round(Math.sin(a) * (radius + 4)) - 1, i % 2 ? 2 : 3, i % 2 ? 2 : 3); }
+      ctx.fillStyle = dragon ? "#f7e5ff" : skill ? "#fff2ba" : "#dff5ff";
+      ctx.fillRect(-1, -radius - 8, 3, 5); ctx.fillRect(-1, radius + 3, 3, 5); ctx.fillRect(-radius - 8, -1, 5, 3); ctx.fillRect(radius + 3, -1, 5, 3);
       ctx.restore();
     } else if (f.kind === "warcry") {
       const radius = 10 + pr * 48;
@@ -715,6 +864,9 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
         ctx.fillStyle = i % 3 === 0 ? "#ffe089" : "#d95b43";
         ctx.fillRect(Math.round(sx + Math.cos(a) * r) - 2, Math.round(sy - 16 + Math.sin(a) * r) - 2, i % 2 ? 3 : 5, i % 2 ? 3 : 5);
       }
+      ctx.strokeStyle = `rgba(255,208,101,${(1 - pr) * .7})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(sx, sy - 4, radius * 1.05, radius * .38, 0, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 4; i++) { const side = i < 2 ? -1 : 1, y = sy - 42 + (i % 2) * 13 + pr * 18; ctx.fillStyle = i % 2 ? "#f3c66c" : "#c84e3e"; ctx.fillRect(Math.round(sx + side * (18 + i * 2)), Math.round(y), 4, 12); }
       ctx.globalAlpha = 1;
     } else if (f.kind === "blink") {
       ctx.globalAlpha = 1 - pr;
@@ -742,6 +894,9 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
         ctx.fillStyle = "#88f0a8";
         ctx.fillRect(sx + Math.cos(a) * rr, sy - 8 - pr * 24 + Math.sin(a) * rr * 0.4, 2, 3);
       }
+      const healSize = 5 + Math.round(Math.sin(Math.min(1, pr) * Math.PI) * 6);
+      ctx.fillStyle = "#dfffe6"; ctx.fillRect(Math.round(sx - 2), Math.round(sy - 23 - healSize), 5, healSize * 2); ctx.fillRect(Math.round(sx - healSize), Math.round(sy - 20), healSize * 2, 5);
+      ctx.strokeStyle = `rgba(113,231,157,${1 - pr})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, sy - 4, 9 + pr * 28, 4 + pr * 10, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     } else if (f.kind === "whirl") {
       ctx.globalAlpha = 1 - pr;
@@ -753,6 +908,8 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
         const size = ring === 0 ? 2 : 3;
         ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 14 + Math.sin(a) * rr * .65) - 1, size + (i % 3 === 0 ? 2 : 0), size);
       }
+      ctx.strokeStyle = `rgba(255,235,157,${(1 - pr) * .78})`; ctx.lineWidth = 2;
+      for (let ring = 0; ring < 2; ring++) { ctx.beginPath(); ctx.ellipse(sx, sy - 13, 23 + ring * 13 + pr * 18, 8 + ring * 5 + pr * 5, pr * (ring ? -2 : 2), .25, Math.PI * 1.55); ctx.stroke(); }
       ctx.globalAlpha = 1;
     } else if (f.kind === "slashbig") {
       const ox = f.dir === "left" ? -18 : f.dir === "right" ? 18 : 0;
@@ -775,6 +932,26 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
     } else if (f.kind === "pop") {
       ctx.strokeStyle = `rgba(255,255,255,${1 - pr})`; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(sx, sy, 4 + pr * 16, 0, 7); ctx.stroke();
+    } else if (f.kind === "chestburst") {
+      const alpha = Math.max(0, 1 - pr), radius = 6 + pr * (f.pet ? 38 : 27);
+      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy));
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = f.pet ? "#d6a6ff" : "#f2d377"; ctx.lineWidth = 2;
+      ctx.rotate(pr * (f.pet ? 1.2 : .55)); ctx.strokeRect(-radius, -radius * .45, radius * 2, radius * .9);
+      ctx.rotate(Math.PI / 4); ctx.strokeStyle = f.pet ? "#ffe287" : "#72d9ad"; ctx.lineWidth = 1;
+      ctx.strokeRect(-radius * .72, -radius * .72, radius * 1.44, radius * 1.44);
+      ctx.rotate(-Math.PI / 4 - pr * (f.pet ? 1.2 : .55));
+      for (let i = 0; i < (f.pet ? 12 : 8); i++) {
+        const angle = i / (f.pet ? 12 : 8) * Math.PI * 2, inner = 5 + pr * 5, outer = radius + (i % 2 ? 8 : 14);
+        ctx.strokeStyle = i % 3 === 0 ? "#ffffff" : f.pet ? "#b67ce9" : "#eac765";
+        ctx.beginPath(); ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner); ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer); ctx.stroke();
+      }
+      if (pr < .58) {
+        const beam = (1 - pr / .58) * (f.pet ? 30 : 20);
+        ctx.fillStyle = f.pet ? "rgba(205,154,255,.16)" : "rgba(255,225,130,.14)";
+        ctx.beginPath(); ctx.moveTo(-7, 3); ctx.lineTo(-beam, -55); ctx.lineTo(beam, -55); ctx.lineTo(7, 3); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
     } else if (f.kind === "hit") {
       ctx.save(); ctx.globalAlpha = 1 - pr;
       ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
@@ -807,6 +984,9 @@ Game.prototype.renderFX = function (ctx, camx, camy) {
         ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 8 + Math.sin(a) * rr) - Math.floor(h / 2), 2 + (i % 4 === 0 ? 1 : 0), h);
       }
       for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 - pr * 2; const rr = 5 + pr * 36; ctx.fillStyle = "#dffbff"; ctx.fillRect(Math.round(sx + Math.cos(a) * rr) - 1, Math.round(sy - 8 + Math.sin(a) * rr) - 1, 3, 3); }
+      ctx.strokeStyle = `rgba(177,239,255,${(1 - pr) * .78})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(sx, sy - 2, 12 + pr * 55, 5 + pr * 22, 0, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; const inner = 8 + pr * 20, outer = 15 + pr * 48; ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * inner, sy - 2 + Math.sin(a) * inner * .42); ctx.lineTo(sx + Math.cos(a) * outer, sy - 2 + Math.sin(a) * outer * .42); ctx.stroke(); }
       ctx.globalAlpha = 1;
     }
   }
@@ -885,6 +1065,10 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     if (b.type === "lantern") aperture(x, y - 21, 48, .88);
     else if (b.type === "pagoda") aperture(x, y - 49, 42, .32);
   }
+  for (const npc of this.npcs) if (npc.carriesLantern) {
+    const x = npc.x - camx, y = npc.y - camy - 20;
+    if (x > -50 && x < view.w + 50 && y > -50 && y < view.h + 50) aperture(x, y, 35, .64);
+  }
   for (const plant of this.plants) if (plant.hp > 0 && plant.kind === "glow_vine") aperture(plant.x - camx, plant.y - camy - 15, 25, .34);
   if (this.boss && !this.boss.dead && (this.boss.rage || this.boss.breathWindup > 0)) aperture(this.boss.x - camx, this.boss.y - camy - 34, 74, .58);
   for (const projectile of this.projectiles || []) if (projectile.kind === "fire" || projectile.kind === "bossfire") aperture(projectile.x - camx, projectile.y - camy, projectile.kind === "bossfire" ? 35 : 27, .72);
@@ -908,6 +1092,12 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     const flicker = .85 + Math.sin(this.t * 6 + b.x * .03) * .12;
     bloom(x, y, 31, "rgba(255,188,86,A)", dark * .28 * flicker);
   }
+  for (const npc of this.npcs) if (npc.carriesLantern) {
+    const x = npc.x - camx, y = npc.y - camy - 20;
+    if (x < -45 || x > view.w + 45 || y < -45 || y > view.h + 45) continue;
+    const flicker = .86 + Math.sin(this.t * 8 + objectPhase(npc)) * .1;
+    bloom(x, y, 24, "rgba(255,178,72,A)", dark * .24 * flicker);
+  }
   for (const projectile of this.projectiles || []) if (projectile.kind === "fire" || projectile.kind === "bossfire") {
     bloom(projectile.x - camx, projectile.y - camy, projectile.kind === "bossfire" ? 24 : 18, projectile.variant === "dragon" ? "rgba(187,104,255,A)" : "rgba(255,124,45,A)", dark * .34);
   }
@@ -921,6 +1111,13 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     ctx.fillStyle = "#d95526"; ctx.fillRect(x - 2, y - 3 - flip, 5, 7 + flip);
     ctx.fillStyle = "#ffad36"; ctx.fillRect(x - 1, y - 4, 3, 6);
     ctx.fillStyle = "#fff2a4"; ctx.fillRect(x, y - 2, 1, 3);
+  }
+  for (const npc of this.npcs) if (npc.carriesLantern) {
+    const side = npc.dir === "left" ? -1 : 1;
+    const x = Math.round(npc.x - camx - side * 8), y = Math.round(npc.y - camy - 19);
+    if (x < -20 || x > view.w + 20 || y < -20 || y > view.h + 20) continue;
+    ctx.fillStyle = "#ffb23d"; ctx.fillRect(x - 1, y - 1, 3, 4);
+    ctx.fillStyle = "#fff3a6"; ctx.fillRect(x, y, 1, 2);
   }
   if (night && this.critters) for (const c of this.critters) {
     const x = Math.round(c.x - camx), y = Math.round(c.y - camy - 12);

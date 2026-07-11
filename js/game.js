@@ -8,6 +8,7 @@ import { buildTiles } from "./tilegen.js";
 import { buildBoss } from "./boss.js";
 import { applyClass } from "./classes.js";
 import { net, sendMove } from "./net.js";
+import { createAmbientNpcDefs, createNpcRoutine } from "./npcworld.js";
 
 const T = 24;
 const MAP_W = 110, MAP_H = 110;
@@ -189,6 +190,7 @@ export class Game {
     }
     this.map = m; this.vmap = v;
     this.camp = { x: 55 * T, y: 55 * T };
+    this.bossArena = { x: 87 * T, y: 82 * T, radius: 5.5 * T };
 
     // ---- VILLAGE layout around camp ----
     const cx = 55, cy = 55;
@@ -238,7 +240,8 @@ export class Game {
         const i = y * MAP_W + x, t = m[i];
         if (t === 1 || t === 2) continue;
         const nearCamp = Math.hypot(x - 55, y - 55) < 10;
-        if (nearCamp) continue;
+        const nearBossArena = Math.hypot(x - 87, y - 82) < 6;
+        if (nearCamp || nearBossArena) continue;
         const edge = Math.min(x, y, MAP_W - x, MAP_H - y);
         const wx = x * T + T / 2, wy = y * T + T / 2;
         let treeDens = 0.05 + (edge < 12 ? 0.13 : 0) + (t === 5 ? 0.1 : 0);
@@ -279,15 +282,30 @@ export class Game {
     applyClass(this.player, this.player.cls);
     this.player.inv[this.player.equipped] = 1;
 
-    // NPCs around camp
-    for (const def of NPC_DEFS) {
+    const addNpc = (def, x, y, index, ambient = false) => {
       const npcClass = def.look.cls || ({ Guard: "warrior", Forge: "warrior", Champion: "warrior", Potions: "mage", Scout: "archer" }[def.role] || "villager");
       this.npcs.push({
+        id: def.id || `quest-${def.name.toLowerCase()}`,
         name: def.name, look: def.look, role: def.role, line: def.line,
-        x: this.camp.x + def.dx, y: this.camp.y + def.dy,
-        dir: "down", frame: 0, frameT: Math.random() * 4, sortY: 0,
+        dayLine: def.dayLine || def.line, nightLine: def.nightLine || def.line,
+        x, y, dir: def.face || "down", frame: 0, frameT: (index * .17) % .5, sortY: y,
+        ...createNpcRoutine(def, x, y, index, ambient),
         cache: buildCharacter({ ...DEFAULT_LOOK, ...def.look, name: def.name, cls: npcClass }),
       });
+    };
+
+    // Quest givers retain their camp positions, but now run small role-based routines.
+    for (let i = 0; i < NPC_DEFS.length; i++) {
+      const def = NPC_DEFS[i];
+      addNpc(def, this.camp.x + def.dx, this.camp.y + def.dy, i);
+    }
+
+    // Twenty residents make the roads, pond, shrine, coast, forest and snowfield
+    // feel inhabited. Their looks and dialogue are generated deterministically.
+    const ambientDefs = createAmbientNpcDefs();
+    for (let i = 0; i < ambientDefs.length; i++) {
+      const def = ambientDefs[i];
+      addNpc(def, def.tx * T, def.ty * T, NPC_DEFS.length + i, true);
     }
 
     for (let k = 0; k < 46; k++) this.spawnEnemy();
@@ -305,7 +323,7 @@ export class Game {
     this.tufts = [];
     for (let k = 0; k < 240; k++) {
       const tx = (rand(2, MAP_W - 2) | 0), ty = (rand(2, MAP_H - 2) | 0);
-      if (this.map[ty * MAP_W + tx] === 0) this.tufts.push({ x: tx * T + rand(0, T), y: ty * T + rand(0, T), ph: Math.random() * 7 });
+      if (this.map[ty * MAP_W + tx] === 0 && Math.hypot(tx - 87, ty - 82) >= 6) this.tufts.push({ x: tx * T + rand(0, T), y: ty * T + rand(0, T), ph: Math.random() * 7 });
     }
   }
 
@@ -313,7 +331,7 @@ export class Game {
     let x, y, tries = 0;
     do {
       x = rand(4 * T, (MAP_W - 4) * T); y = rand(4 * T, (MAP_H - 4) * T); tries++;
-    } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 12 * T) && tries < 30);
+    } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 12 * T || Math.hypot(x - this.bossArena.x, y - this.bossArena.y) < this.bossArena.radius) && tries < 30);
     const tier = Math.random() < 0.6 ? 1 : Math.random() < 0.8 ? 2 : 3;
     const id = MON_IDS[(Math.random() * MON_IDS.length) | 0];
     // heavier HP/dmg scaling so combat feels meaningful; tier 3 hits harder
@@ -332,7 +350,7 @@ export class Game {
   spawnChest() {
     let x, y, tries = 0;
     do { x = rand(5 * T, (MAP_W - 5) * T); y = rand(5 * T, (MAP_H - 5) * T); tries++; }
-    while (this.tileAt(x, y) === 2 && tries < 30);
+    while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.bossArena.x, y - this.bossArena.y) < this.bossArena.radius) && tries < 30);
     const pet = Math.random() < 0.35 ? MON_IDS[(Math.random() * MON_IDS.length) | 0] : null;
     this.chests.push({ x, y, sortY: y, opened: false, openT: 0, pet });
   }
@@ -365,6 +383,7 @@ export class Game {
   bindInput() {
     addEventListener("keydown", (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (this.inputLocked) return;
       this.keys[e.code] = true;
       if (e.repeat && ["KeyI", "KeyC", "KeyQ", "KeyM", "KeyF", "Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code)) return;
       if (e.code === "KeyI") this.ui.toggle("inv");
@@ -383,6 +402,7 @@ export class Game {
       this.mouse.y = (e.clientY - r.top) * (view.h / r.height);
     });
     this.canvas.addEventListener("mousedown", (e) => {
+      if (this.inputLocked) return;
       if (this.moveMode === "tap") {
         const r = rect();
         const mx = (e.clientX - r.left) * (view.w / r.width);
@@ -393,7 +413,7 @@ export class Game {
     addEventListener("mouseup", () => { this.mouse.down = false; });
     document.getElementById("btn-move-mode")?.addEventListener("click", () => this.toggleMoveMode());
     document.querySelectorAll("#skillbar .sk[data-i]").forEach((b) =>
-      b.addEventListener("click", () => this.useSkill(Number(b.dataset.i))));
+      b.addEventListener("click", () => { if (!this.inputLocked) this.useSkill(Number(b.dataset.i)); }));
     this.bindTouch();
   }
 
@@ -410,6 +430,7 @@ export class Game {
     const knob = document.getElementById("stick-knob");
     if (stick) {
       const set = (cx, cy) => {
+        if (this.inputLocked) return;
         const r = stick.getBoundingClientRect();
         let dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2);
         const d = Math.hypot(dx, dy), max = r.width / 2;
@@ -439,6 +460,7 @@ export class Game {
       };
       const begin = (e) => {
         e?.preventDefault?.();
+        if (this.inputLocked) return;
         if (active) return;
         active = true;
         activeReleases.add(end);
@@ -490,7 +512,7 @@ export class Game {
     }, () => this.keys.KeyF = false);
     this.canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
-      if (this.paused || this.fishing) return;
+      if (this.paused || this.inputLocked || this.fishing) return;
       const r = this.canvas.getBoundingClientRect();
       const mx = (e.touches[0].clientX - r.left) * (view.w / r.width);
       const my = (e.touches[0].clientY - r.top) * (view.h / r.height);

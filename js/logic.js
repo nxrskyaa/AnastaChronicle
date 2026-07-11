@@ -1,6 +1,8 @@
 import { Game } from "./game.js";
 import { ITEMS, RECIPES, doCraft, xpFor } from "./crafting.js";
 import { view } from "./view.js";
+import { updateNpcWorld } from "./npcworld.js";
+import { net, sendBossHit, sendPvpHit } from "./net.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -43,12 +45,35 @@ function rangedAim(game, kind, preview = false) {
 
   for (const e of game.enemies) if (!e.dead) consider(e.x, e.y - e.h * 0.4);
   if (game.boss && !game.boss.dead) consider(game.boss.x, game.boss.y - 30);
+  if (net.connected && net.duelActive) {
+    for (const remote of Object.values(net.remote)) if (remote.duel) consider(remote.rx, remote.ry - 18);
+  }
   if (!best) return fallback;
 
   const d = Math.sqrt(bestD2);
   game.aimAssist = { x: ox + best.dx, y: oy + best.dy, fromX: ox, fromY: oy, kind, until: game.t + (preview ? .12 : .55) };
   return { dx: best.dx / d, dy: best.dy / d };
 }
+
+function nearestDuelTarget(game, x, y, radius, fx = 0, fy = 0) {
+  if (!net.connected || !net.duelActive) return null;
+  let best = null, bestDistance = Infinity;
+  for (const [id, remote] of Object.entries(net.remote)) {
+    if (!remote.duel) continue;
+    const dx = remote.rx - x, dy = remote.ry - y, distance = Math.hypot(dx, dy);
+    if (distance > radius || distance >= bestDistance) continue;
+    const dot = distance > .001 ? dx / distance * fx + dy / distance * fy : 1;
+    if ((fx || fy) && dot < .1) continue;
+    best = { id, remote, distance }; bestDistance = distance;
+  }
+  return best;
+}
+
+Game.prototype.tryDuelStrike = function (x, y, radius, damage, kind = "basic", fx = 0, fy = 0) {
+  const target = nearestDuelTarget(this, x, y, radius, fx, fy);
+  if (!target) return false;
+  return sendPvpHit(target.id, Math.min(120, Math.max(1, Math.round(damage))), kind);
+};
 
 Game.prototype.update = function (dt) {
   // hit-stop: freeze action briefly on big hits
@@ -155,12 +180,7 @@ Game.prototype.update = function (dt) {
   const equipped = WEAPONS[p.equipped] || WEAPONS.fist;
   if (!this.fishing && equipped.ranged) rangedAim(this, equipped.projectile || "arrow", true);
 
-  // npc idle anim
-  for (const n of this.npcs) {
-    n.frameT += dt;
-    if (n.frameT > 0.5) { n.frameT = 0; n.frame = (n.frame + 1) % 2; }
-    n.sortY = n.y;
-  }
+  updateNpcWorld(this, dt);
 
   this.updateEnemies(dt);
   this.updateBoss(dt);
@@ -270,6 +290,9 @@ Game.prototype.doAttack = function () {
       if (!(fx || fy) || dot > 0.1) { this.hurtBossDirect(Math.round(dmg * (Math.random() < 0.2 ? 1.8 : 1))); }
     }
   }
+  const duelCrit = Math.random() < .16;
+  this.tryDuelStrike(p.x, p.y, w.range + 14, dmg * (duelCrit ? 1.55 : 1), this._nextDuelKind || "basic", fx, fy);
+  this._nextDuelKind = null;
   // melee also hits harvestable plants in range
   for (const pl of this.plants) {
     if (pl.hp <= 0) continue;
@@ -407,15 +430,16 @@ Game.prototype.useSkill = function (i) {
 
   switch (skillId) {
     case "powerstrike": {
-      p.skillCd[i] = 4; this.mouse.down = true; this.doAttack(); this.mouse.down = false;
+      p.skillCd[i] = 4; this._nextDuelKind = "skill"; this.mouse.down = true; this.doAttack(); this.mouse.down = false;
       this.fx.push({ kind: "slashbig", x: p.x, y: p.y, dir: p.dir, t: 0, dur: 0.3 });
-      this.shake = Math.max(this.shake, 5); this.ui.toast("Power Strike!"); break;
+      this.shake = Math.max(this.shake, 3); this.ui.toast("Power Strike!"); break;
     }
     case "whirlwind": {
       p.skillCd[i] = 7; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackT = p.attackDur;
-      this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, t: 0, dur: 0.4 }); this.shake = Math.max(this.shake, 7);
+      this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, t: 0, dur: 0.48 }); this.shake = Math.max(this.shake, 4);
       for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 70) { const hit = Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)); this.hurtEnemy(e, hit, true); } }
       this.hurtBoss(p.x, p.y, 70, Math.round(40 * (p.dmgMul || 1)));
+      this.tryDuelStrike(p.x, p.y, 82, Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)), "skill");
       this.ui.toast("Whirlwind!"); break;
     }
     case "warcry": {
@@ -431,9 +455,10 @@ Game.prototype.useSkill = function (i) {
       this.audio.sfx("whirl"); this.ui.toast("Fireball!"); break;
     }
     case "frostnova": {
-      p.skillCd[i] = 8; this.fx.push({ kind: "frost", x: p.x, y: p.y, t: 0, dur: 0.6 }); this.shake = Math.max(this.shake, 5); this.audio.sfx("crit");
+      p.skillCd[i] = 8; this.fx.push({ kind: "frost", x: p.x, y: p.y, t: 0, dur: 0.72 }); this.shake = Math.max(this.shake, 3); this.audio.sfx("crit");
       for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 80) { this.hurtEnemy(e, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), true); e.frozen = 2.2; } }
       this.hurtBoss(p.x, p.y, 80, Math.round(30 * (p.dmgMul || 1)));
+      this.tryDuelStrike(p.x, p.y, 92, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), "skill");
       this.ui.toast("Frost Nova!"); break;
     }
     case "arrowshot": {
@@ -469,11 +494,11 @@ Game.prototype.useSkill = function (i) {
 };
 
 // ---- Projectiles (fireballs, arrows, boss fire) ----
-Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce, variant = "basic") {
+Game.prototype.spawnProjectile = function (x, y, dx, dy, kind, dmg, pierce, variant = "basic", options = null) {
   const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
   this.projectiles = this.projectiles || [];
   const maxLife = variant === "power" || variant === "dragon" ? PROJECTILE_LIFE * 1.15 : PROJECTILE_LIFE;
-  this.projectiles.push({ x, y, dx, dy, kind, variant, dmg, pierce: !!pierce, life: maxLife, maxLife, age: 0, trailT: 0, hostile: kind === "bossfire", hits: [], hitBoss: false });
+  this.projectiles.push({ x, y, dx, dy, kind, variant, dmg, pierce: !!pierce, life: maxLife, maxLife, age: 0, trailT: 0, hostile: kind === "bossfire" && !options?.visualOnly, visualOnly: !!options?.visualOnly, targetId: options?.targetId || null, hits: [], hitsRemote: [], hitBoss: false });
 };
 Game.prototype.updateProjectiles = function (dt) {
   if (!this.projectiles) return;
@@ -489,12 +514,25 @@ Game.prototype.updateProjectiles = function (dt) {
       this.particles.push({ x: pr.x - pr.dx * 4, y: pr.y - pr.dy * 4, vx: -pr.dx * 18 + (Math.random() - .5) * 9, vy: -pr.dy * 18 + (Math.random() - .5) * 9, life: .28, color });
     }
     const impact = () => this.fx.push({ kind: "projectileimpact", x: pr.x, y: pr.y, element: pr.kind, variant: pr.variant, t: 0, dur: .3 });
+    if (pr.visualOnly) continue;
     if (pr.hostile) {
       // hits player
       if (p.invuln <= 0 && Math.hypot(pr.x - p.x, pr.y - (p.y - 14)) < 16) { this.damagePlayer(pr.dmg); impact(); pr.life = 0; }
     } else {
       let consumed = false;
       for (const e of this.enemies) { if (e.dead || pr.hits.includes(e)) continue; if (Math.hypot(pr.x - e.x, pr.y - (e.y - e.h * 0.4)) < 18) { this.hurtEnemy(e, pr.dmg, true); impact(); pr.hits.push(e); if (!pr.pierce) { pr.life = 0; consumed = true; break; } } }
+      if (!consumed && net.connected && net.duelActive) {
+        for (const [id, remote] of Object.entries(net.remote)) {
+          if (!remote.duel || pr.hitsRemote.includes(id)) continue;
+          if (Math.hypot(pr.x - remote.rx, pr.y - (remote.ry - 18)) >= 17) continue;
+          const combatKind = pr.variant === "skill" || pr.variant === "power" || pr.variant === "multi" ? "skill" : "projectile";
+          if (sendPvpHit(id, Math.min(120, Math.max(1, Math.round(pr.dmg))), combatKind)) {
+            impact(); pr.hitsRemote.push(id);
+            if (!pr.pierce) { pr.life = 0; consumed = true; }
+          }
+          break;
+        }
+      }
       // boss hit
       if (!consumed && !pr.hitBoss && this.boss && !this.boss.dead && Math.hypot(pr.x - this.boss.x, pr.y - (this.boss.y - 30)) < 34) { this.hurtBossDirect(pr.dmg); impact(); pr.hitBoss = true; if (!pr.pierce) pr.life = 0; }
     }
@@ -541,8 +579,93 @@ Game.prototype.respawn = function () {
   this._dead = false; this.paused = false; this.ui.hideDeath();
 };
 
-// ---- WORLD BOSS: glowing dragon, spawns every 3 minutes ----
+// ---- WORLD BOSS: one server-owned HP pool, local AI presentation ----
+Game.prototype.applySharedBoss = function (state) {
+  if (!state?.active) {
+    if (this.boss?.shared) { this.boss.hp = 0; this.boss.dead = true; this.boss.respawnAt = state?.respawnAt || 0; }
+    this.ui.syncBoss?.(this.boss);
+    return;
+  }
+  const isNew = !this.boss?.shared || this.boss.serverId !== state.id;
+  if (isNew) {
+    this.boss = {
+      serverId: state.id, shared: true, x: state.x, y: state.y, sortY: state.y,
+      hp: state.hp, maxHp: state.maxHp, dmg: 14 + this.player.level * 2,
+      frame: 0, frameT: 0, dead: false, hurt: 0, state: "guard",
+      atkCd: 3, breatheCd: 5, breathWindup: 0, t: 0, rage: state.phase === 2,
+      strafeDir: 1, strafeT: 2, contribution: Number(state.contribution) || 0,
+    };
+    this.ui.toast("WORLD BOSS · Infernyx awakened in the Umbral Arena");
+    this.ui.receiveSystemChat?.("Infernyx awakened. Contribute damage and remain in the arena; every eligible traveler receives the same reward.");
+  } else {
+    Object.assign(this.boss, { x: state.x, y: state.y, sortY: state.y, hp: state.hp, maxHp: state.maxHp, dead: false, rage: state.phase === 2 });
+    if (Number.isFinite(state.contribution)) this.boss.contribution = state.contribution;
+  }
+  this.ui.syncBoss?.(this.boss);
+};
+
+Game.prototype.applySharedBossHit = function (message) {
+  if (!this.boss?.shared || this.boss.serverId !== message.bossId) this.applySharedBoss(net.boss);
+  const b = this.boss; if (!b) return;
+  const enteredRage = message.phase === 2 && !b.rage;
+  b.hp = message.hp; b.maxHp = message.maxHp; b.rage = message.phase === 2; b.hurt = .18;
+  if (message.source === net.selfId) b.contribution = (b.contribution || 0) + message.damage;
+  if (enteredRage) {
+    this.ui.toast("PHASE II · Infernyx shattered its oni guard!");
+    this.fx.push({ kind: "levelring", x: b.x, y: b.y - 18, t: 0, dur: 1 });
+    this.audio.sfx("level"); this.shake = Math.max(this.shake, 4);
+  }
+  if (message.source !== net.selfId) {
+    this.addFloater(b.x, b.y - 42, message.damage, message.phase === 2);
+    this.fx.push({ kind: "projectileimpact", x: b.x, y: b.y - 30, element: "fire", variant: "shared", t: 0, dur: .3 });
+  }
+  this.ui.syncBoss?.(b);
+};
+
+Game.prototype.applySharedBossAttack = function (message) {
+  const b = this.boss;
+  if (!b?.shared || b.serverId !== message.bossId || b.dead) return;
+  const windup = message.kind === "melee" ? .24 : message.phase === 2 ? .48 : .68;
+  b.sharedAttack = {
+    kind: message.kind, target: message.target, targetName: message.targetName,
+    targetX: message.targetX, targetY: message.targetY, angle: message.angle,
+    windup, life: windup + .7, fired: false,
+  };
+  b.state = message.kind === "melee" ? "melee" : "windup";
+  if (message.kind === "melee") b.atkCd = b.rage ? 1.4 : 2.2;
+  b.breathWindup = message.kind === "breath" ? windup : 0;
+  if (message.kind === "breath") {
+    this.audio.sfx("whirl");
+    this.fx.push({ kind: "bosswarn", x: b.x, y: b.y - 30, angle: message.angle, t: 0, dur: windup });
+  }
+};
+
+Game.prototype.applySharedBossDefeat = function (message) {
+  const b = this.boss; if (!b || (message.boss?.id && b.serverId !== message.boss.id)) return;
+  b.hp = 0; b.dead = true; b.respawnAt = message.boss?.respawnAt || 0;
+  for (let i = 0; i < 30; i++) this.particles.push({ x: b.x, y: b.y - 30, vx: (Math.random() - .5) * 120, vy: -35 - Math.random() * 80, life: 1, color: Math.random() < .5 ? "rgba(255,190,80,.95)" : "rgba(125,224,180,.9)" });
+  this.fx.push({ kind: "levelring", x: b.x, y: b.y - 20, t: 0, dur: 1 });
+  this.audio.sfx("level");
+  this.ui.toast("INFERNYX SEALED · shared realm victory");
+  this.ui.receiveSystemChat?.(`${message.eligibleIds?.length || 0} eligible traveler${message.eligibleIds?.length === 1 ? "" : "s"} sealed Infernyx together.`);
+  this.ui.syncBoss?.(b);
+};
+
+Game.prototype.applySharedBossReward = function (message) {
+  if (!message?.bossId || this._sharedRewardBoss === message.bossId) return;
+  this._sharedRewardBoss = message.bossId;
+  const reward = message.reward || {}, p = this.player;
+  p.gold += Number(reward.gold) || 0;
+  p.xp += Number(reward.xp) || 0;
+  for (const [item, count] of Object.entries(reward.items || {})) p.inv[item] = (p.inv[item] || 0) + (Number(count) || 0);
+  this.ui.toast(`CO-OP REWARD · +${reward.gold || 0}g · +${reward.xp || 0}xp · Dragon Scale`);
+  this.ui.receiveSystemChat?.(`Shared boss reward received · ${message.participants || 1} contributor${message.participants === 1 ? "" : "s"}.`);
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
+  this.ui.sync?.();
+};
+
 Game.prototype.spawnBoss = function () {
+  if (net.connected && net.protocol >= 2) return;
   if (this.boss && !this.boss.dead) return;
   const p = this.player;
   // spawn a bit away from the player, on land
@@ -564,9 +687,12 @@ Game.prototype.spawnBoss = function () {
   this.audio.sfx("level"); this.shake = Math.max(this.shake, 8);
 };
 Game.prototype.updateBoss = function (dt) {
-  // 3-minute spawn timer
-  this.bossTimer = (this.bossTimer == null ? 180 : this.bossTimer) - dt;
-  if (this.bossTimer <= 0 && (!this.boss || this.boss.dead)) { this.spawnBoss(); this.bossTimer = 180; }
+  if (net.connected && net.protocol >= 2) {
+    if (net.boss?.active && (!this.boss?.shared || this.boss.serverId !== net.boss.id)) this.applySharedBoss(net.boss);
+  } else {
+    this.bossTimer = (this.bossTimer == null ? 180 : this.bossTimer) - dt;
+    if (this.bossTimer <= 0 && (!this.boss || this.boss.dead)) { this.spawnBoss(); this.bossTimer = 180; }
+  }
 
   const b = this.boss; if (!b || b.dead) return;
   const p = this.player;
@@ -580,6 +706,31 @@ Game.prototype.updateBoss = function (dt) {
   }
   b.rage = rageNow;
 
+  if (b.shared) {
+    b.sortY = b.y;
+    const attack = b.sharedAttack;
+    if (!attack) { b.state = "guard"; b.breathWindup = 0; return; }
+    attack.windup -= dt; attack.life -= dt;
+    b.atkCd = Math.max(0, (b.atkCd || 0) - dt);
+    if (attack.kind === "breath") b.breathWindup = Math.max(0, attack.windup);
+    if (!attack.fired && attack.windup <= 0) {
+      attack.fired = true;
+      const remote = net.remote[attack.target];
+      const targetX = attack.target === net.selfId ? p.x : remote?.rx ?? attack.targetX;
+      const targetY = attack.target === net.selfId ? p.y : remote?.ry ?? attack.targetY;
+      if (attack.kind === "melee") {
+        if (attack.target === net.selfId && Math.hypot(p.x - attack.targetX, p.y - attack.targetY) < 52) this.damagePlayer(b.dmg);
+        this.fx.push({ kind: "slashbig", x: targetX, y: targetY, dir: "down", t: 0, dur: .32 });
+      } else {
+        const spread = b.rage ? [-.35, -.12, .12, .35] : [-.18, 0, .18];
+        for (const off of spread) this.spawnProjectile(b.x, b.y - 30, Math.cos(attack.angle + off), Math.sin(attack.angle + off), "bossfire", b.dmg, false, "boss", { visualOnly: attack.target !== net.selfId, targetId: attack.target });
+        this.fx.push({ kind: "whirl", x: b.x, y: b.y - 30, t: 0, dur: .4 });
+      }
+    }
+    if (attack.life <= 0) { b.sharedAttack = null; b.state = "guard"; b.breathWindup = 0; }
+    return;
+  }
+
   const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;
   // Close distance when needed, then orbit or hold ground. Infernyx never
   // backpedals radially from a player who commits to close combat.
@@ -591,9 +742,9 @@ Game.prototype.updateBoss = function (dt) {
     b.strafeT = 1.5 + Math.random() * 1.5;
     if (Math.random() < 0.45) b.strafeDir *= -1;
   }
-  if (d > desired + 20) {
+  if (!b.shared && d > desired + 20) {
     b.x += (dx / d) * spd; b.y += (dy / d) * spd;
-  } else if (d >= 62 && b.breathWindup <= 0) {
+  } else if (!b.shared && d >= 62 && b.breathWindup <= 0) {
     // Rotate around the player to preserve distance exactly instead of
     // introducing a tiny outward drift from a Cartesian tangent step.
     const orbit = (spd * (b.rage ? 0.56 : 0.42)) / d * b.strafeDir;
@@ -627,7 +778,7 @@ Game.prototype.updateBoss = function (dt) {
     this.audio.sfx("whirl"); this.shake = Math.max(this.shake, 5);
     this.fx.push({ kind: "bosswarn", x: b.x, y: b.y - 30, angle: b.breathAngle, t: 0, dur: b.breathWindup });
   }
-  b.state = b.breathWindup > 0 ? "windup" : d < 60 ? "melee" : d > desired + 20 ? "chase" : "strafe";
+  b.state = b.breathWindup > 0 ? "windup" : d < 60 ? "melee" : b.shared ? "guard" : d > desired + 20 ? "chase" : "strafe";
 };
 // AoE damage helper for player skills hitting the boss
 Game.prototype.hurtBoss = function (x, y, radius, dmg) {
@@ -638,6 +789,14 @@ Game.prototype.hurtBossDirect = function (dmg) {
   const b = this.boss; if (!b || b.dead) return;
   const p = this.player;
   const buffed = Math.round(dmg * (p.buffT > 0 ? (p.buffMul || 1) : 1));
+  if (b.shared) {
+    if (!net.connected || !sendBossHit(Math.min(180, Math.max(1, buffed)), b.serverId)) return;
+    b.hurt = .16;
+    this.addFloater(b.x, b.y - 40, buffed, true);
+    this.audio.sfx("hit");
+    this.fx.push({ kind: "projectileimpact", x: b.x, y: b.y - 30, element: "fire", variant: "shared", t: 0, dur: .28 });
+    return;
+  }
   b.hp -= buffed; b.hurt = 0.2;
   this.addFloater(b.x, b.y - 40, buffed, true);
   this.audio.sfx("hit"); this.shake = Math.max(this.shake, 3);
@@ -645,6 +804,7 @@ Game.prototype.hurtBossDirect = function (dmg) {
 };
 Game.prototype.killBoss = function () {
   const b = this.boss; if (!b) return;
+  if (b.shared) return;
   b.dead = true;
   const p = this.player;
   const goldReward = 200 + p.level * 20, xpReward = 300 + p.level * 40;
@@ -655,7 +815,7 @@ Game.prototype.killBoss = function () {
   this.fx.push({ kind: "levelring", x: b.x, y: b.y - 20, t: 0, dur: 1.0 });
   this.shake = Math.max(this.shake, 12); this.audio.sfx("level");
   this.ui.toast(`INFERNYX SEALED · +${goldReward}g · +${xpReward}xp · Dragon Scale`);
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; this.ui.showLevel(p.level); }
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
   this.ui.sync && this.ui.sync();
   setTimeout(() => { this.boss = null; }, 600);
 };
@@ -682,7 +842,7 @@ Game.prototype.harvestPlant = function (pl) {
   // particle burst
   for (let i = 0; i < 8; i++) this.particles.push({ x: pl.x, y: pl.y - 10, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 40, life: 0.6, color: pl.kind === "crystal_ore" ? "rgba(180,220,255,0.9)" : "rgba(120,200,100,0.9)" });
   pl.respawn = 30; // respawn in 30 sec
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; this.ui.showLevel(p.level); }
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
   this.ui.sync && this.ui.sync();
 };
 
@@ -705,6 +865,16 @@ Game.prototype.damagePlayer = function (raw) {
   p.hp -= dmg; p.invuln = 0.6;
   this.addFloater(p.x, p.y - 36, dmg, false, true);
   this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 5);
+};
+Game.prototype.damagePlayerPvp = function (acceptedDamage) {
+  const p = this.player;
+  const dmg = Math.max(1, Math.round(Number(acceptedDamage) || 0));
+  p.hp -= dmg;
+  p.hurtT = Math.max(p.hurtT || 0, .2);
+  this.addFloater(p.x, p.y - 36, dmg, false, true);
+  this.audio.sfx("hurt");
+  this.shake = Math.max(this.shake, 2);
+  return dmg;
 };
 Game.prototype.addFloater = function (x, y, val, crit, dmgToPlayer, heal) {
   const sx = (x - this.cam.x) * (this.canvas.clientWidth / view.w);

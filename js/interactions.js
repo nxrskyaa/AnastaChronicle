@@ -259,9 +259,11 @@ Game.prototype.interact = function (resolved = null) {
   this.quests.chestCount++;
   this.audio.sfx("chest");
   const player = this.player;
-  for (let i = 0; i < 14; i++) {
-    this.particles.push({ x: target.x, y: target.y - 8, vx: (Math.random() - .5) * 58, vy: -32 - Math.random() * 45, life: .7, color: "rgba(255,220,120,.92)" });
+  for (let i = 0; i < (target.pet ? 24 : 18); i++) {
+    const petColor = i % 3 === 0 ? "rgba(199,151,255,.95)" : i % 2 ? "rgba(255,225,126,.95)" : "rgba(124,232,190,.9)";
+    this.particles.push({ x: target.x, y: target.y - 8, vx: (Math.random() - .5) * (target.pet ? 88 : 68), vy: -35 - Math.random() * 58, life: .75 + Math.random() * .25, color: target.pet ? petColor : (i % 3 === 0 ? "rgba(126,231,190,.9)" : "rgba(255,220,120,.92)") });
   }
+  this.fx.push({ kind: "chestburst", x: target.x, y: target.y - 9, pet: !!target.pet, t: 0, dur: target.pet ? 1.05 : .72 });
 
   if (target.pet) {
     this.ui.showPet(target.pet, () => {

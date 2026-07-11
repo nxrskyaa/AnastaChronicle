@@ -1,8 +1,9 @@
 import { ITEMS, RECIPES, canCraft, xpFor } from "./crafting.js";
 import { QUESTS } from "./quests.js";
 import { CLASSES } from "./classes.js";
-import { RODS, activeRod } from "./fishing.js";
+import { FISH, RODS, activeRod } from "./fishing.js";
 import { getFishSprite } from "./fishart.js";
+import { img } from "./assets.js";
 import { MON_IDS, MON_ELEMENT } from "./monsters.js";
 
 const PET_COLORS = {
@@ -18,6 +19,9 @@ export class UI {
     this.audio = audio || null;
     this.panels = {
       inv: document.getElementById("panel-inv"),
+      menu: document.getElementById("panel-menu"),
+      chat: document.getElementById("panel-chat"),
+      collection: document.getElementById("panel-collection"),
       craft: document.getElementById("panel-craft"),
       quest: document.getElementById("panel-quest"),
       companions: document.getElementById("panel-companions"),
@@ -27,19 +31,49 @@ export class UI {
       pet: document.getElementById("panel-pet"),
       death: document.getElementById("death-screen"),
     };
+    this.chatHistory = [];
+    this.chatUnread = 0;
+    this.online = false;
+    this.onlineCount = 1;
+    this.duelActive = false;
+    this._chatSender = null;
+    this._duelSender = null;
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
-    document.getElementById("btn-level-ok")?.addEventListener("click", () => { this.panels.level.classList.add("hidden"); if (this.game) this.game.paused = false; });
+    document.getElementById("btn-level-ok")?.addEventListener("click", () => { this.panels.level.classList.add("hidden"); if (this.game && !this.hasBlockingOpen()) this.game.paused = false; });
     document.getElementById("btn-respawn")?.addEventListener("click", () => this.game?.respawn());
     document.getElementById("btn-inv-hot")?.addEventListener("click", () => this.toggle("inv"));
     document.getElementById("btn-craft-hot")?.addEventListener("click", () => this.toggle("craft"));
     document.getElementById("btn-quest-hot")?.addEventListener("click", () => this.toggle("quest"));
+    document.getElementById("btn-realm-menu")?.addEventListener("click", () => this.toggle("menu"));
+    document.getElementById("chat-dock")?.addEventListener("click", () => this.openChat());
     document.getElementById("pet-chip")?.addEventListener("click", () => this.toggle("companions"));
     document.getElementById("btn-cycle-pet")?.addEventListener("click", () => this.cyclePet());
+    document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
+    document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
+    const chatInput = document.getElementById("chat-input");
+    chatInput?.addEventListener("input", () => { const count = document.getElementById("chat-count"); if (count) count.textContent = `${chatInput.value.length}/160`; });
+    document.getElementById("chat-form")?.addEventListener("submit", (event) => { event.preventDefault(); this.submitChat(); });
     document.addEventListener("keydown", (event) => {
       if (event.code !== "KeyP" || event.repeat || !this.game || /INPUT|TEXTAREA|SELECT/.test(event.target?.tagName || "")) return;
       const sanctuaryOpen = !this.panels.companions?.classList.contains("hidden");
       if (this.anyOpen() && !sanctuaryOpen) return;
       event.preventDefault(); this.cyclePet();
+    });
+    document.addEventListener("keydown", (event) => {
+      const tag = event.target?.tagName || "";
+      const typing = /INPUT|TEXTAREA|SELECT/.test(tag);
+      if (event.code === "Escape" && this.anyOpen()) {
+        if (typing) event.target.blur?.();
+        this.closeAll();
+        event.preventDefault();
+        return;
+      }
+      if (typing) return;
+      if (event.code === "Enter" && !event.repeat) {
+        if (this.panels.level && !this.panels.level.classList.contains("hidden")) return;
+        event.preventDefault(); this.openChat(true);
+      }
+      if (event.code === "KeyJ" && !event.repeat) { event.preventDefault(); this.toggle("collection"); }
     });
     this._petCb = null;
     document.getElementById("btn-pet-ok")?.addEventListener("click", () => {
@@ -59,8 +93,119 @@ export class UI {
       if (label && skill) label.textContent = skill.name;
       if (skill) button.title = `${skill.name} — ${skill.desc}`;
       button.dataset.class = classId;
+      button.dataset.skill = skill?.id || "";
     });
+    const className = loadout.name || "Warrior";
+    const classPaths = { warrior: "VANGUARD", mage: "ARCANIST", archer: "RANGER" };
+    const crest = className.charAt(0).toUpperCase();
+    for (const id of ["status-class-crest", "menu-class-crest"]) { const el = document.getElementById(id); if (el) el.textContent = crest; }
+    const statusClass = document.getElementById("status-class-name"); if (statusClass) statusClass.textContent = classPaths[classId] || className.toUpperCase();
+    const menuPath = document.getElementById("menu-class-path"); if (menuPath) menuPath.textContent = `${classPaths[classId] || className.toUpperCase()} PATH`;
+    document.getElementById("status-card")?.style.setProperty("--class-accent", loadout.color || "#5ec18e");
     this._skillClass = classId;
+  }
+
+  setChatSender(sender) { this._chatSender = typeof sender === "function" ? sender : null; }
+  setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
+
+  setOnlineState(online, count = this.onlineCount) {
+    this.online = !!online;
+    this.onlineCount = Math.max(1, Number(count) || 1);
+    const state = this.online ? `${this.onlineCount} traveler${this.onlineCount === 1 ? "" : "s"} online` : "Offline realm";
+    for (const id of ["menu-online-state", "menu-chat-state", "chat-presence-text"]) { const el = document.getElementById(id); if (el) el.textContent = state; }
+    document.getElementById("chat-presence-text")?.parentElement?.classList.toggle("online", this.online);
+    const dock = document.getElementById("chat-dock"); if (dock) dock.dataset.online = this.online ? "true" : "false";
+    if (!this.online) this.updateDuel(false);
+  }
+
+  updateDuel(active) {
+    this.duelActive = !!active;
+    const button = document.getElementById("duel-toggle");
+    button?.setAttribute("aria-checked", String(this.duelActive));
+    const label = document.getElementById("duel-toggle-label"); if (label) label.textContent = this.duelActive ? "DUEL ARMED" : "SAFE MODE";
+    document.getElementById("hud")?.classList.toggle("duel-armed", this.duelActive);
+  }
+
+  requestDuel(active) {
+    if (!this.online || !this._duelSender) { this.toast("Realm connection required for Duel Mode."); return; }
+    if (!this._duelSender(!!active)) { this.toast("Duel request could not reach the realm."); return; }
+    this.toast(active ? "Duel request armed. Damage needs mutual consent." : "Returning to Safe Mode...");
+  }
+
+  openChat(focus = false) {
+    if (this.panels.chat?.classList.contains("hidden")) this.toggle("chat");
+    this.game?.resetInputState?.();
+    if (this.game) this.game.inputLocked = true;
+    this.chatUnread = 0; this.syncUnread();
+    setTimeout(() => document.getElementById("chat-input")?.focus(), focus ? 0 : 20);
+  }
+
+  submitChat() {
+    const input = document.getElementById("chat-input"); if (!input) return;
+    const text = input.value.replace(/\s+/g, " ").trim().slice(0, 160);
+    if (!text) return;
+    if (!this.online || !this._chatSender || !this._chatSender(text)) { this.toast("Realm chat is offline. Reconnecting..."); return; }
+    input.value = "";
+    const count = document.getElementById("chat-count"); if (count) count.textContent = "0/160";
+  }
+
+  receiveChat(message, self = false) {
+    if (!message?.text) return;
+    const normalized = {
+      id: message.id || "realm", name: String(message.name || "Traveler").slice(0, 24),
+      text: String(message.text).slice(0, 200), time: message.at || message.ts || Date.now(), self: !!self,
+    };
+    this.chatHistory.push(normalized);
+    if (this.chatHistory.length > 80) this.chatHistory.shift();
+    const preview = document.getElementById("chat-dock-preview"); if (preview) preview.textContent = `${normalized.name}: ${normalized.text}`;
+    if (this.panels.chat?.classList.contains("hidden")) { this.chatUnread = Math.min(99, this.chatUnread + 1); this.syncUnread(); }
+    else this.appendChatMessage(normalized);
+  }
+
+  receiveSystemChat(text) {
+    const message = { system: true, text: String(text || "").slice(0, 200), time: Date.now() };
+    this.chatHistory.push(message);
+    if (!this.panels.chat?.classList.contains("hidden")) this.appendChatMessage(message);
+  }
+
+  syncUnread() {
+    const badge = document.getElementById("chat-unread"); if (!badge) return;
+    badge.textContent = this.chatUnread > 9 ? "9+" : String(this.chatUnread);
+    badge.classList.toggle("hidden", this.chatUnread <= 0);
+  }
+
+  appendChatMessage(message) {
+    const wrap = document.getElementById("chat-messages"); if (!wrap) return;
+    wrap.querySelector(".chat-empty")?.remove();
+    const row = document.createElement("div");
+    if (message.system) {
+      row.className = "chat-message system";
+      const paragraph = document.createElement("p"); paragraph.textContent = message.text; row.appendChild(paragraph);
+    } else {
+      row.className = `chat-message${message.self ? " self" : ""}`;
+      const avatar = document.createElement("div"); avatar.className = "chat-avatar";
+      const initial = document.createElement("span"); initial.textContent = message.name.charAt(0).toUpperCase() || "?"; avatar.appendChild(initial);
+      const bubble = document.createElement("div"); bubble.className = "chat-bubble";
+      const meta = document.createElement("div"); meta.className = "chat-meta";
+      const name = document.createElement("b"); name.textContent = message.self ? `${message.name} · YOU` : message.name;
+      const time = document.createElement("time"); time.textContent = new Date(message.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const paragraph = document.createElement("p"); paragraph.textContent = message.text;
+      meta.append(name, time); bubble.append(meta, paragraph); row.append(avatar, bubble);
+    }
+    wrap.appendChild(row);
+    while (wrap.children.length > 80) wrap.firstElementChild?.remove();
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  renderChat() {
+    const wrap = document.getElementById("chat-messages"); if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!this.chatHistory.length) {
+      const empty = document.createElement("div"); empty.className = "chat-empty";
+      empty.innerHTML = "<i></i><strong>The trail is quiet.</strong><p>Messages from other travelers will appear here.</p>";
+      wrap.appendChild(empty);
+    } else for (const message of this.chatHistory) this.appendChatMessage(message);
+    this.chatUnread = 0; this.syncUnread();
   }
 
   toast(msg) {
@@ -72,14 +217,109 @@ export class UI {
     const p = this.panels[name]; if (!p) return;
     this.audio?.sfx("ui");
     const open = p.classList.contains("hidden"); this.closeAll();
-    if (open) { p.classList.remove("hidden"); if (name === "inv") this.renderInv(); if (name === "craft") this.renderCraft(); if (name === "quest") this.renderQuestLog(); if (name === "companions") this.renderCompanions(); if (this.game) this.game.paused = true; }
+    if (open) {
+      p.classList.remove("hidden");
+      if (name === "inv") this.renderInv();
+      if (name === "craft") this.renderCraft();
+      if (name === "quest") this.renderQuestLog();
+      if (name === "companions") this.renderCompanions();
+      if (name === "menu") this.renderMenu();
+      if (name === "chat") this.renderChat();
+      if (name === "collection") this.renderCollection();
+      if (this.game && name === "chat") { this.game.resetInputState?.(); this.game.inputLocked = true; setTimeout(() => document.getElementById("chat-input")?.focus(), 0); }
+      if (this.game && name !== "chat") { this.game.resetInputState?.(); this.game.paused = true; }
+      if (name !== "chat") setTimeout(() => p.querySelector(".panel-close,button,input")?.focus(), 0);
+    }
   }
-  close(name) { this.panels[name]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["inv", "craft", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game && !this.anyOpen()) this.game.paused = false; }
-  anyOpen() { return ["inv", "craft", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  close(name) { this.panels[name]?.classList.add("hidden"); if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "craft", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  anyOpen() { return ["menu", "chat", "collection", "inv", "craft", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "collection", "inv", "craft", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
-  showLevel(lv) { const el = document.getElementById("level-msg"); if (el) el.textContent = `Level ${lv}! Max HP, stamina and damage increased.`; this.panels.level?.classList.remove("hidden"); if (this.game) this.game.paused = true; }
-  showDeath() { this.panels.death?.classList.remove("hidden"); }
+  currentRegion() {
+    const p = this.game?.player; if (!p) return "Verdant Wilds";
+    const x = p.x / 24, y = p.y / 24;
+    if (y < 25) return "Frostfield";
+    if (x > 72 && y < 50) return "Azure Coast";
+    if (x > 74 && y > 68) return "Umbral Forest";
+    if (y < 45 && x > 38 && x < 66) return "North Shrine";
+    if (x > 60 && x < 74 && y > 39 && y < 62) return "Reed Pond";
+    if (Math.hypot(x - 55, y - 55) < 13) return "Hearth Camp";
+    return x < 55 ? "West Road" : "Verdant Wilds";
+  }
+
+  renderMenu() {
+    if (!this.game) return;
+    const p = this.game.player;
+    const discovered = FISH.filter(fish => (this.game.fishingStats?.records?.[fish.id]?.count || 0) > 0).length;
+    const ownedPets = Array.isArray(this.game.pets) ? this.game.pets.length : 0;
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set("menu-player-name", document.getElementById("hud-name")?.textContent || "Traveler");
+    set("menu-level", `Level ${p.level}`);
+    set("menu-location", this.currentRegion());
+    set("menu-clock", document.getElementById("clock")?.textContent || "Day 06:00");
+    set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
+    set("menu-pet-progress", `${ownedPets} / ${MON_IDS.length} bonded`);
+    this.setOnlineState(this.online, this.onlineCount);
+    this.updateDuel(this.duelActive);
+  }
+
+  renderCollection() {
+    const grid = document.getElementById("fish-collection-grid"); if (!grid || !this.game) return;
+    const stats = this.game.fishingStats || { total: 0, best: 0, records: {} };
+    const records = stats.records || {};
+    const discovered = FISH.filter(fish => (records[fish.id]?.count || 0) > 0).length;
+    const percent = Math.round(discovered / FISH.length * 100);
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set("collection-percent", `${percent}%`);
+    set("collection-count", `${discovered} / ${FISH.length}`);
+    set("collection-catches", stats.total || 0);
+    set("collection-best", stats.best ? `${Number(stats.best).toFixed(1)} cm` : "--");
+    set("collection-total", discovered ? `${FISH.length - discovered} species remain hidden across pond, lake, weather and moonlight.` : "Cast your first line to begin the archive.");
+    set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
+    const token = FISH.map(fish => `${fish.id}:${records[fish.id]?.count || 0}:${records[fish.id]?.best || 0}`).join("|");
+    if (this._collectionToken === token && grid.children.length === FISH.length) return;
+    this._collectionToken = token;
+    grid.innerHTML = "";
+    for (const fish of FISH) {
+      const record = records[fish.id] || { count: 0, best: 0 };
+      const owned = record.count > 0;
+      const card = document.createElement("article");
+      card.className = `fish-card${owned ? "" : " locked"}`;
+      card.dataset.rarity = fish.rarity;
+      const art = document.createElement("div"); art.className = "fish-card-art";
+      const canvas = document.createElement("canvas"); canvas.width = 120; canvas.height = 72;
+      const ctx = canvas.getContext("2d"); if (ctx) { ctx.imageSmoothingEnabled = false; ctx.drawImage(getFishSprite(fish), 4, 7, 112, 58); }
+      art.appendChild(canvas);
+      if (!owned) { const lock = document.createElement("i"); lock.className = "fish-lock"; art.appendChild(lock); }
+      const rarity = document.createElement("span"); rarity.textContent = fish.rarity;
+      const name = document.createElement("strong"); name.textContent = owned ? fish.name : "Undiscovered";
+      const details = document.createElement("dl");
+      const caught = document.createElement("div"), caughtLabel = document.createElement("dt"), caughtValue = document.createElement("dd");
+      caughtLabel.textContent = "Caught"; caughtValue.textContent = owned ? String(record.count) : "--"; caught.append(caughtLabel, caughtValue);
+      const best = document.createElement("div"), bestLabel = document.createElement("dt"), bestValue = document.createElement("dd");
+      bestLabel.textContent = "Best"; bestValue.textContent = owned ? `${Number(record.best).toFixed(1)} cm` : "--"; best.append(bestLabel, bestValue);
+      details.append(caught, best);
+      const habitat = document.createElement("small");
+      const condition = [fish.habitats.map(x => x[0].toUpperCase() + x.slice(1)).join(" / "), fish.time, fish.weather].filter(Boolean).join(" · ");
+      habitat.textContent = owned ? condition : "Clue hidden until discovered";
+      card.append(art, rarity, name, details, habitat); grid.appendChild(card);
+    }
+  }
+
+  showLevel(lv) {
+    this.closeAll();
+    const el = document.getElementById("level-msg"); if (el) el.textContent = `Level ${lv} reached. Your body steadies as the Chronicle records new strength.`;
+    const number = document.getElementById("level-number"); if (number) number.textContent = lv;
+    if (this.game) {
+      this.game.shake = 0;
+      this.game.hitStop = 0;
+      this.game.resetInputState?.();
+      this.game.paused = true;
+    }
+    this.panels.level?.classList.remove("hidden");
+  }
+  showDeath() { this.closeAll(); this.panels.death?.classList.remove("hidden"); if (this.game) { this.game.inputLocked = false; this.game.paused = true; } }
   hideDeath() { this.panels.death?.classList.add("hidden"); }
   showPet(id, cb) {
     this._petCb = cb;
@@ -254,6 +494,8 @@ export class UI {
     this.syncBoss(g.boss);
     this.syncFishing(g.fishing);
     this.syncCatch(g.catchReveal);
+    if (!this.panels.menu?.classList.contains("hidden")) this.renderMenu();
+    if (!this.panels.collection?.classList.contains("hidden")) this.renderCollection();
   }
 
   syncBoss(boss) {
@@ -267,6 +509,7 @@ export class UI {
     hud.classList.toggle("warning", warning);
     const fill = document.getElementById("boss-health-fill"); if (fill) fill.style.width = `${pct * 100}%`;
     const hp = document.getElementById("boss-health-text"); if (hp) hp.textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp} HP`;
+    const contribution = document.getElementById("boss-contribution"); if (contribution) contribution.textContent = `${Math.round(boss.contribution || 0)} DMG`;
     const phase = document.getElementById("boss-phase"); if (phase) phase.textContent = boss.rage ? "PHASE II · RAGE" : "PHASE I · AWAKENED";
     const state = document.getElementById("boss-state");
     if (state) {
@@ -337,7 +580,30 @@ export class UI {
       const id = keys[i];
       if (id) {
         const item = ITEMS[id] || { name: id, glyph: "?" };
-        cell.innerHTML = `<span class="inv-glyph">${item.glyph || "?"}</span><span class="inv-name">${item.name}</span>`;
+        if (id === "fish") {
+          cell.classList.add("fish-entry");
+          const records = this.game.fishingStats?.records || {};
+          const featured = [...FISH].reverse().find(fish => (records[fish.id]?.count || 0) > 0) || FISH[0];
+          const canvas = document.createElement("canvas"); canvas.className = "inv-fish-art"; canvas.width = 72; canvas.height = 44;
+          const ctx = canvas.getContext("2d"); if (ctx) { ctx.imageSmoothingEnabled = false; ctx.drawImage(getFishSprite(featured), 0, 0, 72, 44); }
+          const label = document.createElement("span"); label.className = "inv-name"; label.textContent = "Fish Archive";
+          cell.append(canvas, label);
+          cell.title = "Open the Fish Chronicle";
+          cell.addEventListener("click", () => this.toggle("collection"));
+        } else if (img(`item/${id}`)) {
+          const canvas = document.createElement("canvas"); canvas.className = "inv-material-art"; canvas.width = 40; canvas.height = 40;
+          const ctx = canvas.getContext("2d"); if (ctx) { ctx.imageSmoothingEnabled = false; ctx.drawImage(img(`item/${id}`), 0, 0, 40, 40); }
+          const label = document.createElement("span"); label.className = "inv-name"; label.textContent = item.name;
+          cell.append(canvas, label);
+        } else if (ITEMS[id]?.weapon) {
+          const canvas = document.createElement("canvas"); canvas.className = "inv-weapon-art"; canvas.width = 40; canvas.height = 48;
+          const frame = this.game.weaponFrames?.(id)?.walk?.down;
+          const ctx = canvas.getContext("2d"); if (ctx && frame) { ctx.imageSmoothingEnabled = false; ctx.drawImage(frame, 0, 0, frame.width, frame.height, 0, 0, 40, 48); }
+          const label = document.createElement("span"); label.className = "inv-name"; label.textContent = item.name;
+          cell.append(canvas, label);
+        } else {
+          cell.innerHTML = `<span class="inv-glyph">${item.glyph || "?"}</span><span class="inv-name">${item.name}</span>`;
+        }
         if (p.inv[id] > 1) { const q = document.createElement("span"); q.className = "qty"; q.textContent = p.inv[id]; cell.appendChild(q); }
         if (ITEMS[id]?.weapon) { cell.classList.add("weapon"); if (p.equipped === id) cell.classList.add("equipped"); cell.addEventListener("click", () => this.game.equip(id)); }
       }

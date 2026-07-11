@@ -1,104 +1,271 @@
-// Networking (Tier 1 presence) — plain JSON WebSocket relay.
-// Replaces the Colyseus client: colyseus.js 0.15.x binary protocol silently
-// fails to deliver state over wss:// in browsers. A raw wss:// + JSON socket
-// is 100% reliable in the browser. Keeps net.remote shaped exactly as render.js
-// expects: { x, y, rx, ry, dir, moving, name, look, frame, frameT, cache }.
+// Realtime multiplayer transport. Presence stays compatible with the original
+// JSON relay while protocol v2 adds chat, mutual duel events and a shared boss.
 
 import { SERVER_URL, MULTIPLAYER_ENABLED } from "./config.js";
 
 export const net = {
   connected: false,
-  room: null,            // kept for API compat (unused)
+  room: null,
   ws: null,
-  remote: {},            // id -> { x, y, rx, ry, dir, moving, name, look, frame, frameT, cache }
+  remote: {},
   selfId: null,
+  resumeToken: null,
+  protocol: 1,
+  duelActive: false,
+  boss: null,
   _lastSend: 0,
   _chat: [],
+  _ping: null,
+  _join: null,
+  _reconnectTimer: null,
+  _reconnectAttempts: 0,
   onChat: null,
+  onDuel: null,
+  onPvpHit: null,
+  onPvpReject: null,
+  onBossState: null,
+  onBossHit: null,
+  onBossAttack: null,
+  onBossDefeated: null,
+  onBossReward: null,
+  onBossReject: null,
+  onWelcome: null,
 };
 
-function applyState(r, s) {
-  r.x = s.x; r.y = s.y; r.dir = s.dir; r.moving = !!s.moving;
-  if (r.name === undefined) { r.name = s.name; r.look = s.look; }
+function remotePlayer(state) {
+  return {
+    x: state.x,
+    y: state.y,
+    rx: state.x,
+    ry: state.y,
+    dir: state.dir,
+    moving: !!state.moving,
+    name: state.name,
+    look: state.look,
+    duel: !!state.duel,
+    frame: 0,
+    frameT: 0,
+    cache: null,
+  };
+}
+
+function applyState(remote, state) {
+  remote.x = state.x;
+  remote.y = state.y;
+  remote.dir = state.dir;
+  remote.moving = !!state.moving;
+  if (state.name !== undefined) remote.name = state.name;
+  if (state.look !== undefined) remote.look = state.look;
+  if (state.duel !== undefined) remote.duel = !!state.duel;
+}
+
+function canSend() {
+  return !!(net.connected && net.ws && net.ws.readyState === 1);
+}
+
+function scheduleReconnect(delayOverride) {
+  if (!MULTIPLAYER_ENABLED || !net._join || net.connected || net._reconnectTimer) return;
+  const delay = delayOverride ?? Math.min(12000, 700 * 2 ** Math.min(4, net._reconnectAttempts));
+  net._reconnectTimer = setTimeout(() => {
+    net._reconnectTimer = null;
+    const join = net._join;
+    connectMultiplayer(join.look, join.name, join.spawn).catch(() => {});
+  }, delay);
+}
+
+function send(object) {
+  if (!canSend()) return false;
+  try {
+    net.ws.send(JSON.stringify(object));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function setBossState(message) {
+  net.boss = message.boss ? { ...message.boss } : null;
+  if (net.boss && Number.isFinite(message.contribution)) net.boss.contribution = message.contribution;
+  net.onBossState?.(net.boss, message);
+}
+
+function handleMessage(message) {
+  if (message.t === "welcome") {
+    net.selfId = message.id;
+    net.protocol = message.protocol || 1;
+    net.connected = true;
+    net._reconnectAttempts = 0;
+    if (message.resumeToken) net.resumeToken = message.resumeToken;
+    net.onWelcome?.(message);
+  } else if (message.t === "players") {
+    for (const state of message.list || []) {
+      if (state.id === net.selfId) {
+        net.duelActive = !!state.duel;
+        continue;
+      }
+      if (!net.remote[state.id]) net.remote[state.id] = remotePlayer(state);
+      else applyState(net.remote[state.id], state);
+    }
+  } else if (message.t === "join") {
+    const state = message.player;
+    if (!state || state.id === net.selfId) return;
+    net.remote[state.id] = remotePlayer(state);
+  } else if (message.t === "state") {
+    if (message.id === net.selfId) return;
+    if (!net.remote[message.id]) {
+      net.remote[message.id] = remotePlayer({
+        ...message,
+        name: "?",
+        look: "{}",
+      });
+    } else {
+      applyState(net.remote[message.id], message);
+    }
+  } else if (message.t === "leave") {
+    delete net.remote[message.id];
+  } else if (message.t === "chat") {
+    net._chat.push(message);
+    if (net._chat.length > 30) net._chat.shift();
+    net.onChat?.(message);
+  } else if (message.t === "duel") {
+    if (message.id === net.selfId) net.duelActive = !!message.active;
+    else if (net.remote[message.id]) net.remote[message.id].duel = !!message.active;
+    net.onDuel?.(message);
+  } else if (message.t === "pvp_hit") {
+    net.onPvpHit?.(message);
+  } else if (message.t === "pvp_reject") {
+    net.onPvpReject?.(message);
+  } else if (message.t === "boss_spawn" || message.t === "boss_state") {
+    setBossState(message);
+  } else if (message.t === "boss_hit") {
+    if (net.boss?.id === message.bossId) {
+      net.boss.hp = message.hp;
+      net.boss.maxHp = message.maxHp;
+      net.boss.phase = message.phase;
+    }
+    net.onBossHit?.(message);
+  } else if (message.t === "boss_attack") {
+    net.onBossAttack?.(message);
+  } else if (message.t === "boss_defeated") {
+    if (message.boss) net.boss = { ...message.boss };
+    else if (net.boss) { net.boss.active = false; net.boss.hp = 0; }
+    net.onBossDefeated?.(message);
+  } else if (message.t === "boss_reward") {
+    net.onBossReward?.(message);
+  } else if (message.t === "boss_reject") {
+    net.onBossReject?.(message);
+  }
 }
 
 export async function connectMultiplayer(look, name, spawn) {
   if (!MULTIPLAYER_ENABLED) return null;
+  net._join = { look, name, spawn: { x: spawn?.x, y: spawn?.y } };
+  if (net.ws && (net.ws.readyState === 0 || net.ws.readyState === 1)) return net.ws;
+  if (net._reconnectTimer) { clearTimeout(net._reconnectTimer); net._reconnectTimer = null; }
+  let ws = null;
   try {
-    const ws = new WebSocket(SERVER_URL);
+    if (net._ping) clearInterval(net._ping);
+    ws = new WebSocket(SERVER_URL);
     net.ws = ws;
 
     await new Promise((resolve, reject) => {
-      ws.onopen = resolve;
-      ws.onerror = (e) => reject(new Error("ws error"));
+      const timeout = setTimeout(() => reject(new Error("ws timeout")), 8000);
+      ws.onopen = () => { clearTimeout(timeout); resolve(); };
+      ws.onerror = () => { clearTimeout(timeout); reject(new Error("ws error")); };
     });
 
-    ws.onmessage = (ev) => {
-      let m;
-      try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.t === "welcome") {
-        net.selfId = m.id;
-        net.connected = true;
-      } else if (m.t === "players") {
-        for (const s of m.list) {
-          if (s.id === net.selfId) continue;
-          if (!net.remote[s.id]) net.remote[s.id] = { x: s.x, y: s.y, rx: s.x, ry: s.y, dir: s.dir, moving: s.moving, name: s.name, look: s.look, frame: 0, frameT: 0, cache: null };
-          else applyState(net.remote[s.id], s);
-        }
-      } else if (m.t === "join") {
-        const s = m.player;
-        if (s.id === net.selfId) return;
-        net.remote[s.id] = { x: s.x, y: s.y, rx: s.x, ry: s.y, dir: s.dir, moving: s.moving, name: s.name, look: s.look, frame: 0, frameT: 0, cache: null };
-      } else if (m.t === "state") {
-        if (m.id === net.selfId) return;
-        if (!net.remote[m.id]) net.remote[m.id] = { x: m.x, y: m.y, rx: m.x, ry: m.y, dir: m.dir, moving: m.moving, name: "?", look: "{}", frame: 0, frameT: 0, cache: null };
-        else applyState(net.remote[m.id], m);
-      } else if (m.t === "leave") {
-        delete net.remote[m.id];
-      } else if (m.t === "chat") {
-        net._chat.push(m);
-        if (net._chat.length > 30) net._chat.shift();
-        if (net.onChat) net.onChat(m);
-      }
+    ws.onmessage = (event) => {
+      let message;
+      try { message = JSON.parse(event.data); } catch { return; }
+      handleMessage(message);
     };
 
-    ws.onclose = () => { net.connected = false; };
-    ws.onerror = () => { net.connected = false; };
+    const markDisconnected = () => {
+      if (net.ws !== ws) return;
+      net.connected = false;
+      net.duelActive = false;
+      net.remote = {};
+      net.boss = null;
+      net.ws = null;
+      if (net._ping) clearInterval(net._ping);
+      net._ping = null;
+      net._reconnectAttempts++;
+      scheduleReconnect();
+    };
+    ws.onclose = markDisconnected;
+    ws.onerror = markDisconnected;
 
-    // Keepalive: Railway's TLS proxy drops idle sockets. Send a tiny ping
-    // every 4s so the connection stays warm in the browser.
     net._ping = setInterval(() => {
-      if (ws.readyState === ws.OPEN) { try { ws.send(JSON.stringify({ t: "ping" })); } catch {} }
+      if (ws.readyState === 1) {
+        try { ws.send(JSON.stringify({ t: "ping" })); } catch { /* close handler updates state */ }
+      }
     }, 4000);
 
-    // send join
     ws.send(JSON.stringify({
       t: "join",
       name: name || "Traveler",
       look: JSON.stringify(look || {}),
-      x: spawn?.x, y: spawn?.y,
+      x: spawn?.x,
+      y: spawn?.y,
+      resumeToken: net.resumeToken,
     }));
 
     return ws;
-  } catch (e) {
-    console.warn("Multiplayer unavailable, running singleplayer:", e.message);
+  } catch (error) {
+    console.warn("Multiplayer unavailable, running singleplayer:", error.message);
     net.connected = false;
+    try { ws?.close(); } catch { /* already closed */ }
+    if (net.ws === ws) net.ws = null;
+    net._reconnectAttempts++;
+    scheduleReconnect();
     return null;
   }
 }
 
-// Throttled position push (call every frame; sends ~12x/sec)
-export function sendMove(p, now) {
-  if (!net.connected || !net.ws) return;
-  if (now - net._lastSend < 84) return;
+// Throttled position push (call every frame; sends about 12 times per second).
+export function sendMove(player, now) {
+  if (!canSend() || now - net._lastSend < 84) return false;
   net._lastSend = now;
-  net.ws.send(JSON.stringify({ t: "move", x: Math.round(p.x), y: Math.round(p.y), dir: p.dir, moving: !!p.moving }));
+  return send({
+    t: "move",
+    x: Math.round(player.x),
+    y: Math.round(player.y),
+    dir: player.dir,
+    moving: !!player.moving,
+  });
 }
 
 export function sendChat(text) {
-  if (net.connected && net.ws) net.ws.send(JSON.stringify({ t: "chat", text }));
+  const clean = String(text || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  return clean ? send({ t: "chat", text: clean }) : false;
+}
+
+export function sendDuel(active) {
+  return send({ t: "duel", active: !!active });
+}
+
+export function sendPvpHit(target, damage, kind = "basic") {
+  if (!target || target === net.selfId) return false;
+  return send({ t: "pvp_hit", target, damage, kind });
+}
+
+export function requestBossState() {
+  return send({ t: "boss_sync" });
+}
+
+export function sendBossHit(damage, bossId = net.boss?.id) {
+  if (!bossId) return false;
+  return send({ t: "boss_hit", bossId, damage });
 }
 
 export function remoteCount() {
   return Object.keys(net.remote).length;
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || net.connected || !net._join) return;
+    if (net._reconnectTimer) { clearTimeout(net._reconnectTimer); net._reconnectTimer = null; }
+    scheduleReconnect(120);
+  });
 }

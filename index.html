@@ -97,7 +97,7 @@
 
   <div id="hud">
     <div id="status-card">
-      <div class="status-row"><span class="status-name" id="hud-name">Anasta</span><span class="status-lvl" id="xp-text">LV 1</span></div>
+      <div class="status-identity"><span id="status-class-crest" class="status-class-crest" aria-hidden="true">W</span><div><div class="status-row"><span class="status-name" id="hud-name">Anasta</span><span class="status-lvl" id="xp-text">LV 1</span></div><span id="status-class-name" class="status-class-name">VANGUARD</span></div></div>
       <div class="bar-row"><span class="bar-label">HP</span><div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div><span class="bar-val" id="hp-text">50</span></div>
       <div class="bar-row"><span class="bar-label">SP</span><div class="bar sp"><div class="bar-fill" id="stamina-fill"></div></div><span class="bar-val" id="stamina-text">100</span></div>
       <div class="bar-row xp-row"><div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div></div>
@@ -121,6 +121,7 @@
         <span id="boss-health-text">0 / 0 HP</span>
         <span id="boss-state">Hunt the marked threat</span>
       </div>
+      <div class="boss-coop-row"><span><i></i> SHARED REALM</span><b id="boss-contribution">0 DMG</b></div>
     </div>
 
     <div id="top-right">
@@ -129,21 +130,27 @@
           <span class="realm-sigil" aria-hidden="true">◇</span>
           <span class="realm-status-copy"><b id="realm-mode">LOCAL REALM</b><small id="realm-sync-indicator">ONCHAIN ROADMAP</small></span>
         </div>
-        <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Open settings">⚙</button>
+        <button class="icon-btn realm-menu-trigger" id="btn-realm-menu" title="Open Realm Menu" aria-label="Open Realm Menu"><i></i><i></i><i></i><i></i><span>MENU</span></button>
       </div>
       <div id="minimap-wrap"><canvas id="minimap" width="120" height="120"></canvas></div>
     </div>
 
     <div id="skillbar">
-      <button class="sk" data-i="0"><span class="sk-key">1</span><span class="sk-name">Strike</span><div class="sk-cd" id="cd0"></div></button>
-      <button class="sk" data-i="1"><span class="sk-key">2</span><span class="sk-name">Heal</span><div class="sk-cd" id="cd1"></div></button>
-      <button class="sk" data-i="2"><span class="sk-key">3</span><span class="sk-name">Whirl</span><div class="sk-cd" id="cd2"></div></button>
-      <button class="sk" data-i="3"><span class="sk-key">4</span><span class="sk-name">Dash</span><div class="sk-cd" id="cd3"></div></button>
+      <button class="sk" data-i="0"><span class="sk-key">1</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Strike</span><div class="sk-cd" id="cd0"></div></button>
+      <button class="sk" data-i="1"><span class="sk-key">2</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Heal</span><div class="sk-cd" id="cd1"></div></button>
+      <button class="sk" data-i="2"><span class="sk-key">3</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Whirl</span><div class="sk-cd" id="cd2"></div></button>
+      <button class="sk" data-i="3"><span class="sk-key">4</span><i class="sk-icon" aria-hidden="true"></i><span class="sk-name">Dash</span><div class="sk-cd" id="cd3"></div></button>
       <div class="sk-div"></div>
       <button class="sk sk-util" id="btn-inv-hot"><span class="sk-key">I</span><span class="sk-name">Bag</span></button>
       <button class="sk sk-util" id="btn-craft-hot"><span class="sk-key">C</span><span class="sk-name">Forge</span></button>
       <button class="sk sk-util" id="btn-quest-hot"><span class="sk-key">Q</span><span class="sk-name">Quest</span></button>
     </div>
+
+    <button id="chat-dock" class="chat-dock" type="button" aria-label="Open realm chat">
+      <span class="chat-dock-sigil" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="chat-dock-copy"><small>REALM CHAT</small><b id="chat-dock-preview">Connect to greet other travelers</b></span>
+      <span id="chat-unread" class="chat-unread hidden">0</span><kbd>ENTER</kbd>
+    </button>
 
     <div id="toast"></div>
     <div id="dmg-layer"></div>
@@ -198,6 +205,38 @@
     </div>
   </div>
 
+  <div id="panel-menu" class="panel panel-wide realm-menu-panel hidden" role="dialog" aria-modal="true" aria-labelledby="realm-menu-title">
+    <div class="panel-head"><div><span class="panel-kicker">TRAVELER COMMAND</span><h2 id="realm-menu-title">Realm Menu</h2></div><button class="panel-close" data-close="menu" aria-label="Close Realm Menu">&times;</button></div>
+    <div class="realm-menu-overview">
+      <div class="realm-menu-profile"><span id="menu-class-crest" class="menu-class-crest">W</span><div><small id="menu-class-path">VANGUARD PATH</small><strong id="menu-player-name">Anasta</strong><p><span id="menu-level">Level 1</span><i></i><span id="menu-online-state">Entering realm...</span></p></div></div>
+      <div class="realm-menu-location"><small>CURRENT TRAIL</small><b id="menu-location">Verdant Wilds</b><span id="menu-clock">Day 06:00</span></div>
+    </div>
+    <nav class="realm-menu-grid" aria-label="Realm features">
+      <button type="button" data-open-panel="inv"><i class="menu-rune bag"></i><span><b>Inventory</b><small>Gear &amp; materials</small></span><em>I</em></button>
+      <button type="button" data-open-panel="craft"><i class="menu-rune forge"></i><span><b>Forge</b><small>Craft your arsenal</small></span><em>C</em></button>
+      <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
+      <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
+      <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 14 bonded</small></span><em>P NEXT</em></button>
+      <button type="button" data-open-panel="chat"><i class="menu-rune chat"></i><span><b>Realm Chat</b><small id="menu-chat-state">Offline</small></span><em>ENTER</em></button>
+      <button type="button" data-open-panel="settings"><i class="menu-rune settings"></i><span><b>Settings</b><small>Controls &amp; audio</small></span><em>OPEN</em></button>
+    </nav>
+    <section class="duel-card" aria-labelledby="duel-title">
+      <div class="duel-swords" aria-hidden="true"><i></i><i></i></div>
+      <div><span>OPT-IN PVP</span><strong id="duel-title">Traveler Duel</strong><p>Damage between players only activates when both travelers enable Duel Mode. World combat stays safe otherwise.</p></div>
+      <button id="duel-toggle" type="button" role="switch" aria-checked="false"><i></i><span id="duel-toggle-label">SAFE MODE</span></button>
+    </section>
+  </div>
+  <div id="panel-chat" class="panel panel-wide chat-panel hidden" role="dialog" aria-modal="true" aria-labelledby="realm-chat-title">
+    <div class="panel-head"><div><span class="panel-kicker">LIVE OPEN WORLD</span><h2 id="realm-chat-title">Realm Chat</h2></div><div class="chat-presence"><i></i><span id="chat-presence-text">Connecting</span></div><button class="panel-close" data-close="chat" aria-label="Close Realm Chat">&times;</button></div>
+    <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"><div class="chat-empty"><i></i><strong>The trail is quiet.</strong><p>Messages from other travelers will appear here.</p></div></div>
+    <form id="chat-form" class="chat-compose"><label for="chat-input">MESSAGE</label><div><input id="chat-input" maxlength="160" autocomplete="off" placeholder="Say something to the realm..." /><span id="chat-count">0/160</span><button type="submit">SEND <i aria-hidden="true">&rsaquo;</i></button></div><small>Be kind. Chat is shared with every traveler in this realm.</small></form>
+  </div>
+  <div id="panel-collection" class="panel panel-wide collection-panel hidden" role="dialog" aria-modal="true" aria-labelledby="fish-chronicle-title">
+    <div class="panel-head"><div><span class="panel-kicker">WATERS OF ANASTA</span><h2 id="fish-chronicle-title">Fish Chronicle</h2></div><button class="panel-close" data-close="collection" aria-label="Close Fish Chronicle">&times;</button></div>
+    <div class="collection-summary"><div class="collection-seal"><i></i><strong id="collection-percent">0%</strong></div><div><span>SPECIES DISCOVERED</span><b id="collection-count">0 / 10</b><p id="collection-total">Cast your first line to begin the archive.</p></div><dl><div><dt>Total catches</dt><dd id="collection-catches">0</dd></div><div><dt>Largest catch</dt><dd id="collection-best">--</dd></div></dl></div>
+    <div class="collection-legend"><span><i class="common"></i>Common</span><span><i class="uncommon"></i>Uncommon</span><span><i class="rare"></i>Rare</span><span><i class="legendary"></i>Legendary</span></div>
+    <div id="fish-collection-grid" class="fish-collection-grid"></div>
+  </div>
   <div id="panel-inv" class="panel hidden"><div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div><div id="inv-grid"></div><div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div></div>
   <div id="panel-craft" class="panel panel-wide hidden">
     <div class="panel-head"><div><span class="panel-kicker">CAMP SMITHY</span><h2>Forge & Arsenal</h2></div><button class="panel-close" data-close="craft">×</button></div>
@@ -245,7 +284,9 @@
     </div>
     <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · I bag · C forge · Q quests</div>
   </div>
-  <div id="panel-level" class="panel hidden modal"><h2>Level Up!</h2><p id="level-msg"></p><button id="btn-level-ok" class="pixel-btn small">Continue</button></div>
+  <div id="panel-level" class="panel hidden modal level-ceremony" role="dialog" aria-modal="true" aria-labelledby="level-title">
+    <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>
+  </div>
   <div id="panel-pet" class="panel hidden modal"><h2>A wild friend!</h2><img id="pet-img" width="96" height="96" style="image-rendering:pixelated;margin:0 auto;display:block"/><p id="pet-msg"></p><button id="btn-pet-ok" class="pixel-btn small">Adopt</button></div>
   <div id="death-screen" class="panel hidden modal"><h2>Fallen</h2><p>The forest claims another traveler.</p><button id="btn-respawn" class="pixel-btn small">Respawn at Camp</button></div>
 </div>

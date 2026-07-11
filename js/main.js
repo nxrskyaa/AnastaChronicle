@@ -10,7 +10,10 @@ import {
 } from "./chargen.js";
 import { audio } from "./audio.js";
 import { computeView } from "./view.js";
-import { connectMultiplayer, net } from "./net.js";
+import {
+  connectMultiplayer, net, remoteCount, requestBossState,
+  sendChat, sendDuel,
+} from "./net.js";
 import { CLASSES } from "./classes.js";
 
 const boot = document.getElementById("boot");
@@ -254,7 +257,6 @@ function wireSettings() {
   const mBtn = document.getElementById("move-btn-btn"), mTap = document.getElementById("move-tap-btn");
   mBtn?.addEventListener("click", () => { if (game) game.moveMode = "button"; mBtn.classList.add("active"); mTap.classList.remove("active"); audio.sfx("ui"); });
   mTap?.addEventListener("click", () => { if (game) { game.moveMode = "tap"; game.moveTarget = null; } mTap.classList.add("active"); mBtn.classList.remove("active"); audio.sfx("ui"); });
-  document.getElementById("btn-settings")?.addEventListener("click", () => { audio.sfx("ui"); game?.ui.toggle("settings"); });
   // dpad hold
   const dpadHold = {};
   document.querySelectorAll(".dpad-btn").forEach(b => {
@@ -298,6 +300,85 @@ function savePayload(g) {
     activePetId: g.activePetId || g.pet?.id || null,
     ts: Date.now(),
   };
+}
+
+function wireMultiplayer(g, ui) {
+  ui.setChatSender(sendChat);
+  ui.setDuelSender(sendDuel);
+  ui.setOnlineState(false, 1);
+
+  net.onWelcome = (message) => {
+    if (!Number.isFinite(message.x) || !Number.isFinite(message.y)) return;
+    const drift = Math.hypot(g.player.x - message.x, g.player.y - message.y);
+    if (drift > 32) {
+      g.player.x = message.x; g.player.y = message.y; g.player.vx = 0; g.player.vy = 0;
+      g.moveTarget = null;
+      if (!message.resumed) ui.toast("Realm session restored at Hearth Camp");
+    }
+  };
+  net.onChat = (message) => {
+    ui.receiveChat(message, message.id === net.selfId);
+    const remote = net.remote[message.id];
+    if (remote) { remote.chatText = String(message.text || "").slice(0, 64); remote.chatUntil = g.t + 5; }
+  };
+  net.onDuel = (message) => {
+    if (message.id === net.selfId) {
+      ui.updateDuel(message.active);
+      ui.receiveSystemChat(message.active ? "Duel Mode armed. Only other armed travelers can damage you." : "Safe Mode restored. Player damage disabled.");
+    } else {
+      const traveler = net.remote[message.id];
+      if (traveler && Math.hypot(traveler.x - g.player.x, traveler.y - g.player.y) < 420) {
+        ui.receiveSystemChat(`${traveler.name || "A traveler"} ${message.active ? "armed Duel Mode" : "returned to Safe Mode"}.`);
+      }
+    }
+  };
+  net.onPvpHit = (message) => {
+    if (message.target === net.selfId) {
+      g.damagePlayerPvp(message.damage);
+      g.spawnHit(g.player.x, g.player.y - 22);
+      g.fx.push({ kind: "slashbig", x: g.player.x, y: g.player.y - 6, dir: g.player.dir, t: 0, dur: .25 });
+      const now = performance.now();
+      if (!g._lastDuelToast || now - g._lastDuelToast > 1100) { ui.toast(`${message.sourceName || "Traveler"} struck you · ${message.damage}`); g._lastDuelToast = now; }
+    } else if (message.source === net.selfId) {
+      const target = net.remote[message.target];
+      if (target) {
+        g.spawnHit(target.rx, target.ry - 22);
+        g.addFloater(target.rx, target.ry - 36, message.damage, message.kind === "skill");
+      }
+    }
+  };
+  net.onPvpReject = (message) => {
+    if (message.reason === "rate_limited") return;
+    const reasons = { mutual_duel_required: "Both travelers must arm Duel Mode.", out_of_range: "Duel target moved out of range.", invalid_target: "Duel target is no longer in the realm." };
+    ui.toast(reasons[message.reason] || "The realm rejected that duel strike.");
+  };
+  net.onBossState = (boss) => g.applySharedBoss?.(boss);
+  net.onBossHit = (message) => g.applySharedBossHit?.(message);
+  net.onBossAttack = (message) => g.applySharedBossAttack?.(message);
+  net.onBossDefeated = (message) => g.applySharedBossDefeat?.(message);
+  net.onBossReward = (message) => g.applySharedBossReward?.(message);
+  net.onBossReject = (message) => {
+    if (message.reason === "rate_limited") return;
+    const reasons = { out_of_range: "Enter the Infernyx arena before attacking.", inactive: "Infernyx is sealed. The next awakening is being prepared.", stale_boss: "That boss echo has already faded." };
+    ui.toast(reasons[message.reason] || "Boss strike rejected by the realm.");
+  };
+
+  let wasConnected = false;
+  g._presenceTimer = setInterval(() => {
+    const connected = !!net.connected;
+    ui.setOnlineState(connected, connected ? remoteCount() + 1 : 1);
+    if (connected && ui.duelActive !== net.duelActive) ui.updateDuel(net.duelActive);
+    if (connected && !wasConnected) {
+      ui.receiveSystemChat("Connected to the shared Forest Realm.");
+      ui.toast("Realm linked · multiplayer online");
+      requestBossState();
+    } else if (!connected && wasConnected) {
+      if (g.boss?.shared) { g.boss = null; g.ui.syncBoss?.(null); }
+      ui.receiveSystemChat("Realm connection lost. Adventure continues in local mode.");
+      ui.toast("Realm link lost · continuing locally");
+    }
+    wasConnected = connected;
+  }, 750);
 }
 
 function startGame(savedLook, savedName, saveData) {
@@ -345,6 +426,7 @@ function startGame(savedLook, savedName, saveData) {
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
     window.__ANASTA__ = game;
     wireSettings();
+    wireMultiplayer(game, ui);
     // recompute internal resolution on rotate/resize so it stays fullscreen
     addEventListener("resize", () => computeView(canvas));
     game.start();
@@ -359,10 +441,7 @@ function startGame(savedLook, savedName, saveData) {
     // Multiplayer presence (no-op unless enabled in config.js). Fire-and-forget.
     connectMultiplayer(look, look.name, { x: game.player.x, y: game.player.y })
       .then((room) => {
-        if (room) {
-          net.onChat = (m) => game.ui.toast(`${m.name}: ${m.text}`);
-          game.ui.toast("Connected — you're online!");
-        }
+        if (!room) game.ui.setOnlineState(false, 1);
       })
       .catch(() => {});
   } catch (e) { console.error(e); alert("Start failed: " + e.message); }

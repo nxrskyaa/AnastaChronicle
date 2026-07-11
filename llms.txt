@@ -1,7 +1,18 @@
 # llms.txt — Anasta Chronicle (AnastaChronicle)
 
 > Context file for continuing this project with another AI (e.g. Claude).
-> Last updated: 2026-07-10. Live client: https://anasta-chronicle.vercel.app
+> Last updated: 2026-07-11. Live client: https://anasta-chronicle.vercel.app
+
+## 2026-07-11 CURRENT STATE (overrides older TODO/history below)
+- Production multiplayer source of truth is `Anasta-server/worker.mjs`, protocol v2 on Cloudflare Durable Objects. `src/index.js` is legacy only.
+- Realm chat now has a real panel, unread dock, world speech bubbles, sanitization and reconnect with a 60-second position resume token.
+- Duel PvP is mutual opt-in. Server validates both consent flags, bounded movement, range, per-kind damage caps and cadence before broadcasting accepted damage.
+- Infernyx uses one server HP pool, server-selected synchronized attack targets, contributor-only equal rewards, three-minute respawn and reconnect-safe contribution recovery.
+- Client has a code-generated Realm Menu/HUD, stable no-shake level ceremony, illustrated 10-species Fish Chronicle, detailed inventory material/weapon art and upgraded chest/skill FX.
+- World now has 28 active NPCs: 8 original quest NPCs plus 20 deterministic residents across West Road, Reed Pond, North Shrine, Umbral Forest, Frostfield and Azure Coast.
+- Procedural art pass added detailed harvest nodes, material icons, pet chests, weapon silhouettes and dragon variants. No external art was introduced.
+- Companion Sanctuary remains 14 pets with active-pet switching and persistence.
+- Current client transport exports `sendChat`, `sendDuel`, `sendPvpHit`, `requestBossState`, `sendBossHit`; callbacks include chat, duel, PvP, boss state/hit/attack/defeat/reward.
 
 ## What this project is
 A pixel-art, top-down 2.5D browser MMO called **Anasta Chronicle**. Forest world,

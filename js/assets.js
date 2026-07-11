@@ -176,13 +176,124 @@ function bushSprite() {
   return cv;
 }
 
-function chestSprite(open) {
+function resourceSprite(kind) {
+  const cv = canvas(28, 32);
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  const edge = "#20272a";
+  shadow(ctx, 14, 28, kind === "crystal_ore" ? 24 : 20);
+
+  if (kind === "bamboo_shoot") {
+    // Three segmented culms and broad folded leaves make the wood source clear.
+    px(ctx, 7, 15, 4, 13, edge); px(ctx, 8, 14, 2, 13, "#4f873f"); px(ctx, 8, 15, 1, 11, "#9bd16a");
+    px(ctx, 17, 13, 4, 15, edge); px(ctx, 18, 12, 2, 15, "#3f7739"); px(ctx, 18, 13, 1, 12, "#86c65d");
+    for (const [x, y] of [[6, 20], [16, 18], [16, 24]]) { px(ctx, x, y, 6, 2, edge); px(ctx, x + 1, y, 4, 1, "#acd977"); }
+    px(ctx, 11, 8, 5, 20, edge); px(ctx, 12, 7, 3, 20, "#46763a");
+    px(ctx, 13, 8, 1, 18, "#8fcf62");
+    for (const y of [13, 19, 24]) { px(ctx, 10, y, 7, 2, edge); px(ctx, 11, y, 5, 1, "#b0dd72"); }
+    px(ctx, 12, 4, 3, 4, edge); px(ctx, 13, 3, 2, 4, "#b6e178");
+    for (const [x, y, w, flip] of [[2, 9, 9, 0], [16, 11, 10, 1], [3, 17, 8, 0], [16, 20, 8, 1]]) {
+      px(ctx, x, y + 1, w, 4, edge);
+      px(ctx, x + 1, y + 1, w - 2, 2, flip ? "#5da447" : "#72b856");
+      px(ctx, flip ? x + 1 : x + w - 2, y, 2, 2, "#9ad76a");
+    }
+    px(ctx, 8, 26, 12, 2, "#315e32"); px(ctx, 11, 25, 7, 2, "#639b45");
+  } else if (kind === "herb_bush") {
+    // A woven root basket shape underneath layered medicinal leaves and flowers.
+    px(ctx, 6, 22, 16, 6, edge); px(ctx, 8, 23, 12, 4, "#5a3d29");
+    px(ctx, 9, 24, 2, 3, "#a06b3d"); px(ctx, 14, 23, 2, 4, "#8a5a34"); px(ctx, 18, 24, 1, 3, "#c18345");
+    for (const [x, y, c] of [[4, 13, "#347a3d"], [9, 8, "#4d9d4e"], [15, 7, "#62ad55"], [20, 12, "#3f8e43"], [11, 15, "#74bd5d"], [17, 16, "#559f48"]]) {
+      px(ctx, x, y, 6, 8, edge); px(ctx, x + 1, y + 1, 4, 6, c);
+      px(ctx, x + 2, y + 1, 1, 5, "#9bd477");
+    }
+    for (const [x, y, c] of [[6, 13, "#ffe39b"], [17, 9, "#f5b6c1"], [21, 17, "#d8c6ff"]]) {
+      px(ctx, x - 1, y, 4, 2, edge); px(ctx, x, y - 1, 2, 4, edge);
+      px(ctx, x, y, 2, 2, c); px(ctx, x + 1, y + 1, 1, 1, "#fff8d0");
+    }
+  } else if (kind === "crystal_ore") {
+    // Heavy ore pedestal with four distinct, faceted crystal teeth.
+    px(ctx, 3, 21, 22, 7, edge); px(ctx, 5, 19, 18, 8, "#46535d");
+    px(ctx, 7, 20, 7, 3, "#707d84"); px(ctx, 16, 23, 5, 3, "#303c45");
+    const shards = [
+      [11, 4, 7, 18, "#73b9df", "#d7f5ff"],
+      [4, 11, 8, 13, "#578eaf", "#b8e8fb"],
+      [17, 9, 7, 15, "#69a6cf", "#c9f1ff"],
+      [8, 14, 5, 10, "#8bcbea", "#ecfbff"],
+    ];
+    for (const [x, y, w, h, mid, hi] of shards) {
+      px(ctx, x, y + 3, w, h - 3, edge); px(ctx, x + 2, y, w - 3, 3, edge);
+      px(ctx, x + 1, y + 4, w - 2, h - 5, mid); px(ctx, x + 2, y + 2, w - 4, 3, mid);
+      px(ctx, x + 2, y + 4, 1, Math.max(3, h - 7), hi);
+      px(ctx, x + w - 3, y + 6, 1, Math.max(2, h - 9), "#3f749b");
+    }
+    px(ctx, 13, 7, 2, 3, "#ffffff"); px(ctx, 20, 12, 1, 2, "#e9fbff");
+  } else {
+    // Glow-vine: a coiled gel-bearing plant with luminous seed pods.
+    px(ctx, 5, 25, 18, 3, edge); px(ctx, 7, 24, 14, 3, "#335d3b");
+    const stems = [[13, 26, 8, 7], [14, 25, 20, 5], [12, 25, 4, 8]];
+    for (const [x1, y1, x2, y2] of stems) {
+      pixelStem(ctx, x1, y1, x2, y2, edge, 3);
+      pixelStem(ctx, x1, y1, x2, y2, "#4c8b55", 1);
+    }
+    for (const [x, y, c] of [[5, 7, "#79e2a7"], [19, 5, "#63dca4"], [2, 15, "#5ac990"], [20, 14, "#92efbd"]]) {
+      px(ctx, x - 1, y + 2, 8, 7, edge); px(ctx, x, y + 1, 6, 7, "#328b64");
+      px(ctx, x + 1, y, 4, 7, c); px(ctx, x + 2, y + 1, 2, 3, "#e2ffe9");
+      px(ctx, x + 1, y + 6, 4, 2, "#286f55");
+    }
+    px(ctx, 11, 15, 4, 3, "#9dffd0"); px(ctx, 12, 16, 2, 1, "#ffffff");
+  }
+  return cv;
+}
+
+function pixelStem(ctx, x0, y0, x1, y1, color, size = 1) {
+  let x = x0, y = y0;
+  const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  while (true) {
+    px(ctx, x, y, size, size, color);
+    if (x === x1 && y === y1) break;
+    const e2 = err * 2;
+    if (e2 >= dy) { err += dy; x += sx; }
+    if (e2 <= dx) { err += dx; y += sy; }
+  }
+}
+
+function materialSprite(kind) {
+  const cv = canvas(20, 20);
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  if (kind === "wood") {
+    px(ctx, 3, 5, 14, 11, "#34251f"); px(ctx, 4, 4, 12, 11, "#855333");
+    px(ctx, 5, 5, 10, 3, "#b97a45"); px(ctx, 6, 9, 8, 2, "#673b2b");
+    px(ctx, 12, 5, 3, 3, "#e0a05c"); px(ctx, 5, 13, 4, 1, "#d08a4d");
+  } else if (kind === "ore") {
+    px(ctx, 2, 10, 16, 7, "#29323b"); px(ctx, 4, 7, 12, 9, "#596875");
+    px(ctx, 7, 3, 6, 11, "#4689b0"); px(ctx, 8, 2, 4, 4, "#a9e8ff");
+    px(ctx, 9, 5, 1, 6, "#e5fbff"); px(ctx, 4, 12, 4, 2, "#84939a");
+  } else if (kind === "gel") {
+    px(ctx, 4, 6, 12, 11, "#214d46"); px(ctx, 3, 9, 14, 6, "#328f73");
+    px(ctx, 5, 5, 10, 10, "#61c99a"); px(ctx, 7, 4, 6, 3, "#8be7b7");
+    px(ctx, 7, 7, 3, 3, "#d6ffe9"); px(ctx, 13, 11, 2, 3, "#2d775f");
+    px(ctx, 6, 15, 3, 2, "#19463f"); px(ctx, 12, 15, 3, 2, "#19463f");
+  } else {
+    px(ctx, 9, 3, 2, 15, "#2f6034");
+    for (const [x, y, c] of [[3, 5, "#60a94e"], [10, 7, "#79be59"], [4, 11, "#4e9344"], [10, 12, "#8acb66"]]) {
+      px(ctx, x, y, 7, 5, "#254d2d"); px(ctx, x + 1, y, 5, 4, c); px(ctx, x + 2, y + 1, 3, 1, "#b4df85");
+    }
+    px(ctx, 8, 8, 4, 4, "#eadb8a"); px(ctx, 9, 9, 2, 2, "#fff4bc");
+  }
+  return cv;
+}
+
+function chestSprite(open, pet = false) {
   const cv = canvas(24, 20);
   const ctx = cv.getContext("2d");
   ctx.imageSmoothingEnabled = false;
   shadow(ctx, 12, 18, 20);
-  const edge = "#251c25", woodD = "#63382b", wood = "#9a542f", woodL = "#ca7840";
-  const iron = "#423f4a", goldD = "#9c6a24", gold = "#e3ae42", shine = "#ffe28a";
+  const edge = pet ? "#231f35" : "#251c25";
+  const woodD = pet ? "#49385d" : "#63382b", wood = pet ? "#715184" : "#9a542f", woodL = pet ? "#a77ac0" : "#ca7840";
+  const iron = pet ? "#4d4660" : "#423f4a", goldD = pet ? "#8f6823" : "#9c6a24", gold = pet ? "#f0c554" : "#e3ae42", shine = "#fff0a5";
 
   if (!open) {
     px(ctx, 3, 5, 18, 13, edge);
@@ -200,6 +311,14 @@ function chestSprite(open) {
     px(ctx, 11, 9, 2, 4, shine);
     px(ctx, 7, 6, 5, 1, "#e99a55");
     px(ctx, 5, 12, 2, 1, "#d98a4c");
+    px(ctx, 16, 11, 2, 2, pet ? "#dcb6ff" : "#f0a05e");
+    px(ctx, 6, 15, 3, 1, pet ? "#8f6cac" : "#7a402c");
+    if (pet) {
+      // Paw-lock and moonlit corners distinguish companion caches at a glance.
+      px(ctx, 7, 3, 2, 2, "#ffe38a"); px(ctx, 15, 3, 2, 2, "#ffe38a");
+      px(ctx, 10, 10, 1, 1, "#fff1ad"); px(ctx, 13, 10, 1, 1, "#fff1ad");
+      px(ctx, 11, 11, 2, 2, "#fff1ad");
+    }
   } else {
     // Raised lid, bright interior, and the same reinforced base.
     px(ctx, 3, 1, 18, 8, edge);
@@ -219,6 +338,9 @@ function chestSprite(open) {
     px(ctx, 7, 8, 2, 2, "#ffe99b");
     px(ctx, 15, 7, 2, 2, "#ffd25b");
     px(ctx, 11, 6, 1, 2, "#fff3bd");
+    px(ctx, 6, 10, 2, 1, pet ? "#d8b6ff" : "#f4b25f");
+    px(ctx, 16, 9, 2, 1, pet ? "#f6dcff" : "#ffe281");
+    if (pet) { px(ctx, 10, 5, 4, 2, "#c98cff"); px(ctx, 11, 4, 2, 1, "#fff1ad"); }
   }
   return cv;
 }
@@ -337,6 +459,16 @@ const BUILDERS = [
   ["bush_0", bushSprite],
   ["fx/chest", () => chestSprite(false)],
   ["fx/chest_open", () => chestSprite(true)],
+  ["fx/chest_pet", () => chestSprite(false, true)],
+  ["fx/chest_pet_open", () => chestSprite(true, true)],
+  ["resource/bamboo_shoot", () => resourceSprite("bamboo_shoot")],
+  ["resource/herb_bush", () => resourceSprite("herb_bush")],
+  ["resource/crystal_ore", () => resourceSprite("crystal_ore")],
+  ["resource/glow_vine", () => resourceSprite("glow_vine")],
+  ["item/wood", () => materialSprite("wood")],
+  ["item/ore", () => materialSprite("ore")],
+  ["item/gel", () => materialSprite("gel")],
+  ["item/herb", () => materialSprite("herb")],
   ["fx/hit_0", () => hitSprite(0)],
   ["fx/hit_1", () => hitSprite(1)],
   ["fx/hit_2", () => hitSprite(2)],

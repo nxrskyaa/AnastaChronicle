@@ -506,55 +506,78 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 function drawPixelBow(ctx, dragon, atkPhase) {
-  const edge = dragon ? "#57251d" : "#432d20";
-  const wood = dragon ? "#a54428" : "#98683a";
-  const shine = dragon ? "#ff8b3d" : "#d7a85b";
-  const string = dragon ? "#ffc35e" : "#e7dfc5";
+  const edge = dragon ? "#32191b" : "#30251f";
+  const dark = dragon ? "#70231f" : "#674126";
+  const wood = dragon ? "#b94025" : "#a66e36";
+  const shine = dragon ? "#ff9f3e" : "#e1b45f";
+  const string = dragon ? "#ffe77c" : "#eee5c9";
   const pull = atkPhase == null ? -1 : -1 - Math.round(Math.sin(Math.PI * atkPhase) * 4);
 
-  // Thick stair-step limbs stay legible after directional rotation.
-  pixelLine(ctx, -1, -1, 1, -5, edge, 2); pixelLine(ctx, 1, -5, 4, -9, edge, 2);
-  pixelLine(ctx, -1, 1, 1, 5, edge, 2); pixelLine(ctx, 1, 5, 4, 9, edge, 2);
-  pixelLine(ctx, 0, -2, 2, -5, wood, 1); pixelLine(ctx, 2, -5, 5, -9, wood, 1);
-  pixelLine(ctx, 0, 2, 2, 5, wood, 1); pixelLine(ctx, 2, 5, 5, 9, wood, 1);
-  px(ctx, -2, -2, 3, 4, shine); px(ctx, -1, -1, 2, 2, "#64412a");
-  pixelLine(ctx, 5, -9, pull, 0, string); pixelLine(ctx, pull, 0, 5, 9, string);
+  // Layered recurved limbs: dark horn belly, timber core, bright shaved edge.
+  pixelLine(ctx, -2, -1, 0, -5, edge, 3); pixelLine(ctx, 0, -5, 4, -9, edge, 3);
+  pixelLine(ctx, 4, -9, 6, -11, edge, 2);
+  pixelLine(ctx, -2, 1, 0, 5, edge, 3); pixelLine(ctx, 0, 5, 4, 9, edge, 3);
+  pixelLine(ctx, 4, 9, 6, 11, edge, 2);
+  pixelLine(ctx, -1, -2, 1, -5, dark, 2); pixelLine(ctx, 1, -5, 5, -10, wood, 2);
+  pixelLine(ctx, -1, 2, 1, 5, dark, 2); pixelLine(ctx, 1, 5, 5, 10, wood, 2);
+  pixelLine(ctx, 2, -6, 5, -10, shine); pixelLine(ctx, 2, 6, 5, 10, shine);
+  px(ctx, -3, -3, 4, 6, edge); px(ctx, -2, -2, 3, 4, dragon ? "#7e2c20" : "#765033");
+  px(ctx, -1, -2, 1, 3, shine); px(ctx, -4, -1, 2, 2, dragon ? "#ffcc59" : "#c9a66a");
+  pixelLine(ctx, 6, -11, pull, 0, string); pixelLine(ctx, pull, 0, 6, 11, string);
+  px(ctx, 5, -12, 3, 2, dragon ? "#ff7131" : "#c5d4c2");
+  px(ctx, 5, 10, 3, 2, dragon ? "#ff7131" : "#c5d4c2");
 
   if (dragon) {
-    px(ctx, 3, -11, 4, 3, "#e34e27"); px(ctx, 5, -12, 3, 2, "#ffb047");
-    px(ctx, 3, 8, 4, 3, "#e34e27"); px(ctx, 5, 10, 3, 2, "#ffb047");
-    px(ctx, 1, -6, 2, 2, "#ffcf67"); px(ctx, 1, 5, 2, 2, "#ffcf67");
+    // Horn tips and scale studs create the dragon silhouette without smooth glow.
+    px(ctx, 2, -11, 3, 3, "#8c251f"); px(ctx, 4, -13, 3, 3, "#e54d28"); px(ctx, 6, -14, 2, 2, "#ffc65a");
+    px(ctx, 2, 9, 3, 3, "#8c251f"); px(ctx, 4, 11, 3, 3, "#e54d28"); px(ctx, 6, 13, 2, 2, "#ffc65a");
+    px(ctx, 0, -7, 2, 2, "#ffca55"); px(ctx, 0, 5, 2, 2, "#ffca55");
+    px(ctx, -3, -1, 2, 2, "#fff09c");
+  } else {
+    px(ctx, 1, -7, 2, 2, "#6d8f69"); px(ctx, 1, 5, 2, 2, "#6d8f69");
   }
   if (atkPhase != null && atkPhase < .78) {
-    pixelLine(ctx, pull, 0, 12, 0, dragon ? "#ffdc7d" : "#b58a50");
-    px(ctx, 10, -2, 3, 5, dragon ? "#ff6a32" : "#dfe6e4");
-    px(ctx, pull, -2, 3, 1, dragon ? "#ff8b3d" : "#6c8c70");
-    px(ctx, pull, 2, 3, 1, dragon ? "#ffb348" : "#6c8c70");
+    pixelLine(ctx, pull, 0, 13, 0, dragon ? "#ffbd45" : "#a87843");
+    pixelLine(ctx, pull + 1, -1, 12, -1, dragon ? "#fff09a" : "#dbe2d6");
+    px(ctx, 11, -2, 3, 5, edge); px(ctx, 12, -1, 2, 3, dragon ? "#ff6a32" : "#edf4f1");
+    px(ctx, pull, -3, 4, 2, dragon ? "#ff7733" : "#52785a");
+    px(ctx, pull, 2, 4, 2, dragon ? "#ffb84d" : "#6f9d6e");
   }
 }
 
 function drawPixelStaff(ctx, dragon, atkPhase) {
-  const shaft = dragon ? "#4a2118" : "#51351f";
-  const shaftHi = dragon ? "#a84826" : "#9a6a38";
-  const metal = dragon ? "#ff7a32" : "#8662aa";
-  const crystal = dragon ? "#ffcf5a" : "#9deaff";
-  const core = dragon ? "#fff09a" : "#e4fbff";
+  const edge = dragon ? "#2b171a" : "#28243a";
+  const shaft = dragon ? "#57251d" : "#4d3829";
+  const shaftHi = dragon ? "#b64a29" : "#a37743";
+  const metal = dragon ? "#db4829" : "#7860aa";
+  const metalHi = dragon ? "#ff9a3c" : "#b09add";
+  const crystal = dragon ? "#ffc747" : "#6ed8ef";
+  const core = dragon ? "#fff3a0" : "#e7fdff";
   const pulse = atkPhase == null ? 0 : Math.round(Math.sin(Math.PI * atkPhase) * 2);
 
-  px(ctx, -2, -16, 4, 22, "#2a2020"); px(ctx, -1, -16, 2, 22, shaft);
-  px(ctx, 0, -14, 1, 18, shaftHi); px(ctx, -2, 1, 4, 3, metal);
-  pixelLine(ctx, -1, -15, -6, -20, shaft, 2); pixelLine(ctx, 1, -15, 6, -20, shaft, 2);
-  px(ctx, -7, -22, 3, 4, metal); px(ctx, 4, -22, 3, 4, metal);
-  // Faceted focus crystal, enlarged during the cast without smooth circles.
-  px(ctx, -3 - pulse, -23 - pulse, 6 + pulse * 2, 6 + pulse * 2, metal);
-  px(ctx, -2 - pulse, -24 - pulse, 4 + pulse * 2, 8 + pulse * 2, crystal);
-  px(ctx, -1, -23 - pulse, 2, 6 + pulse * 2, core);
+  // Knotted shaft with alternating metal collars and a split crown.
+  px(ctx, -2, -17, 4, 23, edge); px(ctx, -1, -17, 2, 23, shaft);
+  px(ctx, 0, -15, 1, 18, shaftHi); px(ctx, -3, -10, 5, 3, edge); px(ctx, -2, -9, 4, 1, metalHi);
+  px(ctx, -3, 0, 6, 4, edge); px(ctx, -2, 1, 4, 2, metal);
+  pixelLine(ctx, -1, -17, -7, -22, edge, 3); pixelLine(ctx, 1, -17, 7, -22, edge, 3);
+  pixelLine(ctx, -1, -17, -6, -22, shaftHi, 1); pixelLine(ctx, 1, -17, 6, -22, shaftHi, 1);
+  px(ctx, -9, -24, 4, 5, edge); px(ctx, 5, -24, 4, 5, edge);
+  px(ctx, -8, -23, 3, 3, metal); px(ctx, 5, -23, 3, 3, metal);
+  px(ctx, -7, -23, 1, 2, metalHi); px(ctx, 6, -23, 1, 2, metalHi);
+  // Faceted focus crystal grows in discrete pixels during the cast.
+  px(ctx, -4 - pulse, -24 - pulse, 8 + pulse * 2, 7 + pulse * 2, edge);
+  px(ctx, -3 - pulse, -25 - pulse, 6 + pulse * 2, 9 + pulse * 2, edge);
+  px(ctx, -2 - pulse, -25 - pulse, 4 + pulse * 2, 8 + pulse * 2, crystal);
+  px(ctx, -1, -24 - pulse, 2, 6 + pulse * 2, core);
+  px(ctx, 1 + pulse, -22, 1, 4, dragon ? "#aa2e25" : "#378aa9");
   if (dragon) {
-    px(ctx, -8, -24, 3, 3, "#d73f26"); px(ctx, 5, -24, 3, 3, "#d73f26");
-    px(ctx, -9, -25, 2, 2, "#ff9d3e"); px(ctx, 7, -25, 2, 2, "#ff9d3e");
-    px(ctx, -3, -12, 2, 3, "#ff6b2e"); px(ctx, 1, -8, 2, 3, "#ff9d3e");
+    px(ctx, -10, -26, 3, 4, "#7e251f"); px(ctx, 7, -26, 3, 4, "#7e251f");
+    px(ctx, -11, -27, 2, 2, "#ff8738"); px(ctx, 9, -27, 2, 2, "#ff8738");
+    px(ctx, -3, -14, 2, 3, "#ff6b2e"); px(ctx, 1, -6, 2, 3, "#ffae42");
+    px(ctx, -3, -4, 2, 2, "#fff09a");
   } else {
-    px(ctx, -3, -12, 2, 3, "#6f4b93"); px(ctx, 1, -8, 2, 3, "#5bb8c7");
+    px(ctx, -3, -14, 2, 3, "#8065b3"); px(ctx, 1, -6, 2, 3, "#55bdd0");
+    px(ctx, -3, -4, 2, 2, "#c7f6ff");
   }
 }
 
@@ -576,7 +599,7 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   else { hx = 23; hy = 22; baseAng = 0; }
   const sweep = isBow ? 0
     : isStaff ? (atkPhase == null ? 0 : Math.sin(Math.PI * atkPhase) * (dir === "up" || dir === "left" ? -.12 : .12))
-      : atkPhase == null ? -0.55 : -1.0 + 2.0 * atkPhase;
+      : atkPhase == null ? -0.55 : -0.8 + 1.6 * atkPhase;
   const ang = baseAng + sweep;
   ctx.save();
   ctx.translate(hx, hy);
@@ -584,37 +607,63 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   const O = "#2a2630";
 
   if (weapon === "sword") {
-    // crossguard sword
-    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-1.5, 0, 3, 5);       // grip
-    ctx.fillStyle = "#e8c96a"; ctx.fillRect(-1.5, 4, 3, 2);        // pommel
-    ctx.fillStyle = "#c9a23e"; ctx.fillRect(-4, -1, 8, 2);         // crossguard
-    ctx.fillStyle = "#dfe4ee"; ctx.fillRect(-2, -16, 4, 15);       // blade
-    ctx.fillStyle = "#f4f8ff"; ctx.fillRect(-2, -16, 1.5, 15);     // edge highlight
-    ctx.fillStyle = "#aab0c0"; ctx.beginPath(); ctx.moveTo(-2, -16); ctx.lineTo(2, -16); ctx.lineTo(0, -19); ctx.fill(); // tip
+    // Broad, faceted adventurer blade with wrapped grip and a stepped guard.
+    px(ctx, -2, 0, 4, 5, O); px(ctx, -1, 0, 2, 5, "#70422e");
+    px(ctx, -2, 1, 4, 1, "#bd7650"); px(ctx, -2, 3, 4, 1, "#bd7650");
+    px(ctx, -3, 4, 6, 3, O); px(ctx, -2, 4, 4, 2, "#d7ad48"); px(ctx, -1, 4, 2, 1, "#ffe187");
+    px(ctx, -5, -2, 10, 4, O); px(ctx, -4, -1, 8, 2, "#bd8b32");
+    px(ctx, -5, -1, 2, 2, "#e3b954"); px(ctx, 3, -1, 2, 2, "#e3b954");
+    px(ctx, -3, -17, 6, 16, O); px(ctx, -2, -18, 4, 2, O); px(ctx, -1, -20, 2, 3, O);
+    px(ctx, -2, -16, 4, 14, "#aeb9c7"); px(ctx, -1, -18, 2, 16, "#e7edf4");
+    px(ctx, -1, -16, 1, 12, "#ffffff"); px(ctx, 1, -14, 1, 9, "#778897");
+    px(ctx, -1, -4, 2, 2, "#8fc6d6");
   } else if (weapon === "axe") {
-    ctx.fillStyle = "#6a4324"; ctx.fillRect(-1.5, -14, 3, 20);     // handle
-    ctx.fillStyle = "#c9cdd8"; ctx.beginPath();                    // head
-    ctx.moveTo(1, -14); ctx.quadraticCurveTo(11, -13, 9, -4); ctx.lineTo(1, -6); ctx.fill();
-    ctx.fillStyle = "#9aa0ae"; ctx.beginPath(); ctx.moveTo(1, -12); ctx.quadraticCurveTo(8, -11, 7, -6); ctx.lineTo(1, -7); ctx.fill();
+    // Bearded forest axe: weighted asymmetric head, reinforced eye and grip wrap.
+    px(ctx, -2, -14, 4, 20, O); px(ctx, -1, -13, 2, 18, "#71482a");
+    px(ctx, 0, -12, 1, 16, "#b37a42"); px(ctx, -2, 1, 4, 4, "#4b3126");
+    px(ctx, -3, 1, 5, 1, "#d18b4b"); px(ctx, -3, 4, 5, 1, "#d18b4b");
+    px(ctx, -3, -16, 7, 8, O); px(ctx, 3, -15, 6, 3, O); px(ctx, 6, -13, 4, 7, O);
+    px(ctx, -2, -15, 6, 6, "#66727d"); px(ctx, 3, -14, 4, 3, "#9aa7b3");
+    px(ctx, 5, -11, 4, 4, "#cbd4dc"); px(ctx, 8, -10, 1, 3, "#f4f7f8");
+    px(ctx, -2, -14, 2, 4, "#dfe6ea"); px(ctx, 1, -13, 2, 3, "#3d4650");
+    px(ctx, -3, -15, 2, 3, "#aeb8c1");
   } else if (weapon === "spear") {
-    ctx.fillStyle = "#7a5228"; ctx.fillRect(-1, -20, 2, 26);       // shaft
-    ctx.fillStyle = "#dfe4ee"; ctx.beginPath();                    // head
-    ctx.moveTo(0, -26); ctx.lineTo(-3, -19); ctx.lineTo(3, -19); ctx.fill();
-    ctx.fillStyle = "#c9a23e"; ctx.fillRect(-2, -19, 4, 2);
+    // Long ash shaft with a leaf-shaped head, socket, bindings and field tassel.
+    px(ctx, -2, -19, 4, 26, O); px(ctx, -1, -18, 2, 24, "#79502c");
+    px(ctx, 0, -17, 1, 22, "#bd8245"); px(ctx, -2, -7, 4, 1, "#e0a25b");
+    px(ctx, -3, -20, 6, 4, O); px(ctx, -2, -20, 4, 3, "#b98735");
+    px(ctx, -4, -22, 8, 3, O); px(ctx, -3, -21, 6, 2, "#a33e36");
+    px(ctx, -4, -20, 3, 5, "#bd4b3d"); px(ctx, 1, -20, 3, 5, "#d76548");
+    px(ctx, -4, -25, 8, 5, O); px(ctx, -3, -27, 6, 5, O); px(ctx, -1, -29, 2, 4, O);
+    px(ctx, -3, -24, 6, 3, "#8795a3"); px(ctx, -2, -26, 4, 4, "#cbd5de");
+    px(ctx, -1, -28, 2, 6, "#f7fbff"); px(ctx, 1, -25, 1, 3, "#5d7180");
   } else if (weapon === "dagger") {
-    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-1.5, 0, 3, 4);
-    ctx.fillStyle = "#c9a23e"; ctx.fillRect(-3, -1, 6, 1.5);
-    ctx.fillStyle = "#e2e6f0"; ctx.beginPath(); ctx.moveTo(-2, -1); ctx.lineTo(2, -1); ctx.lineTo(0, -10); ctx.fill();
+    // Compact hooked dagger with dark fuller and a jade pommel.
+    px(ctx, -2, 0, 4, 5, O); px(ctx, -1, 0, 2, 4, "#72513a");
+    px(ctx, -2, 1, 4, 1, "#d19a5e"); px(ctx, -2, 3, 4, 1, "#d19a5e");
+    px(ctx, -3, 4, 6, 2, O); px(ctx, -2, 4, 4, 1, "#5db0a0"); px(ctx, -1, 4, 2, 1, "#b6f1ce");
+    px(ctx, -4, -2, 8, 3, O); px(ctx, -3, -1, 6, 1, "#c28d3c"); px(ctx, 2, -2, 3, 2, "#e9b950");
+    px(ctx, -3, -10, 6, 9, O); px(ctx, -2, -12, 4, 4, O); px(ctx, 0, -13, 2, 3, O);
+    px(ctx, -2, -9, 4, 7, "#9fabb8"); px(ctx, -1, -11, 3, 8, "#e4ebf2");
+    px(ctx, 0, -11, 1, 7, "#ffffff"); px(ctx, -2, -7, 1, 4, "#546775");
   } else if (weapon === "bow") {
     drawPixelBow(ctx, false, atkPhase);
   } else if (weapon === "staff") {
     drawPixelStaff(ctx, false, atkPhase);
   } else if (weapon === "dragonblade") {
-    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-1.5, 0, 3, 5);
-    ctx.fillStyle = "#ff7a2a"; ctx.fillRect(-4, -1, 8, 2);          // glowing crossguard
-    ctx.fillStyle = "#e05020"; ctx.fillRect(-2, -17, 4, 16);
-    ctx.fillStyle = "#ff9050"; ctx.fillRect(-2, -17, 1.5, 16);
-    ctx.fillStyle = "#ffce5a"; ctx.beginPath(); ctx.moveTo(-2, -17); ctx.lineTo(2, -17); ctx.lineTo(0, -21); ctx.fill();
+    // Jagged obsidian spine, molten fuller, scale guard and eye-stone pommel.
+    px(ctx, -2, 0, 4, 7, "#27191b"); px(ctx, -1, 0, 2, 6, "#743324");
+    px(ctx, -2, 1, 4, 1, "#d65a2c"); px(ctx, -2, 4, 4, 1, "#ff9b3c");
+    px(ctx, -3, 5, 6, 3, "#29191d"); px(ctx, -2, 6, 4, 1, "#b62f27");
+    px(ctx, -1, 6, 2, 1, "#fff074");
+    px(ctx, -5, -3, 10, 5, "#2b181b"); px(ctx, -4, -2, 8, 3, "#8f2922");
+    px(ctx, -5, -2, 3, 2, "#e14826"); px(ctx, 2, -2, 3, 2, "#e14826");
+    px(ctx, -4, -18, 8, 17, "#281a20"); px(ctx, -3, -20, 6, 5, "#281a20");
+    px(ctx, -1, -23, 3, 5, "#281a20"); px(ctx, -5, -14, 3, 4, "#281a20"); px(ctx, 2, -10, 4, 4, "#281a20");
+    px(ctx, -3, -17, 6, 15, "#8e2925"); px(ctx, -2, -19, 4, 5, "#c83c25");
+    px(ctx, -1, -21, 2, 19, "#ff782d"); px(ctx, 0, -18, 1, 14, "#ffd256");
+    px(ctx, -3, -13, 2, 3, "#df4726"); px(ctx, 2, -9, 2, 3, "#f35a28");
+    px(ctx, -1, -9, 2, 2, "#fff29a");
   } else if (weapon === "dragonbow") {
     drawPixelBow(ctx, true, atkPhase);
   } else if (weapon === "dragonstaff") {
@@ -623,10 +672,15 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   ctx.restore();
 
   if (atkPhase != null && atkPhase > 0.12 && atkPhase < 0.88 && !isBow && !isStaff) {
-    ctx.save(); ctx.globalAlpha = 0.4;
-    ctx.strokeStyle = "#eaf2ff"; ctx.lineWidth = 2.5;
+    const dragon = weapon === "dragonblade";
+    ctx.save(); ctx.globalAlpha = dragon ? 0.62 : 0.46;
+    ctx.strokeStyle = dragon ? "#ff9a3c" : weapon === "dagger" ? "#9ff5db" : "#eaf2ff";
+    ctx.lineWidth = weapon === "axe" ? 3.5 : 2.5;
     const reach = weapon === "spear" ? 22 : weapon === "dagger" ? 10 : 16;
     ctx.beginPath(); ctx.arc(hx, hy, reach, baseAng - 1.0, ang); ctx.stroke();
+    ctx.globalAlpha *= .55;
+    ctx.strokeStyle = dragon ? "#fff09a" : "#ffffff"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(hx, hy, reach + 3, baseAng - .82, ang); ctx.stroke();
     ctx.restore();
   }
 }
