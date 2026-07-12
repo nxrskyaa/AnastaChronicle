@@ -1621,6 +1621,7 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
 .battle-panel:not(.hidden) .battle-banner-art .crest{animation:battleCrestPulse 2.1s steps(5,end) infinite}
 
 @media(max-width:720px){
+  .creator-body,.creator-opts,.creator-tabs,.creator-panel{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
   .class-choice-row .class-pick{grid-template-columns:repeat(2,minmax(0,1fr))}
   .class-choice-row .cls-btn{min-height:58px}
   .creator-class-kit{grid-template-columns:1fr}
