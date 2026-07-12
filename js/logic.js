@@ -10,6 +10,9 @@ import { buyItem, getShopListing, marketDayKey, sellItem } from "./shop.js";
 import {
   afkFishingStatus, claimAfkFishingJob, createAfkFishingJob,
 } from "./afkfishing.js";
+import {
+  afkBattleStatus, claimAfkBattleJob, createAfkBattleJob,
+} from "./afkbattle.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -22,6 +25,9 @@ const WEAPONS = {
   dagger: { name: "Dagger", dmg: 14, range: 30, speed: 0.28, cost: 5 },
   bow:    { name: "Bow",    dmg: 18, range: 95, speed: 0.55, cost: 10, ranged: true, projectile: "arrow", pierce: true },
   staff:  { name: "Staff",  dmg: 16, range: 90, speed: 0.5,  cost: 10, ranged: true, projectile: "fire" },
+  scepter:{ name: "Dawn Scepter", dmg: 17, range: 94, speed: 0.52, cost: 9, ranged: true, projectile: "fire", variant: "radiant" },
+  greatblade:{ name: "Reaver Greatblade", dmg: 32, range: 48, speed: 0.66, cost: 13, variant: "blood" },
+  crossbow:{ name: "Wildwood Crossbow", dmg: 21, range: 102, speed: 0.58, cost: 10, ranged: true, projectile: "arrow", pierce: true, variant: "hunter" },
   dragonblade:  { name: "Dragon Blade", dmg: 42, range: 52, speed: 0.42, cost: 10 },
   dragonbow:    { name: "Dragon Bow",   dmg: 34, range: 110, speed: 0.5, cost: 10, ranged: true, projectile: "arrow", pierce: true },
   dragonstaff:  { name: "Dragon Staff", dmg: 36, range: 100, speed: 0.48, cost: 10, ranged: true, projectile: "fire" },
@@ -116,6 +122,7 @@ Game.prototype.update = function (dt) {
   p.evadeCd = Math.max(0, p.evadeCd - dt);
   p.invuln = Math.max(0, p.invuln - dt);
   p.hurtT = Math.max(0, (p.hurtT || 0) - dt);
+  p.bloodOathT = Math.max(0, (p.bloodOathT || 0) - dt);
   for (let i = 0; i < 4; i++) p.skillCd[i] = Math.max(0, p.skillCd[i] - dt);
 
   p.shield = !this.fishing && !!(this.keys.ShiftLeft || this.keys.ShiftRight);
@@ -153,7 +160,7 @@ Game.prototype.update = function (dt) {
     const l = Math.hypot(ix, iy); if (l > 1) { ix /= l; iy /= l; }
   }
 
-  const travelBoost = this.mountSpeedMultiplier() * (1 + (this.foodBuffTotals?.speed || 0));
+  const travelBoost = this.mountSpeedMultiplier() * (1 + (this.foodBuffTotals?.speed || 0)) * (p.bloodOathT > 0 ? 1.16 : 1);
   const maxSp = p.speed * travelBoost * (p.shield ? 0.5 : 1) * (p.attackT > 0 ? 0.4 : 1);
   if (p.evadeT <= 0) {
     if (Math.hypot(ix, iy) > 0.05) {
@@ -257,12 +264,12 @@ Game.prototype.doAttack = function (damageMul = 1) {
   const w = WEAPONS[p.equipped] || WEAPONS.fist;
   if (p.stamina < w.cost * 0.4) return false;
   p.stamina = Math.max(0, p.stamina - w.cost);
-  const durations = { dagger: .18, sword: .28, axe: .42, spear: .34, dragonblade: .36, bow: .34, staff: .38, dragonbow: .4, dragonstaff: .42 };
+  const durations = { dagger: .18, sword: .28, axe: .42, spear: .34, greatblade: .48, bow: .34, crossbow: .37, staff: .38, scepter: .4, dragonblade: .36, dragonbow: .4, dragonstaff: .42 };
   const chained = this.t - (p.lastAttackAt ?? -99) < .68;
   p.comboStep = chained ? ((p.comboStep || 0) + 1) % 3 : 0;
   p.lastAttackAt = this.t;
   p.attackDur = durations[p.equipped] || .26;
-  p.attackT = p.attackDur; p.attackCd = w.speed;
+  p.attackT = p.attackDur; p.attackCd = w.speed * (p.bloodOathT > 0 ? .78 : 1);
   p.attackStyle = w.ranged ? (w.projectile === "arrow" ? "bow" : "cast") : "melee";
   this.audio.sfx("attack");
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
@@ -279,11 +286,11 @@ Game.prototype.doAttack = function (damageMul = 1) {
   if (w.ranged) {
     const kind = w.projectile || "arrow";
     const { dx, dy } = rangedAim(this, kind);
-    const variant = p.equipped.startsWith("dragon") ? "dragon" : kind === "fire" ? "arcane" : "basic";
+    const variant = w.variant || (p.equipped.startsWith("dragon") ? "dragon" : kind === "fire" ? "arcane" : "basic");
     this.spawnProjectile(p.x, attackY, dx, dy, kind, Math.round(dmg), w.pierce, variant);
     p.vx -= dx * 14; p.vy -= dy * 14;
     this.fx.push({ kind: kind === "arrow" ? "bowrelease" : "castburst", x: p.x, y: attackY, angle: Math.atan2(dy, dx), variant, t: 0, dur: .3 });
-    return;
+    return true;
   }
   p.vx += fx * 55; p.vy += fy * 55;
   this.fx.push({ kind: "weaponslash", x: p.x, y: p.y - riderLift, dir: p.dir, weapon: p.equipped, combo: p.comboStep, t: 0, dur: p.attackDur });
@@ -453,6 +460,15 @@ Game.prototype.useSkill = function (i) {
   const foodPower = 1 + (this.foodBuffTotals?.damage || 0);
   const riderLift = this.riderVisualLift();
   const attackY = p.y - 14 - riderLift;
+  const nearestEnemy = (range = Infinity) => {
+    let best = null, bestD = range;
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      const distance = Math.hypot(enemy.x - p.x, enemy.y - p.y);
+      if (distance < bestD) { best = enemy; bestD = distance; }
+    }
+    return best;
+  };
 
   switch (skillId) {
     case "powerstrike": {
@@ -517,6 +533,96 @@ Game.prototype.useSkill = function (i) {
       this.addFloater(p.x, p.y - 36 - this.riderVisualLift(), 12, false, false, true); this.audio.sfx("heal");
       this.fx.push({ kind: "windward", x: p.x, y: p.y, t: 0, dur: .9 }); this.ui.toast("Wind Ward · damage reduced"); break;
     }
+    case "dawnbolt": {
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "fire");
+      p.attackDur = .42; p.attackT = p.attackDur; p.attackStyle = "cast";
+      this.spawnProjectile(p.x, attackY, dx, dy, "fire", Math.round((24 + p.level * 2.6) * (p.dmgMul || 1) * foodPower), true, "holy");
+      this.fx.push({ kind: "castburst", x: p.x, y: attackY, angle: Math.atan2(dy, dx), variant: "holy", t: 0, dur: .5 });
+      this.audio.sfx("heal"); this.ui.toast("Dawn Bolt!"); break;
+    }
+    case "sanctuary": {
+      if (p.stamina < 18) { this.ui.toast("Not enough stamina"); break; }
+      p.stamina -= 18; p.skillCd[i] = cooldown; p.wardT = Math.max(p.wardT || 0, 5);
+      const heal = Math.round(18 + p.level * 1.5), before = p.hp; p.hp = Math.min(p.maxHp, p.hp + heal);
+      this.addFloater(p.x, p.y - 36 - riderLift, Math.round(p.hp - before), false, false, true);
+      this.fx.push({ kind: "heal", x: p.x, y: p.y, variant: "sanctuary", t: 0, dur: 1.15 });
+      this.audio.sfx("heal"); this.ui.toast("Sanctuary · radiant ward active"); break;
+    }
+    case "exorcism": {
+      p.skillCd[i] = cooldown; p.attackDur = .5; p.attackT = p.attackDur; p.attackStyle = "cast";
+      const damage = Math.round((20 + p.level * 2.1) * (p.dmgMul || 1) * foodPower);
+      this.fx.push({ kind: "frost", x: p.x, y: p.y, variant: "holy", t: 0, dur: .9 });
+      for (const enemy of this.enemies) if (!enemy.dead && Math.hypot(enemy.x - p.x, enemy.y - p.y) < 88) { this.hurtEnemy(enemy, damage, true); enemy.frozen = Math.max(enemy.frozen || 0, 1.1); }
+      this.hurtBoss(p.x, p.y, 88, Math.round(damage * 1.15)); this.tryDuelStrike(p.x, p.y, 98, damage, "skill");
+      this.audio.sfx("crit"); this.ui.toast("Exorcism Seal!"); break;
+    }
+    case "benediction": {
+      if (p.stamina < 24) { this.ui.toast("Not enough stamina"); break; }
+      p.stamina -= 24; p.skillCd[i] = cooldown; p.wardT = Math.max(p.wardT || 0, 7); p.buffT = 7; p.buffMul = 1.28;
+      const heal = Math.round(30 + p.level * 1.8), before = p.hp; p.hp = Math.min(p.maxHp, p.hp + heal);
+      this.addFloater(p.x, p.y - 36 - riderLift, Math.round(p.hp - before), false, false, true);
+      this.fx.push({ kind: "warcry", x: p.x, y: p.y, variant: "holy", t: 0, dur: 1.1 });
+      this.fx.push({ kind: "heal", x: p.x, y: p.y, variant: "sanctuary", t: 0, dur: 1.2 });
+      this.audio.sfx("level"); this.ui.toast("Benediction · ward and power restored"); break;
+    }
+    case "nightrend": {
+      if (p.hp <= 4) { this.ui.toast("Night Rend needs more HP"); break; }
+      p.hp -= 3; this._nextDuelKind = "skill";
+      if (!this.doAttack(1.82)) { this._nextDuelKind = null; p.hp += 3; this.ui.toast("Not enough stamina"); break; }
+      p.skillCd[i] = cooldown; const { fx, fy } = dirVec();
+      this.fx.push({ kind: "crescent", x: p.x + fx * 24, y: p.y - riderLift + fy * 24, dir: p.dir, variant: "blood", t: 0, dur: .5 });
+      this.ui.toast("Night Rend!"); break;
+    }
+    case "bloodstorm": {
+      if (p.hp <= 8) { this.ui.toast("Bloodstorm needs more HP"); break; }
+      p.hp -= 6; p.skillCd[i] = cooldown; p.attackDur = .64; p.attackT = p.attackDur; p.attackStyle = "melee";
+      const weapon = WEAPONS[p.equipped] || WEAPONS.greatblade, damage = Math.round((weapon.dmg + p.level * 2.4) * 1.36 * (p.dmgMul || 1) * foodPower);
+      let hits = 0; for (const enemy of this.enemies) if (!enemy.dead && Math.hypot(enemy.x - p.x, enemy.y - p.y) < 74) { this.hurtEnemy(enemy, damage, true); hits++; }
+      this.hurtBoss(p.x, p.y, 74, Math.round(damage * 1.1)); this.tryDuelStrike(p.x, p.y, 84, damage, "skill");
+      if (hits) { const heal = Math.min(15, hits * 4); p.hp = Math.min(p.maxHp, p.hp + heal); this.addFloater(p.x, p.y - 36 - riderLift, heal, false, false, true); }
+      this.fx.push({ kind: "whirl", x: p.x, y: p.y, variant: "blood", t: 0, dur: .72 }); this.audio.sfx("whirl"); this.ui.toast("Bloodstorm!"); break;
+    }
+    case "execution": {
+      const target = nearestEnemy(82); const weapon = WEAPONS[p.equipped] || WEAPONS.greatblade;
+      if (!target && !(this.boss && !this.boss.dead && Math.hypot(this.boss.x - p.x, this.boss.y - p.y) < 92)) { this.ui.toast("No wounded target in reach"); break; }
+      p.skillCd[i] = cooldown; p.attackDur = .58; p.attackT = p.attackDur; p.attackStyle = "melee";
+      const wounded = target ? target.hp / target.maxHp < .38 : this.boss.hp / this.boss.maxHp < .25;
+      const damage = Math.round((weapon.dmg + p.level * 3) * (wounded ? 2.65 : 1.65) * (p.dmgMul || 1) * foodPower);
+      if (target) this.hurtEnemy(target, damage, true); else this.hurtBossDirect(damage);
+      this.fx.push({ kind: "crescent", x: target?.x || this.boss.x, y: (target?.y || this.boss.y) - 12, dir: p.dir, variant: "blood", t: 0, dur: .58 });
+      this.tryDuelStrike(p.x, p.y, 92, damage, "skill"); this.audio.sfx("crit"); this.ui.toast(wounded ? "EXECUTION · final cut" : "Execution!"); break;
+    }
+    case "bloodoath": {
+      if (p.hp <= 11) { this.ui.toast("Blood Oath needs more HP"); break; }
+      p.hp -= 9; p.skillCd[i] = cooldown; p.buffT = 7; p.buffMul = 1.75; p.bloodOathT = 7;
+      this.fx.push({ kind: "warcry", x: p.x, y: p.y, variant: "blood", t: 0, dur: 1 }); this.audio.sfx("level"); this.ui.toast("Blood Oath · damage and haste up"); break;
+    }
+    case "predatorbolt": {
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow");
+      p.attackDur = .4; p.attackT = p.attackDur; p.attackStyle = "bow";
+      this.spawnProjectile(p.x, attackY, dx, dy, "arrow", Math.round((27 + p.level * 2.7) * (p.dmgMul || 1) * foodPower), true, "predator");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: attackY, angle: Math.atan2(dy, dx), variant: "predator", t: 0, dur: .46 }); this.audio.sfx("attack"); this.ui.toast("Predator Bolt!"); break;
+    }
+    case "briarsnare": {
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow"); const tx = p.x + dx * 72, ty = p.y + dy * 72;
+      const damage = Math.round((16 + p.level * 1.7) * (p.dmgMul || 1) * foodPower);
+      for (const enemy of this.enemies) if (!enemy.dead && Math.hypot(enemy.x - tx, enemy.y - ty) < 52) { this.hurtEnemy(enemy, damage, false); enemy.frozen = Math.max(enemy.frozen || 0, 2.4); }
+      this.hurtBoss(tx, ty, 52, Math.round(damage * .75)); this.tryDuelStrike(tx, ty, 58, damage, "skill");
+      this.fx.push({ kind: "frost", x: tx, y: ty, variant: "briar", t: 0, dur: 1.05 }); this.audio.sfx("crit"); this.ui.toast("Briar Snare deployed"); break;
+    }
+    case "spiritflock": {
+      p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow"), base = Math.atan2(dy, dx);
+      p.attackDur = .48; p.attackT = p.attackDur; p.attackStyle = "bow";
+      for (const offset of [-.18, 0, .18]) this.spawnProjectile(p.x, attackY, Math.cos(base + offset), Math.sin(base + offset), "arrow", Math.round((15 + p.level * 1.6) * (p.dmgMul || 1) * foodPower), false, "spirit");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: attackY, angle: base, variant: "spirit", t: 0, dur: .62 }); this.audio.sfx("whirl"); this.ui.toast("Spirit Flock!"); break;
+    }
+    case "wildvault": {
+      if (p.stamina < 18) { this.ui.toast("Not enough stamina"); break; }
+      p.stamina -= 18; p.skillCd[i] = cooldown; p.evadeT = .2; p.evadeCd = .45; p.invuln = .5;
+      const { fx, fy } = dirVec(), dx = fx || 0, dy = fy || 1; p.vx = -dx * 320; p.vy = -dy * 320;
+      this.spawnProjectile(p.x, attackY, dx, dy, "arrow", Math.round((14 + p.level * 1.4) * (p.dmgMul || 1) * foodPower), true, "vault");
+      this.fx.push({ kind: "dashline", x: p.x, y: p.y, dir: p.dir, variant: "hunter", t: 0, dur: .42 }); this.audio.sfx("dash"); this.ui.toast("Wild Vault!"); break;
+    }
     case "blink": {
       p.skillCd[i] = cooldown; const { fx, fy } = dirVec(); const dx = fx || 0, dy = fy || 1;
       this.fx.push({ kind: "blink", x: p.x, y: p.y, variant: "rift", t: 0, dur: .5 });
@@ -548,14 +654,14 @@ Game.prototype.updateProjectiles = function (dt) {
     pr.life -= dt; pr.age += dt; pr.trailT -= dt;
     if ((pr.kind === "fire" || pr.kind === "bossfire") && pr.trailT <= 0) {
       pr.trailT = pr.variant === "dragon" || pr.variant === "boss" ? .025 : .045;
-      const color = pr.kind === "bossfire" ? "rgba(255,93,35,.85)" : pr.variant === "dragon" ? "rgba(174,105,255,.86)" : pr.variant === "comet" ? "rgba(255,196,84,.9)" : "rgba(255,165,58,.82)";
+      const color = pr.kind === "bossfire" ? "rgba(255,93,35,.85)" : ["holy", "radiant"].includes(pr.variant) ? "rgba(255,229,132,.9)" : pr.variant === "dragon" ? "rgba(174,105,255,.86)" : pr.variant === "comet" ? "rgba(255,196,84,.9)" : "rgba(255,165,58,.82)";
       this.particles.push({ x: pr.x - pr.dx * 4, y: pr.y - pr.dy * 4, vx: -pr.dx * 18 + (Math.random() - .5) * 9, vy: -pr.dy * 18 + (Math.random() - .5) * 9, life: .28, color });
-    } else if (pr.kind === "arrow" && ["falcon", "sakura", "dragon"].includes(pr.variant) && pr.trailT <= 0) {
+    } else if (pr.kind === "arrow" && ["falcon", "sakura", "dragon", "hunter", "predator", "spirit", "vault"].includes(pr.variant) && pr.trailT <= 0) {
       pr.trailT = pr.variant === "sakura" ? .06 : .04;
-      const color = pr.variant === "sakura" ? "rgba(255,157,197,.78)" : pr.variant === "dragon" ? "rgba(203,148,255,.82)" : "rgba(178,255,198,.8)";
+      const color = pr.variant === "sakura" ? "rgba(255,157,197,.78)" : pr.variant === "dragon" ? "rgba(203,148,255,.82)" : pr.variant === "spirit" ? "rgba(144,231,205,.82)" : ["hunter", "predator", "vault"].includes(pr.variant) ? "rgba(202,221,105,.82)" : "rgba(178,255,198,.8)";
       this.particles.push({ x: pr.x - pr.dx * 7 + (Math.random() - .5) * 3, y: pr.y - pr.dy * 7 + (Math.random() - .5) * 3, vx: -pr.dx * 8, vy: -pr.dy * 8 - 3, life: .22, color });
     }
-    const impact = () => this.fx.push({ kind: "projectileimpact", x: pr.x, y: pr.y, element: pr.kind, variant: pr.variant, t: 0, dur: ["comet", "falcon", "sakura"].includes(pr.variant) ? .42 : .3 });
+    const impact = () => this.fx.push({ kind: "projectileimpact", x: pr.x, y: pr.y, element: pr.kind, variant: pr.variant, t: 0, dur: ["comet", "falcon", "sakura", "holy", "radiant", "hunter", "predator", "spirit", "vault"].includes(pr.variant) ? .42 : .3 });
     if (pr.visualOnly) continue;
     if (pr.hostile) {
       // hits player
@@ -567,7 +673,7 @@ Game.prototype.updateProjectiles = function (dt) {
         for (const [id, remote] of Object.entries(net.remote)) {
           if (!remote.duel || pr.hitsRemote.includes(id)) continue;
           if (Math.hypot(pr.x - remote.rx, pr.y - (remote.ry - 18)) >= 17) continue;
-          const combatKind = ["skill", "power", "multi", "comet", "falcon", "sakura"].includes(pr.variant) ? "skill" : "projectile";
+          const combatKind = ["skill", "power", "multi", "comet", "falcon", "sakura", "holy", "predator", "spirit", "vault"].includes(pr.variant) ? "skill" : "projectile";
           if (sendPvpHit(id, pvpDamage(pr.dmg, combatKind), combatKind)) {
             impact(); pr.hitsRemote.push(id);
             if (!pr.pierce) { pr.life = 0; consumed = true; }
@@ -713,6 +819,71 @@ Game.prototype.claimAfkFishing = function () {
   return true;
 };
 
+Game.prototype.startAfkBattle = function (optionId) {
+  const current = afkBattleStatus(this.afkBattleJob);
+  if (current.state === "running" || current.state === "ready") {
+    this.ui.toast(current.state === "ready" ? "Your patrol rewards are ready." : "An AFK patrol is already deployed.");
+    return false;
+  }
+  const job = createAfkBattleJob({ optionId, classId: this.player.cls, level: this.player.level, now: Date.now() });
+  if (!job) { this.ui.toast("That patrol route is unavailable."); return false; }
+  this.afkBattleJob = job;
+  this.lastAfkBattleClaim = null;
+  this.audio.sfx("pickup");
+  this.ui.toast("AFK patrol deployed · battle continues offline");
+  this.onProgressChange?.();
+  this.ui.renderAfkBattle?.();
+  return true;
+};
+
+Game.prototype.cancelAfkBattle = function () {
+  const status = afkBattleStatus(this.afkBattleJob);
+  if (status.state !== "running") return false;
+  this.afkBattleJob = null;
+  this.lastAfkBattleClaim = null;
+  this.ui.toast("AFK patrol aborted.");
+  this.onProgressChange?.();
+  this.ui.renderAfkBattle?.();
+  return true;
+};
+
+Game.prototype.claimAfkBattle = function () {
+  const claim = claimAfkBattleJob(this.afkBattleJob, Date.now());
+  if (!claim.ok) {
+    this.ui.toast(claim.code === "not_ready" ? "The patrol is still fighting." : claim.code === "already_claimed" ? "That patrol was already claimed." : "No completed patrol found.");
+    return false;
+  }
+
+  // Persist the claimed receipt before granting rewards. This makes a rapid
+  // double click or reload fail closed instead of minting the same patrol twice.
+  this.afkBattleJob = claim.job;
+  this.onProgressChange?.();
+  const rewards = claim.rewards, player = this.player;
+  player.gold += rewards.gold;
+  player.xp += rewards.xp;
+  this.quests.killCount += rewards.kills;
+  for (const [itemId, amount] of Object.entries(rewards.items || {})) {
+    const count = Math.max(0, Math.floor(Number(amount) || 0));
+    if (count) player.inv[itemId] = (player.inv[itemId] || 0) + count;
+  }
+  let leveled = false;
+  while (player.xp >= xpFor(player.level)) {
+    player.xp -= xpFor(player.level); player.level++;
+    player.maxHp += 12; player.maxStamina += 8; leveled = true;
+  }
+  if (leveled) {
+    player.hp = player.maxHp; player.stamina = player.maxStamina;
+    this.ui.showLevel(player.level); this.fx.push({ kind: "levelring", x: player.x, y: player.y, t: 0, dur: .8 });
+  }
+  this.lastAfkBattleClaim = { ...rewards, claimedAt: Date.now() };
+  this.afkBattleJob = null;
+  this.audio.sfx(leveled ? "level" : "coin");
+  this.ui.toast(`PATROL CLAIMED · ${rewards.kills} kills · +${rewards.gold}g · +${rewards.xp}xp`);
+  this.onProgressChange?.();
+  this.ui.renderAfkBattle?.(); this.ui.renderInv?.(); this.ui.renderQuestLog?.(); this.ui.sync?.();
+  return true;
+};
+
 Game.prototype.craft = function (rid) {
   const r = RECIPES.find(x => x.id === rid); if (!r) return;
   const p = this.player;
@@ -790,7 +961,7 @@ Game.prototype.applySharedBoss = function (state) {
   if (!state?.active) {
     if (this.boss?.shared) { this.boss.hp = 0; this.boss.dead = true; this.boss.respawnAt = state?.respawnAt || 0; }
     this.ui.syncBoss?.(this.boss);
-    return true;
+    return;
   }
   const isNew = !this.boss?.shared || this.boss.serverId !== state.id;
   if (isNew) {
@@ -934,7 +1105,7 @@ Game.prototype.updateBoss = function (dt) {
       }
     }
     if (attack.life <= 0) { b.sharedAttack = null; b.state = "guard"; b.breathWindup = 0; }
-    return;
+    return true;
   }
 
   const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy) || 1;

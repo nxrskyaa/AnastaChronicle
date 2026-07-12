@@ -18,6 +18,7 @@ import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
 import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
+import { afkBattleStatus, normalizeAfkBattleJob } from "./afkbattle.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -102,24 +103,32 @@ let previewWeapon = null;
 let previewLookKey = "";
 let previewRAF = null;
 
-const PREVIEW_META = {
-  warrior: { kicker: "VANGUARD PATH", traits: ["70 HP", "MELEE", "GUARD"] },
-  mage: { kicker: "ARCANIST PATH", traits: ["44 HP", "RANGED", "BURST"] },
-  archer: { kicker: "RANGER PATH", traits: ["52 HP", "RANGED", "AGILE"] },
-};
-
 function invalidatePreview() { previewLookKey = ""; }
 
 function updateCreatorSummary() {
   const cls = CLASSES[look.cls] || CLASSES.warrior;
-  const meta = PREVIEW_META[look.cls] || PREVIEW_META.warrior;
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-  set("preview-class-kicker", meta.kicker);
+  document.querySelectorAll("#pick-class [data-cls]").forEach((button) => {
+    const meta = CLASSES[button.dataset.cls];
+    if (!meta) return;
+    const crest = button.querySelector("i"), name = button.querySelector("b"), path = button.querySelector("small");
+    if (crest) crest.textContent = meta.crest;
+    if (name) name.textContent = meta.name;
+    if (path) path.textContent = meta.path;
+    button.style.setProperty("--class-accent", meta.color);
+  });
+  set("preview-class-kicker", `${cls.path || cls.name.toUpperCase()} PATH`);
   set("preview-class-name", cls.name);
   set("preview-class-desc", cls.blurb);
   const traits = document.getElementById("preview-traits");
-  if (traits) traits.innerHTML = meta.traits.map(v => `<span>${v}</span>`).join("");
+  if (traits) traits.innerHTML = (cls.traits || []).map(v => `<span>${v}</span>`).join("");
+  const kit = document.getElementById("creator-class-kit");
+  if (kit) {
+    kit.style.setProperty("--selected-class", cls.color);
+    kit.innerHTML = cls.skills.map((skill, index) => `<article><i>${index + 1}</i><div><b>${skill.name}</b><span>${skill.desc}</span></div></article>`).join("");
+  }
   document.querySelector(".preview-summary")?.style.setProperty("--preview-accent", look.accent || cls.color);
+  document.getElementById("pick-class")?.style.setProperty("--selected-class", cls.color);
 }
 
 function drawPreview(now = performance.now()) {
@@ -303,6 +312,7 @@ function savePayload(g) {
     fishing: g.fishingStats,
     quests: g.quests?.serialize?.(),
     afkFishing: g.afkFishingJob || null,
+    afkBattle: g.afkBattleJob || null,
     flags: g.flags,
     equipped: p.equipped,
     pets: Array.isArray(g.pets) ? [...g.pets] : [],
@@ -410,6 +420,7 @@ function startGame(savedLook, savedName, saveData) {
   // Apply saved look if provided (continue scenario)
   if (savedLook) look = normalizeLook({ ...look, ...savedLook });
   else look = normalizeLook(look);
+  if (!CLASSES[look.cls]) look.cls = "warrior";
   if (!savedLook?.cls && CLASSES[saveData?.stats?.cls]) look.cls = saveData.stats.cls;
   if (savedName) { look.name = savedName; }
   creator.classList.add("hidden");
@@ -424,16 +435,24 @@ function startGame(savedLook, savedName, saveData) {
     // Apply saved game state if continuing
     if (saveData && saveData.stats) {
       const p = game.player;
-      p.level = saveData.stats.level || 1;
+      p.level = Math.max(1, Math.floor(Number(saveData.stats.level) || 1));
       p.xp = saveData.stats.xp || 0;
       p.gold = saveData.stats.gold || 0;
-      p.hp = saveData.stats.hp || p.maxHp;
+      const classStats = (CLASSES[p.cls] || CLASSES.warrior).stats;
+      p.maxHp = classStats.maxHp + (p.level - 1) * 12;
+      p.maxStamina = classStats.maxStamina + (p.level - 1) * 8;
+      p.hp = Math.max(1, Math.min(p.maxHp, Number(saveData.stats.hp) || p.maxHp));
+      p.stamina = p.maxStamina;
       if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
       if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
       if (saveData.quests) game.quests.restore?.(saveData.quests);
       if (saveData.afkFishing) {
         const restoredAfk = normalizeAfkFishingJob(saveData.afkFishing);
         game.afkFishingJob = restoredAfk?.claimedAt ? null : restoredAfk;
+      }
+      if (saveData.afkBattle) {
+        const restoredBattle = normalizeAfkBattleJob(saveData.afkBattle);
+        game.afkBattleJob = restoredBattle?.claimedAt ? null : restoredBattle;
       }
       if (Array.isArray(saveData.activeFoodBuffs)) {
         game.activeFoodBuffs = normalizeActiveBuffs(saveData.activeFoodBuffs, Date.now());
@@ -475,6 +494,9 @@ function startGame(savedLook, savedName, saveData) {
     showArrivalGuide(!!saveData);
     if (afkFishingStatus(game.afkFishingJob).state === "ready") {
       setTimeout(() => ui.toast("AFK Fishing catch ready · open the Dock to claim"), 700);
+    }
+    if (afkBattleStatus(game.afkBattleJob).state === "ready") {
+      setTimeout(() => ui.toast("AFK Battle patrol complete · rewards ready"), 1050);
     }
     // Auto-save every 15s
     setInterval(persist, 15000);

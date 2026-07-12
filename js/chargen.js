@@ -13,11 +13,11 @@ export const PRESETS = {
   boots: ["#5c3c2c", "#3a3a42", "#7a5230", "#2a2a30", "#8a6a3a"],
   accent: ["#e8c96a", "#6ee0b0", "#65b8e8", "#a87ae0", "#e06055", "#e887bd", "#f09b4e", "#d7e2ea"],
 };
-export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail", "bob", "braids", "undercut", "samurai", "waves", "twintails"];
-export const FACE_MARKS = ["none", "scar", "freckles", "warpaint", "rune", "blossom"];
-export const ACCESSORIES = ["none", "headband", "leafpin", "earring", "foxmask", "horns", "crown", "ribbon"];
+export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail", "bob", "braids", "undercut", "samurai", "waves", "twintails", "messy", "topknot", "shaved"];
+export const FACE_MARKS = ["none", "scar", "freckles", "warpaint", "rune", "blossom", "sunseal", "fang"];
+export const ACCESSORIES = ["none", "headband", "leafpin", "earring", "foxmask", "horns", "crown", "ribbon", "halo", "eyepatch", "feather"];
 export const OUTFITS = ["wanderer", "vanguard", "mythic"];
-export const AURAS = ["none", "ember", "arcane", "verdant", "frost", "void"];
+export const AURAS = ["none", "ember", "arcane", "verdant", "frost", "void", "holy", "blood", "storm"];
 
 export const DEFAULT_LOOK = {
   name: "Anasta",
@@ -103,6 +103,67 @@ function drawClassBack(ctx, look, dir, cx, by, frame = 0) {
       px(ctx, cx - 5, 23 + by, 2, 2, hi); px(ctx, cx + 3, 27 + by, 2, 2, hi);
       px(ctx, cx - 1, 31 + by, 2, 2, accent);
     }
+  } else if (cls === "priest") {
+    // Layered mantle and split stole keep the healer readable from every angle.
+    const ivory = outfit === "mythic" ? "#f6f0d8" : "#d7d6cc";
+    const hem = outfit === "mythic" ? 35 : 33;
+    if (dir === "left" || dir === "right") {
+      const edge = dir === "left" ? cx + 1 : cx - 7;
+      px(ctx, edge, 17 + by, 6, hem - 17, deep); px(ctx, edge + 1, 18 + by, 4, hem - 19, ivory);
+      px(ctx, edge + (dir === "left" ? 4 : 0), 20 + by, 2, hem - 21, mid);
+      px(ctx, edge + 1 + sway, hem - 2 + by, 2, 2, hi);
+    } else {
+      px(ctx, cx - 7, 17 + by, 14, hem - 17, deep);
+      px(ctx, cx - 6, 19 + by, 12, hem - 20, ivory);
+      px(ctx, cx - 5, 20 + by, 3, hem - 21 + sway, mid);
+      px(ctx, cx + 2, 20 + by, 3, hem - 21 - sway, mid);
+      px(ctx, cx - 1, 22 + by, 2, hem - 23, accent);
+    }
+    px(ctx, cx - 7, 16 + by, 14, 4, deep); px(ctx, cx - 5, 16 + by, 10, 2, hi);
+    if (outfit === "vanguard") {
+      px(ctx, cx - 9, 17 + by, 4, 5, "#aaafb4"); px(ctx, cx + 5, 17 + by, 4, 5, "#aaafb4");
+      px(ctx, cx - 8, 17 + by, 3, 2, hi); px(ctx, cx + 5, 17 + by, 3, 2, hi);
+    } else if (outfit === "mythic") {
+      px(ctx, cx - 6, 24 + by, 2, 2, hi); px(ctx, cx + 4, 27 + by, 2, 2, hi);
+      px(ctx, cx - 1, 31 + by, 2, 2, "#fff8bd");
+    }
+  } else if (cls === "slayer") {
+    // An asymmetric torn mantle and chained blade harness make a heavier silhouette.
+    const iron = outfit === "mythic" ? mid : "#50545d";
+    const capeX = dir === "right" ? cx - 8 : cx + 3;
+    if (dir !== "down") {
+      px(ctx, capeX, 17 + by, 5, 15 + sway, deep); px(ctx, capeX + 1, 19 + by, 3, 11 + sway, mid);
+      px(ctx, capeX, 30 + by + sway, 2, 3, accent); px(ctx, capeX + 3, 29 + by + sway, 2, 2, deep);
+    }
+    if (dir === "up" || dir === "down") {
+      pixelLine(ctx, cx - 6, 17 + by, cx + 5, 30 + by, "#26232a", 3);
+      pixelLine(ctx, cx - 5, 17 + by, cx + 5, 29 + by, iron);
+      px(ctx, cx + 3, 27 + by, 5, 4, deep); px(ctx, cx + 4, 28 + by, 3, 2, hi);
+    }
+    px(ctx, cx - 8, 16 + by, 6, 5, iron); px(ctx, cx - 7, 16 + by, 4, 2, hi);
+    if (outfit === "vanguard") {
+      px(ctx, cx + 3, 18 + by, 5, 8, "#353943"); px(ctx, cx + 4, 19 + by, 3, 5, iron);
+    } else if (outfit === "mythic") {
+      px(ctx, cx - 7, 23 + by, 3, 9 + sway, deep); px(ctx, cx - 6, 24 + by, 1, 6, accent);
+    }
+  } else if (cls === "hunter") {
+    // A compact hood-cape and transverse bolt case separate hunters from archers.
+    const leather = outfit === "mythic" ? deep : "#493a2b";
+    px(ctx, cx - 7, 16 + by, 14, 6, deep); px(ctx, cx - 5, 17 + by, 10, 4, mid);
+    if (dir === "left" || dir === "right") {
+      const edge = dir === "left" ? cx + 3 : cx - 7;
+      px(ctx, edge, 20 + by, 4, 11 + sway, leather); px(ctx, edge + 1, 21 + by, 2, 8 + sway, accent);
+    } else {
+      px(ctx, cx - 6, 21 + by, 12, 9, leather);
+      px(ctx, cx - 5, 22 + by, 5, 7 + sway, mid); px(ctx, cx + 1, 22 + by, 4, 7 - sway, deep);
+      px(ctx, cx - 7, 27 + by, 14, 4, "#30271f"); px(ctx, cx - 5, 28 + by, 10, 2, hi);
+      for (let i = 0; i < 4; i++) px(ctx, cx - 5 + i * 3, 25 + by - (i % 2), 1, 4, accent);
+    }
+    if (outfit === "vanguard") {
+      px(ctx, cx - 8, 18 + by, 3, 7, "#56615d"); px(ctx, cx + 5, 18 + by, 3, 7, "#56615d");
+    } else if (outfit === "mythic") {
+      px(ctx, cx - 7, 29 + by + sway, 3, 3, hi); px(ctx, cx + 4, 29 + by - sway, 3, 3, hi);
+    }
   } else if (cls === "archer") {
     const leather = "#583b27", rim = outfit === "mythic" ? accent : "#8b6238";
     const qx = dir === "left" ? cx + 3 : dir === "right" ? cx - 6 : dir === "up" ? cx + 4 : cx - 7;
@@ -162,6 +223,66 @@ function drawClassFront(ctx, look, dir, cx, by, frame = 0) {
     } else if (outfit === "mythic" && dir === "down") {
       px(ctx, cx - 4, tBot + 2, 2, 2, hi); px(ctx, cx + 2, tBot + 4, 2, 2, hi);
     }
+  } else if (cls === "priest") {
+    const ivory = outfit === "mythic" ? "#fff8dc" : "#deddd2";
+    if (dir === "left" || dir === "right") {
+      const edge = dir === "left" ? cx - 6 : cx + 3;
+      px(ctx, edge, tTop, 4, 9, deep); px(ctx, edge + (dir === "left" ? 1 : 0), tTop + 1, 3, 7, ivory);
+      px(ctx, edge, tBot - 1, 4, 7, mid); px(ctx, edge + 1, tBot + 1, 2, 5, hi);
+    } else {
+      px(ctx, cx - 7, tTop, 14, 4, deep); px(ctx, cx - 5, tTop, 10, 2, hi);
+      px(ctx, cx - 4, tTop + 2, 8, 8, ivory);
+      px(ctx, cx - 3, tBot - 1, 6, 7, mid); px(ctx, cx - 1, tTop + 3, 2, 15, accent);
+      px(ctx, cx - 4, tBot + 4, 3, 2, deep); px(ctx, cx + 1, tBot + 4, 3, 2, deep);
+    }
+    if (outfit === "vanguard") {
+      px(ctx, cx - 9, tTop, 4, 5, "#9099a1"); px(ctx, cx + 5, tTop, 4, 5, "#9099a1");
+      px(ctx, cx - 8, tTop, 3, 2, hi); px(ctx, cx + 5, tTop, 3, 2, hi);
+    } else if (outfit === "mythic" && dir === "down") {
+      px(ctx, cx - 5, tBot + 1, 2, 2, "#fff5aa"); px(ctx, cx + 3, tBot + 3, 2, 2, "#fff5aa");
+    }
+  } else if (cls === "slayer") {
+    const iron = outfit === "mythic" ? mid : "#555965";
+    const darkIron = outfit === "mythic" ? deep : "#30333b";
+    if (dir === "left" || dir === "right") {
+      const front = dir === "left" ? cx - 7 : cx + 3;
+      px(ctx, front, tTop, 5, 7, darkIron); px(ctx, front, tTop, 4, 3, iron);
+      px(ctx, front + (dir === "left" ? 1 : 0), tTop + 3, 4, 8, deep);
+    } else {
+      // One high pauldron, one bare strap: deliberately uneven Slayer armor.
+      px(ctx, cx - 9, tTop - 1, 6, 6, darkIron); px(ctx, cx - 8, tTop - 1, 4, 3, iron);
+      px(ctx, cx + 4, tTop + 1, 4, 3, deep); px(ctx, cx + 5, tTop + 1, 3, 1, hi);
+      px(ctx, cx - 5, tTop + 2, 10, 8, iron);
+      pixelLine(ctx, cx - 4, tTop + 2, cx + 3, tBot - 1, "#29242a", 2);
+      pixelLine(ctx, cx + 3, tTop + 2, cx - 3, tBot - 1, accent);
+      px(ctx, cx - 4, tBot - 1, 8, 3, darkIron); px(ctx, cx - 1, tBot - 1, 2, 2, hi);
+    }
+    if (outfit === "vanguard") {
+      px(ctx, cx - 6, tBot + 1, 12, 4, darkIron); px(ctx, cx - 4, tBot + 1, 8, 2, iron);
+    } else if (outfit === "mythic" && dir === "down") {
+      px(ctx, cx - 5, tTop + 5, 2, 2, hi); px(ctx, cx + 3, tTop + 7, 2, 2, hi);
+    }
+  } else if (cls === "hunter") {
+    const leather = outfit === "mythic" ? deep : "#574535";
+    const green = outfit === "mythic" ? mid : "#526b55";
+    px(ctx, cx - 7, tTop, 14, 3, deep); px(ctx, cx - 5, tTop, 10, 2, green);
+    if (dir === "down") {
+      px(ctx, cx - 5, tTop + 2, 10, 8, leather);
+      pixelLine(ctx, cx - 4, tTop + 2, cx + 3, tBot - 1, "#9a7247", 2);
+      px(ctx, cx + 2, tBot - 3, 3, 3, accent);
+      px(ctx, cx - 5, tBot - 1, 10, 2, "#302820"); px(ctx, cx - 1, tBot - 1, 2, 2, hi);
+    } else if (dir === "up") {
+      pixelLine(ctx, cx + 4, tTop + 2, cx - 3, tBot - 2, "#9a7247", 2);
+    } else {
+      const front = dir === "left" ? cx - 6 : cx + 3;
+      px(ctx, front, tTop + 2, 4, 8, leather); px(ctx, front, tTop + 3, 2, 5, green);
+    }
+    px(ctx, cx - 8, tTop + 1, 3, 6, green); px(ctx, cx + 5, tTop + 1, 3, 6, green);
+    if (outfit === "vanguard") {
+      px(ctx, cx - 8, tTop + 3, 3, 4, "#76827c"); px(ctx, cx + 5, tTop + 3, 3, 4, "#76827c");
+    } else if (outfit === "mythic" && dir === "down") {
+      px(ctx, cx - 5, tTop + 4, 2, 2, hi); px(ctx, cx + 3, tTop + 6 + (frame % 2), 2, 2, hi);
+    }
   } else if (cls === "archer") {
     const leather = "#805638", buckle = accent;
     px(ctx, cx - 6, tTop, 12, outfit === "vanguard" ? 3 : 2, deep);
@@ -212,6 +333,9 @@ const AURA_PALETTES = {
   verdant: ["#3fd68d", "#bcff8a"],
   frost: ["#6fdcff", "#e7fbff"],
   void: ["#6b3c9b", "#ef69d5"],
+  holy: ["#ffd96a", "#fffbd1"],
+  blood: ["#9d2235", "#ff6a5f"],
+  storm: ["#4e9cff", "#d9f4ff"],
 };
 
 function drawAura(ctx, look, frame, energy = 0) {
@@ -229,6 +353,20 @@ function drawAura(ctx, look, frame, energy = 0) {
   ctx.globalAlpha *= 0.55;
   px(ctx, 8 - phase % 2, 35, 6, 1, pal[0]);
   px(ctx, 18 + phase % 2, 35, 6, 1, pal[1]);
+  if (look.aura === "holy") {
+    // Floating votive crosses and a bright ground ring.
+    px(ctx, 4 + phase, 12, 1, 5, pal[1]); px(ctx, 2 + phase, 14, 5, 1, pal[0]);
+    px(ctx, 25 - phase, 19, 1, 4, pal[1]); px(ctx, 24 - phase, 20, 3, 1, pal[0]);
+    px(ctx, 11, 36, 11, 1, pal[1]);
+  } else if (look.aura === "blood") {
+    // Dense rising shards stay graphic instead of reading as a soft red glow.
+    pixelLine(ctx, 5 + phase, 34, 7 + phase, 27, pal[0], 2);
+    pixelLine(ctx, 26 - phase, 34, 24 - phase, 25, pal[1]);
+    px(ctx, 3 + phase, 23, 2, 3, pal[1]); px(ctx, 27 - phase, 15, 2, 2, pal[0]);
+  } else if (look.aura === "storm") {
+    pixelLine(ctx, 4 + phase, 10, 8 + phase, 14, pal[1]); pixelLine(ctx, 8 + phase, 14, 5 + phase, 19, pal[0]);
+    pixelLine(ctx, 27 - phase, 21, 23 - phase, 25, pal[1]); pixelLine(ctx, 23 - phase, 25, 26 - phase, 30, pal[0]);
+  }
   ctx.restore();
 }
 
@@ -251,6 +389,24 @@ function drawFaceMark(ctx, look, dir, cx, hy, skinShade) {
   } else if (mark === "blossom") {
     const x = dir === "right" ? cx + 3 : cx - 4;
     px(ctx, x, hy + 2, 2, 2, "#ef8db0"); px(ctx, x + 1, hy + 1, 1, 4, "#ffd0df");
+  } else if (mark === "sunseal") {
+    if (dir === "down") {
+      px(ctx, cx - 1, hy - 2, 2, 2, "#fff3a5");
+      px(ctx, cx - 1, hy - 3, 2, 1, accent); px(ctx, cx - 1, hy, 2, 1, accent);
+      px(ctx, cx - 2, hy - 1, 1, 1, accent); px(ctx, cx + 1, hy - 1, 1, 1, accent);
+    } else {
+      px(ctx, cx + side * 3, hy - 1, 2, 2, "#fff3a5");
+      px(ctx, cx + side * 4, hy - 2, 1, 4, accent);
+    }
+  } else if (mark === "fang") {
+    if (dir === "down") {
+      pixelLine(ctx, cx - 5, hy + 1, cx - 3, hy + 4, accent);
+      pixelLine(ctx, cx + 4, hy + 1, cx + 2, hy + 4, shade(accent, .8));
+      px(ctx, cx - 3, hy + 4, 1, 2, shade(accent, 1.2)); px(ctx, cx + 2, hy + 4, 1, 2, shade(accent, 1.2));
+    } else {
+      pixelLine(ctx, cx + side * 3, hy + 1, cx + side * 5, hy + 4, accent);
+      px(ctx, cx + side * 5, hy + 4, 1, 2, shade(accent, 1.2));
+    }
   }
 }
 
@@ -286,6 +442,31 @@ function drawAccessory(ctx, look, dir, cx, hy, frame) {
     const x = dir === "right" ? cx - 8 : cx + 5;
     px(ctx, x, hy - 2, 3, 3, accent); px(ctx, x + (dir === "right" ? -2 : 2), hy - 3, 3, 3, hi);
     px(ctx, x + sway, hy + 1, 2, 6, deep); px(ctx, x + 2 - sway, hy + 1, 2, 5, accent);
+  } else if (accessory === "halo") {
+    px(ctx, cx - 5, hy - 10, 10, 1, deep); px(ctx, cx - 7, hy - 9, 3, 1, hi); px(ctx, cx + 4, hy - 9, 3, 1, hi);
+    px(ctx, cx - 4, hy - 11, 8, 1, "#fff6b0");
+    px(ctx, cx - 6 + (frame % 2), hy - 10, 2, 2, accent); px(ctx, cx + 4 - (frame % 2), hy - 10, 2, 2, accent);
+  } else if (accessory === "eyepatch") {
+    const strap = "#29242b";
+    if (dir === "down") {
+      pixelLine(ctx, cx - 5, hy - 1, cx + 5, hy + 2, strap);
+      px(ctx, cx - 4, hy, 3, 4, strap); px(ctx, cx - 3, hy + 1, 2, 2, deep);
+    } else if (dir === "left") {
+      pixelLine(ctx, cx - 5, hy, cx + 4, hy - 2, strap);
+      px(ctx, cx - 5, hy, 3, 4, strap); px(ctx, cx - 5, hy + 1, 2, 2, deep);
+    } else if (dir === "right") {
+      pixelLine(ctx, cx - 4, hy - 2, cx + 5, hy, strap);
+      px(ctx, cx + 2, hy, 3, 4, strap); px(ctx, cx + 3, hy + 1, 2, 2, deep);
+    } else {
+      pixelLine(ctx, cx - 5, hy, cx + 5, hy - 1, strap);
+    }
+  } else if (accessory === "feather") {
+    const side = dir === "right" ? -1 : 1;
+    const x = cx + side * 6;
+    pixelLine(ctx, x, hy - 1, x + side * (2 + sway), hy - 10, "#f2e8cf");
+    pixelLine(ctx, x + side, hy - 3, x + side * 4, hy - 7, hi);
+    pixelLine(ctx, x + side, hy - 5, x - side, hy - 8, accent);
+    px(ctx, x - (side < 0 ? 1 : 0), hy - 1, 2, 3, deep);
   }
 }
 
@@ -471,6 +652,16 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
     if (look.cls === "mage") {
       px(ctx, cx - 1, tTop + 4, 2, 5, accent); px(ctx, cx - 3, tTop + 6, 6, 1, shade(accent, 1.28));
       px(ctx, cx - 1, tTop + 5, 2, 2, "#e9fbff");
+    } else if (look.cls === "priest") {
+      px(ctx, cx - 1, tTop + 3, 2, 7, shade(accent, 1.2)); px(ctx, cx - 4, tTop + 5, 8, 2, shade(accent, .68));
+      px(ctx, cx - 1, tTop + 4, 2, 2, "#fffbd0");
+    } else if (look.cls === "slayer") {
+      px(ctx, cx - 3, tTop + 4, 2, 2, shade(accent, 1.2)); px(ctx, cx + 2, tTop + 4, 2, 2, shade(accent, 1.2));
+      pixelLine(ctx, cx - 3, tTop + 5, cx, tTop + 9, shade(accent, .55));
+      pixelLine(ctx, cx + 3, tTop + 5, cx, tTop + 9, shade(accent, .55));
+    } else if (look.cls === "hunter") {
+      px(ctx, cx - 4, tTop + 5, 8, 2, shade(accent, .58)); px(ctx, cx - 1, tTop + 3, 2, 6, shade(accent, 1.22));
+      px(ctx, cx - 1, tTop + 5, 2, 2, "#e8ffd8"); px(ctx, cx + 3, tTop + 4, 2, 1, shade(accent, 1.22));
     } else if (look.cls === "archer") {
       px(ctx, cx - 2, tTop + 5, 4, 4, shade(accent, .72)); px(ctx, cx - 1, tTop + 4, 2, 5, shade(accent, 1.25));
     } else if (look.cls === "warrior") {
@@ -504,6 +695,19 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
       if (st === "undercut") { px(ctx, cx - 5, hy - 1, 2, 4, sk2); px(ctx, cx + 3, hy - 1, 2, 4, sk2); px(ctx, cx - 2, hy - 8, 7, 4, hr); }
       if (st === "samurai") { px(ctx, cx - 3, hy - 9, 6, 4, hr3); px(ctx, cx - 2, hy - 11, 4, 3, hr); }
       if (st === "twintails") { px(ctx, cx - 8, hy - 1, 4, 4, hr); px(ctx, cx + 4, hy - 1, 4, 4, hr); px(ctx, cx - 8 + hairSway, hy + 2, 2, 8, hr); px(ctx, cx + 6 - hairSway, hy + 2, 2, 8, hr); }
+      if (st === "messy") {
+        px(ctx, cx - 6, hy - 8, 3, 4, hr); px(ctx, cx - 2, hy - 9, 3, 4, hr2); px(ctx, cx + 2, hy - 8, 4, 4, hr);
+        px(ctx, cx - 7, hy - 1, 2, 5 + hairSway, hr3); px(ctx, cx + 5, hy - 2, 2, 6 - hairSway, hr);
+      }
+      if (st === "topknot") {
+        px(ctx, cx - 3, hy - 10, 6, 4, hr3); px(ctx, cx - 2, hy - 12, 4, 4, hr);
+        px(ctx, cx - 1, hy - 12, 2, 2, hr2); px(ctx, cx - 3, hy - 8, 6, 1, look.accent || DEFAULT_LOOK.accent);
+      }
+      if (st === "shaved") {
+        px(ctx, cx - 5, hy - 4, 3, 6, sk2); px(ctx, cx + 2, hy - 4, 3, 6, sk2);
+        px(ctx, cx - 2, hy - 6, 4, 6, hr3); px(ctx, cx - 1, hy - 6, 2, 4, hr2);
+        px(ctx, cx - 4, hy, 1, 1, hr3); px(ctx, cx + 3, hy + 1, 1, 1, hr3);
+      }
     } else {
       // top + sides fringe
       ctx.fillStyle = hr; roundRect(ctx, cx - 6, hy - 6, 12, 6, 3); ctx.fill();
@@ -523,6 +727,21 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
       if (st === "samurai") { px(ctx, cx - 3, hy - 9, 6, 4, hr3); px(ctx, cx - 2, hy - 11, 4, 3, hr); px(ctx, cx + 4, hy - 2, 3, 5, hr); }
       if (st === "waves") { px(ctx, cx - 7, hy - 2, 3, 5, hr); px(ctx, cx - 8, hy + 2, 3, 4 + hairSway, hr3); px(ctx, cx + 4, hy - 2, 3, 5, hr); px(ctx, cx + 5, hy + 2, 3, 4 - hairSway, hr3); }
       if (st === "twintails") { px(ctx, cx - 9, hy - 2, 4, 4, hr); px(ctx, cx + 5, hy - 2, 4, 4, hr); px(ctx, cx - 9 + hairSway, hy + 1, 2, 9, hr); px(ctx, cx + 7 - hairSway, hy + 1, 2, 9, hr); }
+      if (st === "messy") {
+        px(ctx, cx - 6, hy - 9, 3, 5, hr); px(ctx, cx - 2, hy - 10, 3, 5, hr2); px(ctx, cx + 2, hy - 8, 4, 4, hr);
+        px(ctx, cx - 7, hy - 1, 2, 7 + hairSway, hr3); px(ctx, cx + 5, hy, 2, 5 - hairSway, hr);
+        px(ctx, cx - 4, hy - 1, 2, 4, hr3); px(ctx, cx + 1, hy - 1, 2, 3, hr3);
+      }
+      if (st === "topknot") {
+        px(ctx, cx - 3, hy - 10, 6, 4, hr3); px(ctx, cx - 2, hy - 12, 4, 4, hr);
+        px(ctx, cx - 1, hy - 12, 2, 2, hr2); px(ctx, cx - 3, hy - 8, 6, 1, look.accent || DEFAULT_LOOK.accent);
+        if (dir !== "down") px(ctx, cx + (dir === "left" ? 4 : -6), hy - 1, 2, 5, hr);
+      }
+      if (st === "shaved") {
+        px(ctx, cx - 5, hy - 5, 4, 5, sk2); px(ctx, cx + 2, hy - 5, 3, 5, sk2);
+        px(ctx, cx - 1, hy - 6, 3, 4, hr3); px(ctx, cx, hy - 6, 1, 3, hr2);
+        px(ctx, cx - 4, hy - 2, 1, 1, hr3); px(ctx, cx + 3, hy - 1, 1, 1, hr3);
+      }
     }
   }
 
@@ -642,11 +861,85 @@ function drawPixelStaff(ctx, dragon, atkPhase) {
   }
 }
 
+function drawPixelScepter(ctx, atkPhase) {
+  const edge = "#29232d", gold = "#b98a38", goldHi = "#ffe07a";
+  const pearl = "#fffbd8", holy = "#8de7ff";
+  const pulse = atkPhase == null ? 0 : Math.round(Math.sin(Math.PI * atkPhase) * 2);
+
+  // Short ceremonial shaft, winged crown and a faceted healing focus.
+  px(ctx, -2, -13, 4, 19, edge); px(ctx, -1, -13, 2, 18, gold);
+  px(ctx, 0, -12, 1, 15, goldHi); px(ctx, -3, -4, 6, 3, edge); px(ctx, -2, -3, 4, 1, goldHi);
+  px(ctx, -3, 3, 6, 4, edge); px(ctx, -2, 4, 4, 2, gold); px(ctx, -1, 4, 2, 1, pearl);
+  pixelLine(ctx, -1, -13, -7, -18, edge, 2); pixelLine(ctx, 1, -13, 7, -18, edge, 2);
+  pixelLine(ctx, -1, -13, -6, -18, goldHi); pixelLine(ctx, 1, -13, 6, -18, goldHi);
+  px(ctx, -8, -20, 4, 4, edge); px(ctx, 4, -20, 4, 4, edge);
+  px(ctx, -7, -19, 3, 2, gold); px(ctx, 4, -19, 3, 2, gold);
+  px(ctx, -4 - pulse, -21 - pulse, 8 + pulse * 2, 8 + pulse * 2, edge);
+  px(ctx, -3 - pulse, -22 - pulse, 6 + pulse * 2, 10 + pulse * 2, gold);
+  px(ctx, -2 - pulse, -21 - pulse, 4 + pulse * 2, 8 + pulse * 2, holy);
+  px(ctx, -1, -20 - pulse, 2, 6 + pulse * 2, pearl);
+  px(ctx, -1, -26 - pulse, 2, 4, goldHi); px(ctx, -4 - pulse, -19, 3, 2, goldHi); px(ctx, 2 + pulse, -19, 3, 2, goldHi);
+  px(ctx, 2, -9, 3, 7, "#f2e5bd"); px(ctx, 3, -8, 1, 5, gold);
+  if (atkPhase != null) {
+    const orbit = atkPhase * Math.PI * 2;
+    for (let i = 0; i < 4; i++) {
+      const a = orbit + i * Math.PI * .5;
+      px(ctx, Math.round(Math.cos(a) * (8 + pulse)) - 1, -18 + Math.round(Math.sin(a) * (6 + pulse)), 2, 2, i % 2 ? holy : pearl);
+    }
+  }
+}
+
+function drawPixelCrossbow(ctx, atkPhase) {
+  const edge = "#29251f", wood = "#735034", woodHi = "#b9854d";
+  const steel = "#8d9fa5", steelHi = "#e5f1ef", string = "#dbe4d7";
+  const phase = atkPhase == null ? null : Math.max(0, Math.min(1, atkPhase));
+  const released = phase != null && phase > .58;
+  const pull = phase == null || released ? 0 : -Math.round(Math.sin(Math.PI * phase / .58) * 4);
+
+  // Stock and rail run horizontally; the recurved steel prod stays unmistakable.
+  pixelLine(ctx, -10, 3, 12, -1, edge, 4); pixelLine(ctx, -9, 2, 10, -1, wood, 2);
+  pixelLine(ctx, -8, 1, 9, -2, woodHi); px(ctx, -12, 1, 5, 5, edge); px(ctx, -11, 2, 4, 3, wood);
+  px(ctx, -7, 4, 8, 4, edge); px(ctx, -6, 4, 6, 2, woodHi); px(ctx, -4, 6, 3, 3, edge);
+  px(ctx, -2, -3, 17, 5, edge); px(ctx, -1, -2, 15, 3, steel); px(ctx, 0, -2, 12, 1, steelHi);
+  px(ctx, 2, -5, 5, 9, edge); px(ctx, 3, -4, 3, 7, wood); px(ctx, 4, -3, 1, 5, "#d5aa56");
+  pixelLine(ctx, 4, -2, 8, -10, edge, 3); pixelLine(ctx, 8, -10, 10, -12, edge, 2);
+  pixelLine(ctx, 4, 1, 8, 9, edge, 3); pixelLine(ctx, 8, 9, 10, 11, edge, 2);
+  pixelLine(ctx, 5, -2, 9, -11, steel, 2); pixelLine(ctx, 5, 1, 9, 10, steel, 2);
+  pixelLine(ctx, 9, -11, pull, 0, string); pixelLine(ctx, pull, 0, 9, 10, string);
+  px(ctx, 9, -12, 3, 2, steelHi); px(ctx, 9, 10, 3, 2, steelHi);
+
+  const boltX = released ? 11 + Math.round((phase - .58) * 24) : 5;
+  if (phase == null || phase < .92) {
+    pixelLine(ctx, pull, -1, boltX + 5, -1, "#b47b43");
+    px(ctx, boltX + 4, -3, 4, 5, edge); px(ctx, boltX + 5, -2, 3, 3, steelHi);
+    px(ctx, pull, -3, 3, 2, "#5b875d"); px(ctx, pull, 1, 3, 2, "#78a86b");
+  }
+  if (phase != null && !released) px(ctx, -1 + pull, -2, 2, 4, "#fff2a8");
+}
+
+function drawPixelGreatblade(ctx, atkPhase) {
+  const edge = "#241d25", iron = "#68717b", steel = "#b9c5cc";
+  const blood = "#9e3040", glow = atkPhase == null ? "#d85a55" : (atkPhase > .2 && atkPhase < .82 ? "#ffb05e" : "#d85a55");
+
+  // Oversized cleaver with a jagged spine, blood channel and two-handed grip.
+  px(ctx, -3, 0, 6, 8, edge); px(ctx, -2, 0, 4, 7, "#49302b");
+  px(ctx, -3, 1, 6, 1, blood); px(ctx, -3, 4, 6, 1, "#c56655");
+  px(ctx, -4, 6, 8, 4, edge); px(ctx, -3, 7, 6, 2, "#68403b"); px(ctx, -1, 7, 2, 2, glow);
+  px(ctx, -7, -3, 14, 5, edge); px(ctx, -6, -2, 12, 3, "#7f3540");
+  px(ctx, -7, -2, 3, 2, glow); px(ctx, 4, -2, 3, 2, glow);
+  px(ctx, -5, -21, 10, 19, edge); px(ctx, -4, -24, 8, 5, edge); px(ctx, -2, -27, 4, 5, edge);
+  px(ctx, -4, -20, 8, 17, iron); px(ctx, -3, -23, 6, 5, steel); px(ctx, -1, -26, 2, 22, "#eef5f5");
+  px(ctx, -3, -18, 2, 14, "#4c555f"); px(ctx, 1, -19, 2, 15, blood);
+  px(ctx, 2, -18, 3, 4, edge); px(ctx, 3, -17, 2, 2, steel);
+  px(ctx, -5, -14, 3, 4, edge); px(ctx, -4, -13, 2, 2, iron);
+  px(ctx, 0, -17, 2, 2, glow); px(ctx, 0, -11, 2, 2, glow); px(ctx, 0, -5, 2, 2, glow);
+}
+
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)
 function drawWeapon(ctx, weapon, dir, atkPhase) {
   if (weapon === "fist") return;
-  const isBow = weapon === "bow" || weapon === "dragonbow";
-  const isStaff = weapon === "staff" || weapon === "dragonstaff";
+  const isBow = weapon === "bow" || weapon === "dragonbow" || weapon === "crossbow";
+  const isStaff = weapon === "staff" || weapon === "dragonstaff" || weapon === "scepter";
   let hx, hy, baseAng;
   if (isBow) {
     hx = 16; hy = 21;
@@ -662,6 +955,7 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   const meleeSweep = phase == null ? -0.55
     : weapon === "dagger" ? -1.05 + Math.min(1, phase / .48) * 2.05
       : weapon === "axe" ? (phase < .42 ? -1.18 + phase * .45 : -.99 + ((phase - .42) / .58) * 2.18)
+        : weapon === "greatblade" ? (phase < .38 ? -1.28 + phase * .35 : -1.15 + ((phase - .38) / .62) * 2.45)
         : weapon === "spear" ? -.08 + Math.sin(phase * Math.PI) * .12
           : -0.86 + 1.78 * phase;
   const sweep = isBow ? 0
@@ -716,8 +1010,14 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
     px(ctx, 0, -11, 1, 7, "#ffffff"); px(ctx, -2, -7, 1, 4, "#546775");
   } else if (weapon === "bow") {
     drawPixelBow(ctx, false, atkPhase);
+  } else if (weapon === "crossbow") {
+    drawPixelCrossbow(ctx, atkPhase);
   } else if (weapon === "staff") {
     drawPixelStaff(ctx, false, atkPhase);
+  } else if (weapon === "scepter") {
+    drawPixelScepter(ctx, atkPhase);
+  } else if (weapon === "greatblade") {
+    drawPixelGreatblade(ctx, atkPhase);
   } else if (weapon === "dragonblade") {
     // Jagged obsidian spine, molten fuller, scale guard and eye-stone pommel.
     px(ctx, -2, 0, 4, 7, "#27191b"); px(ctx, -1, 0, 2, 6, "#743324");
@@ -741,13 +1041,14 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
 
   if (atkPhase != null && atkPhase > 0.12 && atkPhase < 0.88 && !isBow && !isStaff) {
     const dragon = weapon === "dragonblade";
+    const heavy = weapon === "greatblade";
     ctx.save(); ctx.globalAlpha = dragon ? 0.62 : 0.46;
-    ctx.strokeStyle = dragon ? "#ff9a3c" : weapon === "dagger" ? "#9ff5db" : "#eaf2ff";
-    ctx.lineWidth = weapon === "axe" ? 3.5 : 2.5;
-    const reach = weapon === "spear" ? 22 : weapon === "dagger" ? 10 : 16;
+    ctx.strokeStyle = dragon ? "#ff9a3c" : heavy ? "#e34f62" : weapon === "dagger" ? "#9ff5db" : "#eaf2ff";
+    ctx.lineWidth = heavy ? 4.5 : weapon === "axe" ? 3.5 : 2.5;
+    const reach = weapon === "spear" ? 22 : heavy ? 20 : weapon === "dagger" ? 10 : 16;
     ctx.beginPath(); ctx.arc(hx, hy, reach, baseAng - 1.0, ang); ctx.stroke();
     ctx.globalAlpha *= .55;
-    ctx.strokeStyle = dragon ? "#fff09a" : "#ffffff"; ctx.lineWidth = 1;
+    ctx.strokeStyle = dragon ? "#fff09a" : heavy ? "#ffb577" : "#ffffff"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(hx, hy, reach + 3, baseAng - .82, ang); ctx.stroke();
     ctx.restore();
   }

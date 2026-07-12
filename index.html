@@ -43,7 +43,7 @@
       <h1>Your legend begins<br/>before the first step.</h1>
       <p>Create a traveler, master a class, bond with wild companions, and leave your mark across a shared living realm.</p>
       <div class="login-hero-art" aria-hidden="true"><div class="hero-shadow"></div><div class="hero-cape"></div><div class="hero-body"></div><div class="hero-head"></div><div class="hero-hair"></div><div class="hero-blade"></div><i class="hero-spark s1"></i><i class="hero-spark s2"></i><i class="hero-spark s3"></i></div>
-      <div class="realm-pillars"><div><b>3</b><span>CLASSES</span></div><div><b>25</b><span>COMPANIONS</span></div><div><b>&infin;</b><span>CHRONICLES</span></div></div>
+      <div class="realm-pillars"><div><b>6</b><span>CLASSES</span></div><div><b>25</b><span>COMPANIONS</span></div><div><b>&infin;</b><span>CHRONICLES</span></div></div>
     </section>
     <section class="login-card">
       <div class="login-glow"></div><div class="login-sigil"><span>A</span></div><span class="login-step">REALM ACCESS / 01</span>
@@ -75,7 +75,7 @@
         <section class="creator-panel active" data-creator-panel="identity">
           <label class="opt-name"><span>TRAVELER NAME</span><input id="opt-name" maxlength="14" value="Anasta" /></label>
           <div class="opt-row" data-part="gender"><span>BODY</span><div class="class-pick" id="pick-gender"><button data-gender="male" class="cls-btn sel">Type A</button><button data-gender="female" class="cls-btn">Type B</button></div></div>
-          <div class="opt-row class-choice-row" data-part="class"><span>COMBAT PATH</span><div class="class-pick" id="pick-class"><button data-cls="warrior" class="cls-btn sel"><i>W</i><b>Warrior</b><small>Vanguard</small></button><button data-cls="mage" class="cls-btn"><i>M</i><b>Mage</b><small>Arcanist</small></button><button data-cls="archer" class="cls-btn"><i>A</i><b>Archer</b><small>Ranger</small></button></div></div>
+          <div class="opt-row class-choice-row" data-part="class"><span>COMBAT PATH · 6 DISCIPLINES</span><div class="class-pick" id="pick-class"><button data-cls="warrior" class="cls-btn sel"><i>W</i><b>Warrior</b><small>Vanguard</small></button><button data-cls="mage" class="cls-btn"><i>M</i><b>Mage</b><small>Arcanist</small></button><button data-cls="archer" class="cls-btn"><i>A</i><b>Archer</b><small>Ranger</small></button><button data-cls="priest" class="cls-btn"><i>P</i><b>Priest</b><small>Hierophant</small></button><button data-cls="slayer" class="cls-btn"><i>S</i><b>Slayer</b><small>Reaper</small></button><button data-cls="hunter" class="cls-btn"><i>H</i><b>Hunter</b><small>Warden</small></button></div><div id="creator-class-kit" class="creator-class-kit" aria-live="polite"></div></div>
         </section>
         <section class="creator-panel" data-creator-panel="appearance">
           <div class="opt-row" data-part="style"><span>HAIR STYLE</span><div class="swatches" id="sw-style"></div></div><div class="opt-row" data-part="hair"><span>HAIR COLOR</span><div class="swatches" id="sw-hair"></div></div><div class="opt-row" data-part="eyes"><span>EYES</span><div class="swatches" id="sw-eyes"></div></div><div class="opt-row" data-part="skin"><span>SKIN</span><div class="swatches" id="sw-skin"></div></div><div class="opt-row" data-part="mark"><span>FACE MARK</span><div class="swatches" id="sw-mark"></div></div><div class="opt-row" data-part="accessory"><span>ACCESSORY</span><div class="swatches" id="sw-accessory"></div></div>
@@ -226,6 +226,7 @@
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
       <button type="button" data-open-panel="afk"><i class="menu-rune afk"></i><span><b>AFK Fishing Dock</b><small id="menu-afk-state">Dock is ready</small></span><em>L</em></button>
+      <button type="button" data-open-panel="battle"><i class="menu-rune battle"></i><span><b>AFK Battle Patrol</b><small id="menu-battle-state">Patrol board ready</small></span><em>H</em></button>
       <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 25 bonded</small></span><em>P NEXT</em></button>
       <button type="button" data-open-panel="chat"><i class="menu-rune chat"></i><span><b>Realm Chat</b><small id="menu-chat-state">Offline</small></span><em>ENTER</em></button>
       <button type="button" data-open-panel="settings"><i class="menu-rune settings"></i><span><b>Settings</b><small>Controls &amp; audio</small></span><em>OPEN</em></button>
@@ -269,6 +270,18 @@
     <div id="afk-reward-summary" class="afk-reward-summary hidden" aria-live="polite"></div>
     <div class="afk-actions"><button id="afk-cancel" class="afk-cancel hidden" type="button">CANCEL WATCH</button><button id="afk-primary" class="afk-primary" type="button" disabled>SELECT A WATCH</button></div>
     <p class="afk-note"><i></i> Local offline timer for the current prototype. Future onchain rewards will be server-authoritative and wallet-bound.</p>
+  </div>
+  <div id="panel-battle" class="panel panel-wide battle-panel hidden" role="dialog" aria-modal="true" aria-labelledby="battle-title">
+    <div class="panel-head"><div><span class="panel-kicker">WARDEN'S AUTONOMOUS PATROL BOARD</span><h2 id="battle-title">AFK Battle &amp; Farming</h2></div><button class="panel-close" data-close="battle" aria-label="Close AFK Battle Patrol">&times;</button></div>
+    <section class="battle-hero">
+      <div class="battle-banner-art" aria-hidden="true"><i class="blade one"></i><i class="blade two"></i><span class="crest" id="battle-art-crest">W</span><b></b></div>
+      <div class="battle-hero-copy"><span id="battle-eyebrow">PATROL BOARD READY</span><strong id="battle-state">Choose an expedition.</strong><p id="battle-description">Your active class clears simulated monster waves while you are away. Return to claim battle XP, gold, materials, and kill progress once.</p><div class="battle-progress"><div><i id="battle-progress-fill"></i></div><b id="battle-time">READY</b></div></div>
+      <dl><div><dt>Active class</dt><dd id="battle-class-name">Warrior</dd></div><div><dt>Field role</dt><dd id="battle-class-role">Steady Vanguard</dd></div></dl>
+    </section>
+    <div id="battle-expedition-list" class="battle-expedition-list" aria-label="AFK battle expeditions"></div>
+    <div id="battle-reward-summary" class="battle-reward-summary hidden" aria-live="polite"></div>
+    <div class="battle-actions"><button id="battle-cancel" class="battle-cancel hidden" type="button">ABORT PATROL</button><button id="battle-primary" class="battle-primary" type="button" disabled>SELECT A PATROL</button></div>
+    <p class="battle-note"><i></i> Prototype rewards are local-only. Onchain patrols will require server-signed jobs, nonces, and claim receipts.</p>
   </div>
   <div id="panel-craft" class="panel panel-wide hidden">
     <div class="panel-head"><div><span class="panel-kicker">CAMP SMITHY</span><h2>Forge & Arsenal</h2></div><button class="panel-close" data-close="craft">×</button></div>
@@ -326,7 +339,7 @@
     <div class="set-row"><span>Movement</span>
       <div class="seg"><button id="move-btn-btn" class="seg-btn active">Button</button><button id="move-tap-btn" class="seg-btn">Tap</button></div>
     </div>
-    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · B shop · L AFK dock · J fish book · K cook · M mount · P pet</div>
+    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · B shop · H AFK battle · L AFK dock · J fish book · K cook · M mount · P pet</div>
   </div>
   <div id="panel-level" class="panel hidden modal level-ceremony" role="dialog" aria-modal="true" aria-labelledby="level-title">
     <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>
