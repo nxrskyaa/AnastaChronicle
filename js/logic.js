@@ -10,9 +10,6 @@ import { buyItem, getShopListing, marketDayKey, sellItem } from "./shop.js";
 import {
   afkFishingStatus, claimAfkFishingJob, createAfkFishingJob,
 } from "./afkfishing.js";
-import {
-  afkBattleStatus, claimAfkBattleJob, createAfkBattleJob,
-} from "./afkbattle.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -39,6 +36,11 @@ const PROJECTILE_LIFE = 1.4;
 const projectileSpeed = (kind) => PROJECTILE_SPEED[kind] || PROJECTILE_SPEED.fire;
 const PVP_DAMAGE_CAP = Object.freeze({ basic: 72, projectile: 92, skill: 120 });
 const pvpDamage = (damage, kind = "basic") => Math.min(PVP_DAMAGE_CAP[kind] || PVP_DAMAGE_CAP.basic, Math.max(1, Math.round(damage)));
+const AUTO_BATTLE_SCAN_RADIUS = 320;
+const AUTO_BATTLE_SKILLS = Object.freeze({
+  warrior: [0, 1, 2], mage: [0, 1], archer: [0, 1],
+  priest: [0, 2], slayer: [0, 1, 2], hunter: [0, 1, 2],
+});
 
 function rangedAim(game, kind, preview = false) {
   const p = game.player;
@@ -88,6 +90,109 @@ Game.prototype.tryDuelStrike = function (x, y, radius, damage, kind = "basic", f
   const target = nearestDuelTarget(this, x, y, radius, fx, fy);
   if (!target) return false;
   return sendPvpHit(target.id, pvpDamage(damage, kind), kind);
+};
+
+Game.prototype.setAutoBattle = function (enabled) {
+  const next = !!enabled;
+  if (next === !!this.autoBattle) { this.ui.syncAutoBattle?.(true); return next; }
+  if (next && this.fishing) this.failFishing?.("Fishing stopped · Auto Battle enabled.");
+  this.autoBattle = next;
+  this.autoBattleTarget = null;
+  this.autoBattleScanT = 0;
+  this.autoBattleSkillT = 0;
+  this.autoBattleStuckT = 0;
+  this.autoBattleLastDistance = Infinity;
+  this.autoBattleState = next ? "SCANNING NEARBY" : "OFF";
+  this.resetInputState?.();
+  this.ui.syncAutoBattle?.(true);
+  this.ui.toast(next ? "AUTO BATTLE ON · hunting nearby monsters" : "Auto Battle stopped.");
+  return next;
+};
+
+Game.prototype.acquireAutoBattleTarget = function () {
+  const player = this.player;
+  let target = null, nearest = AUTO_BATTLE_SCAN_RADIUS;
+  const consider = (candidate) => {
+    if (!candidate || candidate.dead || candidate.hp <= 0 || (candidate._autoSkipUntil || 0) > this.t) return;
+    const distance = Math.hypot(candidate.x - player.x, candidate.y - player.y);
+    if (distance >= nearest) return;
+    nearest = distance; target = candidate;
+  };
+  for (const enemy of this.enemies) consider(enemy);
+  consider(this.boss);
+  return target;
+};
+
+Game.prototype.updateAutoBattle = function (dt) {
+  if (!this.autoBattle || this.fishing || this.player.hp <= 0) return null;
+  const player = this.player;
+  this.autoBattleScanT = Math.max(0, (this.autoBattleScanT || 0) - dt);
+  this.autoBattleSkillT = Math.max(0, (this.autoBattleSkillT || 0) - dt);
+  const current = this.autoBattleTarget;
+  const currentDistance = current ? Math.hypot(current.x - player.x, current.y - player.y) : Infinity;
+  const invalid = !current || current.dead || current.hp <= 0 || currentDistance > AUTO_BATTLE_SCAN_RADIUS + 70 || (current._autoSkipUntil || 0) > this.t;
+  if (invalid || this.autoBattleScanT <= 0) {
+    this.autoBattleTarget = this.acquireAutoBattleTarget();
+    this.autoBattleScanT = .3;
+    if (this.autoBattleTarget !== current) {
+      this.autoBattleStuckT = 0;
+      this.autoBattleLastDistance = Infinity;
+    }
+  }
+
+  const target = this.autoBattleTarget;
+  if (!target) {
+    this.autoBattleState = "SCANNING NEARBY";
+    return { ix: 0, iy: 0 };
+  }
+
+  const dx = target.x - player.x, dy = target.y - player.y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const weapon = WEAPONS[player.equipped] || WEAPONS.fist;
+  const engageRange = weapon.ranged ? Math.min(90, weapon.range * .82) : Math.max(25, weapon.range * .72);
+  this.autoBattleState = target === this.boss ? "ENGAGING INFERNYX" : `HUNTING:${target.id || "MONSTER"}`;
+
+  if (Math.abs(dx) > Math.abs(dy)) player.dir = dx < 0 ? "left" : "right";
+  else player.dir = dy < 0 ? "up" : "down";
+
+  if (distance > engageRange) {
+    const progress = (this.autoBattleLastDistance || Infinity) - distance;
+    this.autoBattleStuckT = progress < .35 ? (this.autoBattleStuckT || 0) + dt : Math.max(0, (this.autoBattleStuckT || 0) - dt * 2);
+    this.autoBattleLastDistance = distance;
+    if (this.autoBattleStuckT > 1.35) {
+      target._autoSkipUntil = this.t + 3;
+      this.autoBattleTarget = null;
+      this.autoBattleState = "REPATHING";
+      this.autoBattleStuckT = 0;
+      return { ix: 0, iy: 0 };
+    }
+    return { ix: dx / distance, iy: dy / distance };
+  }
+
+  this.autoBattleStuckT = 0;
+  this.autoBattleLastDistance = distance;
+  let usedSkill = false;
+  if (player.attackCd <= 0 && this.autoBattleSkillT <= 0) {
+    const hpRatio = player.hp / player.maxHp;
+    const order = player.cls === "priest" && hpRatio < .62
+      ? [1, 3, 0]
+      : player.cls === "slayer" && hpRatio < .48
+        ? [2]
+        : AUTO_BATTLE_SKILLS[player.cls] || [0];
+    for (const index of order) {
+      if ((player.skillCd[index] || 0) > 0) continue;
+      const before = player.skillCd[index] || 0;
+      this._autoBattleCasting = true;
+      try { this.useSkill(index); } finally { this._autoBattleCasting = false; }
+      if ((player.skillCd[index] || 0) > before) {
+        usedSkill = true;
+        this.autoBattleSkillT = 1.05;
+        break;
+      }
+    }
+  }
+  if (!usedSkill && player.attackCd <= 0) this.doAttack();
+  return { ix: 0, iy: 0 };
 };
 
 Game.prototype.update = function (dt) {
@@ -158,6 +263,18 @@ Game.prototype.update = function (dt) {
     if (this.keys.KeyD || this.keys.ArrowRight) ix += 1;
     if (this.stick.active) { ix += this.stick.x; iy += this.stick.y; }
     const l = Math.hypot(ix, iy); if (l > 1) { ix /= l; iy /= l; }
+  }
+
+  const manualMovement = Math.hypot(ix, iy) > .05;
+  if (this.autoBattle && !this.fishing) {
+    if (manualMovement) {
+      this.autoBattleState = "MANUAL OVERRIDE";
+      this.autoBattleTarget = null;
+      this.autoBattleScanT = 0;
+    } else {
+      const command = this.updateAutoBattle(dt);
+      if (command) { ix = command.ix; iy = command.iy; }
+    }
   }
 
   const travelBoost = this.mountSpeedMultiplier() * (1 + (this.foodBuffTotals?.speed || 0)) * (p.bloodOathT > 0 ? 1.16 : 1);
@@ -762,10 +879,11 @@ Game.prototype.startAfkFishing = function (durationMinutes) {
     weather: this.weather === "rain" ? "rain" : "clear", now: Date.now(),
   });
   if (!job) { this.ui.toast("That fishing watch is unavailable."); return false; }
+  if (this.autoBattle) this.setAutoBattle(false);
   this.afkFishingJob = job;
   this.lastAfkFishingClaim = null;
   this.audio.sfx("pickup");
-  this.ui.toast(`${durationMinutes} minute fishing watch started.`);
+  this.ui.toast(`Auto Fishing started · ${durationMinutes} minute watch`);
   this.onProgressChange?.();
   this.ui.renderAfkFishing?.();
   return true;
@@ -776,7 +894,7 @@ Game.prototype.cancelAfkFishing = function () {
   if (status.state !== "running") return false;
   this.afkFishingJob = null;
   this.lastAfkFishingClaim = null;
-  this.ui.toast("Fishing watch cancelled.");
+  this.ui.toast("Auto Fishing watch cancelled.");
   this.onProgressChange?.();
   this.ui.renderAfkFishing?.();
   return true;
@@ -810,77 +928,12 @@ Game.prototype.claimAfkFishing = function () {
   this.lastAfkFishingClaim = { ...rewards, gold: afkGold, claimedAt: Date.now() };
   this.afkFishingJob = null;
   this.audio.sfx(rewards.summary?.some((fish) => fish.rarity === "legendary") ? "level" : "coin");
-  this.ui.toast(`Dock claimed · ${rewards.fishCount} fish · +${afkGold}g`);
+  this.ui.toast(`AUTO CATCH CLAIMED · ${rewards.fishCount} fish · +${afkGold}g`);
   this.onProgressChange?.();
   this.ui.renderAfkFishing?.();
   this.ui.renderCollection?.();
   this.ui.renderInv?.();
   this.ui.sync?.();
-  return true;
-};
-
-Game.prototype.startAfkBattle = function (optionId) {
-  const current = afkBattleStatus(this.afkBattleJob);
-  if (current.state === "running" || current.state === "ready") {
-    this.ui.toast(current.state === "ready" ? "Your patrol rewards are ready." : "An AFK patrol is already deployed.");
-    return false;
-  }
-  const job = createAfkBattleJob({ optionId, classId: this.player.cls, level: this.player.level, now: Date.now() });
-  if (!job) { this.ui.toast("That patrol route is unavailable."); return false; }
-  this.afkBattleJob = job;
-  this.lastAfkBattleClaim = null;
-  this.audio.sfx("pickup");
-  this.ui.toast("AFK patrol deployed · battle continues offline");
-  this.onProgressChange?.();
-  this.ui.renderAfkBattle?.();
-  return true;
-};
-
-Game.prototype.cancelAfkBattle = function () {
-  const status = afkBattleStatus(this.afkBattleJob);
-  if (status.state !== "running") return false;
-  this.afkBattleJob = null;
-  this.lastAfkBattleClaim = null;
-  this.ui.toast("AFK patrol aborted.");
-  this.onProgressChange?.();
-  this.ui.renderAfkBattle?.();
-  return true;
-};
-
-Game.prototype.claimAfkBattle = function () {
-  const claim = claimAfkBattleJob(this.afkBattleJob, Date.now());
-  if (!claim.ok) {
-    this.ui.toast(claim.code === "not_ready" ? "The patrol is still fighting." : claim.code === "already_claimed" ? "That patrol was already claimed." : "No completed patrol found.");
-    return false;
-  }
-
-  // Persist the claimed receipt before granting rewards. This makes a rapid
-  // double click or reload fail closed instead of minting the same patrol twice.
-  this.afkBattleJob = claim.job;
-  this.onProgressChange?.();
-  const rewards = claim.rewards, player = this.player;
-  player.gold += rewards.gold;
-  player.xp += rewards.xp;
-  this.quests.killCount += rewards.kills;
-  for (const [itemId, amount] of Object.entries(rewards.items || {})) {
-    const count = Math.max(0, Math.floor(Number(amount) || 0));
-    if (count) player.inv[itemId] = (player.inv[itemId] || 0) + count;
-  }
-  let leveled = false;
-  while (player.xp >= xpFor(player.level)) {
-    player.xp -= xpFor(player.level); player.level++;
-    player.maxHp += 12; player.maxStamina += 8; leveled = true;
-  }
-  if (leveled) {
-    player.hp = player.maxHp; player.stamina = player.maxStamina;
-    this.ui.showLevel(player.level); this.fx.push({ kind: "levelring", x: player.x, y: player.y, t: 0, dur: .8 });
-  }
-  this.lastAfkBattleClaim = { ...rewards, claimedAt: Date.now() };
-  this.afkBattleJob = null;
-  this.audio.sfx(leveled ? "level" : "coin");
-  this.ui.toast(`PATROL CLAIMED · ${rewards.kills} kills · +${rewards.gold}g · +${rewards.xp}xp`);
-  this.onProgressChange?.();
-  this.ui.renderAfkBattle?.(); this.ui.renderInv?.(); this.ui.renderQuestLog?.(); this.ui.sync?.();
   return true;
 };
 

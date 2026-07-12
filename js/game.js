@@ -53,8 +53,12 @@ export class Game {
     this.fishingStats = { total: 0, best: 0, records: {} };
     this.afkFishingJob = null;
     this.lastAfkFishingClaim = null;
-    this.afkBattleJob = null;
-    this.lastAfkBattleClaim = null;
+    this.autoBattle = false;
+    this.autoBattleTarget = null;
+    this.autoBattleState = "OFF";
+    this.autoBattleScanT = 0;
+    this.autoBattleSkillT = 0;
+    this.inputSuspendUntil = 0;
     this.catchReveal = null;
     this.time = 6 * 60;
     this.weather = "clear";     // clear | rain | snow
@@ -493,10 +497,16 @@ export class Game {
     }
   }
 
+  suspendInput(milliseconds = 180) {
+    this.resetInputState();
+    this.inputSuspendUntil = Math.max(this.inputSuspendUntil || 0, performance.now() + milliseconds);
+  }
+
   bindInput() {
     addEventListener("keydown", (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (this.inputLocked) return;
+      if (performance.now() < (this.inputSuspendUntil || 0)) return;
       this.keys[e.code] = true;
       if (e.repeat && ["KeyI", "KeyC", "KeyQ", "KeyF", "Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code)) return;
       if (e.code === "KeyI") this.ui.toggle("inv");
@@ -515,6 +525,7 @@ export class Game {
     });
     this.canvas.addEventListener("mousedown", (e) => {
       if (this.inputLocked) return;
+      if (performance.now() < (this.inputSuspendUntil || 0)) return;
       if (this.moveMode === "tap") {
         const r = rect();
         const mx = (e.clientX - r.left) * (view.w / r.width);
@@ -543,6 +554,7 @@ export class Game {
     if (stick) {
       const set = (cx, cy) => {
         if (this.inputLocked) return;
+        if (performance.now() < (this.inputSuspendUntil || 0)) return;
         const r = stick.getBoundingClientRect();
         let dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2);
         const d = Math.hypot(dx, dy), max = r.width / 2;
@@ -573,6 +585,7 @@ export class Game {
       const begin = (e) => {
         e?.preventDefault?.();
         if (this.inputLocked) return;
+        if (performance.now() < (this.inputSuspendUntil || 0)) return;
         if (active) return;
         active = true;
         activeReleases.add(end);
@@ -607,11 +620,14 @@ export class Game {
     };
     const resetAllInput = () => {
       releaseActions();
-      this.resetInputState();
+      this.suspendInput();
     };
     addEventListener("blur", resetAllInput);
     addEventListener("focus", resetAllInput);
+    addEventListener("pointercancel", resetAllInput);
     addEventListener("pagehide", resetAllInput);
+    addEventListener("pageshow", resetAllInput);
+    document.addEventListener("freeze", resetAllInput);
     document.addEventListener("visibilitychange", resetAllInput);
 
     bindAction("btn-attack", () => this.mouse.down = true, () => this.mouse.down = false);
@@ -625,6 +641,7 @@ export class Game {
     this.canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
       if (this.paused || this.inputLocked || this.fishing) return;
+      if (performance.now() < (this.inputSuspendUntil || 0)) return;
       const r = this.canvas.getBoundingClientRect();
       const mx = (e.touches[0].clientX - r.left) * (view.w / r.width);
       const my = (e.touches[0].clientY - r.top) * (view.h / r.height);
@@ -651,6 +668,12 @@ export class Game {
     let last = performance.now();
     const loop = (now) => {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (document.hidden) {
+        this.suspendInput(250);
+        requestAnimationFrame(loop);
+        return;
+      }
+      if (now < (this.inputSuspendUntil || 0)) this.resetInputState();
       if (!this.paused) {
         this.update(dt);
         if (this.catchReveal) {

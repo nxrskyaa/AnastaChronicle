@@ -88,6 +88,7 @@ Game.prototype.updateInteract = function () {
 
 Game.prototype.startFishing = function (spot) {
   const player = this.player;
+  if (this.autoBattle) this.setAutoBattle?.(false);
   if (this.mounted) this.toggleMount?.();
   this.moveTarget = null;
   this._pendingInteraction = null;
@@ -253,7 +254,7 @@ Game.prototype.interact = function (resolved = null) {
   if (!resolved?.target) return;
   const target = resolved.target, kind = resolved.kind;
   if (!target) return;
-  if (kind === "fish") { this.startFishing(target); return; }
+  if (kind === "fish") { this.ui.showFishingMode?.(target); return; }
   if (kind === "cook") { this.ui.toggle("cooking"); return; }
   if (kind === "npc") { this.ui.showDialog(target, this); return; }
   if (kind !== "chest" || target.opened) return;

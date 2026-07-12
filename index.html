@@ -193,6 +193,10 @@
       </div>
     </div>
 
+    <button id="auto-battle-chip" class="auto-battle-chip hidden" type="button" aria-label="Disable Auto Battle">
+      <i aria-hidden="true"></i><span><small>AUTO BATTLE</small><b id="auto-battle-status">SCANNING NEARBY</b></span><kbd>H · STOP</kbd>
+    </button>
+
     <div id="touch-ui">
       <!-- analog stick -->
       <div id="stick" class="ctrl-analog"><div id="stick-knob"></div></div>
@@ -225,8 +229,7 @@
       <button type="button" data-open-panel="cooking"><i class="menu-rune cooking"></i><span><b>Hearth Kitchen</b><small id="menu-cooking-state">12 camp recipes</small></span><em>K</em></button>
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
-      <button type="button" data-open-panel="afk"><i class="menu-rune afk"></i><span><b>AFK Fishing Dock</b><small id="menu-afk-state">Dock is ready</small></span><em>L</em></button>
-      <button type="button" data-open-panel="battle"><i class="menu-rune battle"></i><span><b>AFK Battle Patrol</b><small id="menu-battle-state">Patrol board ready</small></span><em>H</em></button>
+      <button id="auto-battle-toggle" type="button" role="switch" aria-checked="false"><i class="menu-rune battle"></i><span><b>Auto Battle</b><small id="menu-battle-state">OFF · hunts nearby monsters</small></span><em>H</em></button>
       <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 25 bonded</small></span><em>P NEXT</em></button>
       <button type="button" data-open-panel="chat"><i class="menu-rune chat"></i><span><b>Realm Chat</b><small id="menu-chat-state">Offline</small></span><em>ENTER</em></button>
       <button type="button" data-open-panel="settings"><i class="menu-rune settings"></i><span><b>Settings</b><small>Controls &amp; audio</small></span><em>OPEN</em></button>
@@ -259,29 +262,26 @@
     <div class="market-tabs" role="tablist" aria-label="Market sections"><button type="button" class="active" data-shop-tab="buy" role="tab" aria-selected="true">BUY SUPPLIES</button><button type="button" data-shop-tab="sell" role="tab" aria-selected="false">SELL FROM PACK</button></div>
     <div id="shop-list" class="shop-list" aria-live="polite"></div>
   </div>
+  <div id="panel-fishing-mode" class="panel fishing-mode-panel hidden" role="dialog" aria-modal="true" aria-labelledby="fishing-mode-title">
+    <div class="panel-head"><div><span class="panel-kicker">WATER'S EDGE</span><h2 id="fishing-mode-title">Choose Fishing Style</h2></div><button class="panel-close" data-close="fishingMode" aria-label="Close fishing style chooser">&times;</button></div>
+    <section class="fishing-mode-hero"><div class="fishing-mode-water" aria-hidden="true"><i></i><b></b><span></span></div><div><span>ACTIVE ROD</span><strong id="fishing-mode-rod">Willow Rod</strong><p>Fish hands-on for full control, or leave an automatic line and return later.</p></div></section>
+    <div class="fishing-mode-grid">
+      <button id="fishing-mode-manual" type="button"><i class="manual"></i><span><small>REAL-TIME</small><strong>Manual Fishing</strong><p>Cast now. Set the hook, manage tension, and earn precision bonuses.</p></span><kbd>PLAY</kbd></button>
+      <button id="fishing-mode-auto" type="button"><i class="auto"></i><span><small>HANDS-OFF</small><strong>Auto Fishing</strong><p id="fishing-mode-auto-copy">Choose a timed watch. Return to this fishing spot to claim the catch.</p></span><kbd id="fishing-mode-auto-state">SET WATCH</kbd></button>
+    </div>
+    <p class="fishing-mode-note"><i></i> Auto Fishing is available from water interactions—not the general Realm Menu.</p>
+  </div>
   <div id="panel-afk" class="panel panel-wide afk-panel hidden" role="dialog" aria-modal="true" aria-labelledby="afk-title">
-    <div class="panel-head"><div><span class="panel-kicker">ANGLER'S MOONWATER SERVICE</span><h2 id="afk-title">AFK Fishing Dock</h2></div><button class="panel-close" data-close="afk" aria-label="Close AFK Fishing Dock">&times;</button></div>
+    <div class="panel-head"><div><span class="panel-kicker">AUTOMATIC LINE</span><h2 id="afk-title">Auto Fishing Watch</h2></div><button class="panel-close" data-close="afk" aria-label="Close Auto Fishing">&times;</button></div>
     <section class="afk-hero">
       <div class="afk-water-art" aria-hidden="true"><i class="moon"></i><i class="rod"></i><i class="line"></i><i class="bobber"></i><span></span></div>
-      <div class="afk-hero-copy"><span id="afk-eyebrow">DOCK READY</span><strong id="afk-state">Choose a fishing watch.</strong><p id="afk-description">The Angler watches your line while you are away—even after closing the tab. Return when the timer ends to claim the catch once.</p><div class="afk-progress"><div><i id="afk-progress-fill"></i></div><b id="afk-time">READY</b></div></div>
+      <div class="afk-hero-copy"><span id="afk-eyebrow">AUTO LINE READY</span><strong id="afk-state">Choose a fishing watch.</strong><p id="afk-description">Your automatic line keeps a timestamped watch while you are away. Return to any fishing spot and choose Auto Fishing to claim.</p><div class="afk-progress"><div><i id="afk-progress-fill"></i></div><b id="afk-time">READY</b></div></div>
       <dl><div><dt>Active rod</dt><dd id="afk-rod">Willow Rod</dd></div><div><dt>Efficiency</dt><dd id="afk-efficiency">Safe waters</dd></div></dl>
     </section>
     <div id="afk-duration-list" class="afk-duration-list" aria-label="Fishing watch duration"></div>
     <div id="afk-reward-summary" class="afk-reward-summary hidden" aria-live="polite"></div>
     <div class="afk-actions"><button id="afk-cancel" class="afk-cancel hidden" type="button">CANCEL WATCH</button><button id="afk-primary" class="afk-primary" type="button" disabled>SELECT A WATCH</button></div>
     <p class="afk-note"><i></i> Local offline timer for the current prototype. Future onchain rewards will be server-authoritative and wallet-bound.</p>
-  </div>
-  <div id="panel-battle" class="panel panel-wide battle-panel hidden" role="dialog" aria-modal="true" aria-labelledby="battle-title">
-    <div class="panel-head"><div><span class="panel-kicker">WARDEN'S AUTONOMOUS PATROL BOARD</span><h2 id="battle-title">AFK Battle &amp; Farming</h2></div><button class="panel-close" data-close="battle" aria-label="Close AFK Battle Patrol">&times;</button></div>
-    <section class="battle-hero">
-      <div class="battle-banner-art" aria-hidden="true"><i class="blade one"></i><i class="blade two"></i><span class="crest" id="battle-art-crest">W</span><b></b></div>
-      <div class="battle-hero-copy"><span id="battle-eyebrow">PATROL BOARD READY</span><strong id="battle-state">Choose an expedition.</strong><p id="battle-description">Your active class clears simulated monster waves while you are away. Return to claim battle XP, gold, materials, and kill progress once.</p><div class="battle-progress"><div><i id="battle-progress-fill"></i></div><b id="battle-time">READY</b></div></div>
-      <dl><div><dt>Active class</dt><dd id="battle-class-name">Warrior</dd></div><div><dt>Field role</dt><dd id="battle-class-role">Steady Vanguard</dd></div></dl>
-    </section>
-    <div id="battle-expedition-list" class="battle-expedition-list" aria-label="AFK battle expeditions"></div>
-    <div id="battle-reward-summary" class="battle-reward-summary hidden" aria-live="polite"></div>
-    <div class="battle-actions"><button id="battle-cancel" class="battle-cancel hidden" type="button">ABORT PATROL</button><button id="battle-primary" class="battle-primary" type="button" disabled>SELECT A PATROL</button></div>
-    <p class="battle-note"><i></i> Prototype rewards are local-only. Onchain patrols will require server-signed jobs, nonces, and claim receipts.</p>
   </div>
   <div id="panel-craft" class="panel panel-wide hidden">
     <div class="panel-head"><div><span class="panel-kicker">CAMP SMITHY</span><h2>Forge & Arsenal</h2></div><button class="panel-close" data-close="craft">×</button></div>
@@ -339,7 +339,7 @@
     <div class="set-row"><span>Movement</span>
       <div class="seg"><button id="move-btn-btn" class="seg-btn active">Button</button><button id="move-tap-btn" class="seg-btn">Tap</button></div>
     </div>
-    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · B shop · H AFK battle · L AFK dock · J fish book · K cook · M mount · P pet</div>
+    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact/fish · B shop · H auto battle · J fish book · K cook · M mount · P pet</div>
   </div>
   <div id="panel-level" class="panel hidden modal level-ceremony" role="dialog" aria-modal="true" aria-labelledby="level-title">
     <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>

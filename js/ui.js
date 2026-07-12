@@ -7,7 +7,6 @@ import { img } from "./assets.js";
 import { MON_IDS, MON_ELEMENT, MON_META, STARTER_MOUNT_ID } from "./monsters.js";
 import { marketDayKey, shopView } from "./shop.js";
 import { AFK_FISHING_OPTIONS, afkFishingStatus } from "./afkfishing.js";
-import { AFK_BATTLE_CLASS_PROFILES, AFK_BATTLE_OPTIONS, afkBattleStatus } from "./afkbattle.js";
 import {
   COOKING_RECIPES, FOOD_ITEMS, canCook, knownRecipeIds,
   displayIngredientName, activeBuffTotals, normalizeActiveBuffs,
@@ -29,7 +28,7 @@ export class UI {
       inv: document.getElementById("panel-inv"),
       shop: document.getElementById("panel-shop"),
       afk: document.getElementById("panel-afk"),
-      battle: document.getElementById("panel-battle"),
+      fishingMode: document.getElementById("panel-fishing-mode"),
       menu: document.getElementById("panel-menu"),
       chat: document.getElementById("panel-chat"),
       collection: document.getElementById("panel-collection"),
@@ -53,7 +52,6 @@ export class UI {
     this._duelSender = null;
     this._shopMode = "buy";
     this._afkSelection = AFK_FISHING_OPTIONS[0]?.minutes || 2;
-    this._battleSelection = AFK_BATTLE_OPTIONS[0]?.id || "mosswood-patrol";
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
     document.getElementById("btn-level-ok")?.addEventListener("click", () => { this.panels.level.classList.add("hidden"); if (this.game && !this.hasBlockingOpen()) this.game.paused = false; });
     document.getElementById("btn-respawn")?.addEventListener("click", () => this.game?.respawn());
@@ -66,6 +64,10 @@ export class UI {
     document.getElementById("btn-cycle-pet")?.addEventListener("click", () => this.cyclePet());
     document.getElementById("btn-mount-toggle")?.addEventListener("click", () => this.toggleMount());
     document.getElementById("mount-chip")?.addEventListener("click", () => this.toggleMount());
+    document.getElementById("auto-battle-toggle")?.addEventListener("click", () => this.toggleAutoBattle());
+    document.getElementById("auto-battle-chip")?.addEventListener("click", () => this.toggleAutoBattle(false));
+    document.getElementById("fishing-mode-manual")?.addEventListener("click", () => this.chooseFishingMode("manual"));
+    document.getElementById("fishing-mode-auto")?.addEventListener("click", () => this.chooseFishingMode("auto"));
     document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
     const chatInput = document.getElementById("chat-input");
@@ -94,8 +96,7 @@ export class UI {
       if (event.code === "KeyJ" && !event.repeat) { event.preventDefault(); this.toggle("collection"); }
       if (event.code === "KeyK" && !event.repeat) { event.preventDefault(); this.toggle("cooking"); }
       if (event.code === "KeyB" && !event.repeat) { event.preventDefault(); this.toggle("shop"); }
-      if (event.code === "KeyL" && !event.repeat) { event.preventDefault(); this.toggle("afk"); }
-      if (event.code === "KeyH" && !event.repeat) { event.preventDefault(); this.toggle("battle"); }
+      if (event.code === "KeyH" && !event.repeat) { event.preventDefault(); this.toggleAutoBattle(); }
       if (event.code === "KeyM" && !event.repeat) {
         const sanctuaryOpen = !this.panels.companions?.classList.contains("hidden");
         if (this.anyOpen() && !sanctuaryOpen) return;
@@ -108,7 +109,7 @@ export class UI {
       const callback = this._petCb; this._petCb = null; if (callback) callback();
     });
   }
-  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); this.syncPet(true); this.syncMount(true); this.syncFoodBuffs(true); }
+  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); this.syncPet(true); this.syncMount(true); this.syncFoodBuffs(true); this.syncAutoBattle(true); }
 
   renderSkillbar() {
     if (!this.game) return;
@@ -248,6 +249,7 @@ export class UI {
   }
 
   toast(msg) {
+    if (this.game?._autoBattleCasting) return;
     const el = document.getElementById("toast"); if (!el) return;
     el.textContent = msg; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
     clearTimeout(this._t); this._t = setTimeout(() => el.classList.remove("show"), 1700);
@@ -261,7 +263,6 @@ export class UI {
       if (name === "inv") this.renderInv();
       if (name === "shop") this.renderShop();
       if (name === "afk") this.renderAfkFishing();
-      if (name === "battle") this.renderAfkBattle();
       if (name === "craft") this.renderCraft();
       if (name === "cooking") this.renderCooking();
       if (name === "quest") this.renderQuestLog();
@@ -274,10 +275,74 @@ export class UI {
       if (name !== "chat") setTimeout(() => p.querySelector(".panel-close,button,input")?.focus(), 0);
     }
   }
-  close(name) { this.panels[name]?.classList.add("hidden"); if (name === "afk") clearInterval(this._afkClock); if (name === "battle") clearInterval(this._battleClock); if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "shop", "afk", "battle", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); clearInterval(this._afkClock); clearInterval(this._battleClock); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "afk", "battle", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
-  hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "afk", "battle", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  close(name) { this.panels[name]?.classList.add("hidden"); if (name === "afk") clearInterval(this._afkClock); if (name === "fishingMode") this._fishingSpot = null; if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "shop", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); clearInterval(this._afkClock); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+
+  toggleAutoBattle(force) {
+    if (!this.game) return false;
+    const enabled = this.game.setAutoBattle(typeof force === "boolean" ? force : !this.game.autoBattle);
+    this.syncAutoBattle(true);
+    if (!this.panels.menu?.classList.contains("hidden")) this.renderMenu();
+    return enabled;
+  }
+
+  syncAutoBattle(force = false) {
+    if (!this.game) return;
+    const enabled = !!this.game.autoBattle;
+    const raw = enabled ? (this.game.autoBattleState || "SCANNING NEARBY") : "OFF";
+    const label = raw.startsWith("HUNTING:") ? `HUNTING ${petName(raw.slice(8)).toUpperCase()}` : raw;
+    const token = `${enabled}:${label}`;
+    if (!force && token === this._autoBattleToken) return;
+    this._autoBattleToken = token;
+    const toggle = document.getElementById("auto-battle-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-checked", String(enabled));
+      toggle.classList.toggle("active", enabled);
+    }
+    const menuState = document.getElementById("menu-battle-state");
+    if (menuState) menuState.textContent = enabled ? `ON · ${label.toLowerCase()}` : "OFF · hunts nearby monsters";
+    const chip = document.getElementById("auto-battle-chip");
+    chip?.classList.toggle("hidden", !enabled);
+    if (chip) chip.setAttribute("aria-label", enabled ? `Disable Auto Battle. ${label}` : "Enable Auto Battle");
+    const status = document.getElementById("auto-battle-status");
+    if (status) status.textContent = label;
+  }
+
+  showFishingMode(spot) {
+    if (!this.game || !spot || !this.panels.fishingMode) return;
+    this._fishingSpot = spot;
+    this.closeAll();
+    this.game.resetInputState?.();
+    this.game.paused = true;
+    const rod = activeRod(this.game.player.inv);
+    const status = afkFishingStatus(this.game.afkFishingJob);
+    const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+    set("fishing-mode-rod", rod.name);
+    set("fishing-mode-auto-copy", status.state === "ready"
+      ? "Your automatic catch is ready. Open it now to claim every fish."
+      : status.state === "running"
+        ? `Your automatic line is active with ${this.formatDuration(status.remainingMs)} remaining.`
+        : "Choose a timed watch. Return to a fishing spot to claim the catch.");
+    set("fishing-mode-auto-state", status.state === "ready" ? "CLAIM" : status.state === "running" ? "VIEW WATCH" : "SET WATCH");
+    this.panels.fishingMode.classList.remove("hidden");
+    setTimeout(() => document.getElementById("fishing-mode-manual")?.focus(), 0);
+  }
+
+  chooseFishingMode(mode) {
+    if (!this.game || !this._fishingSpot) return;
+    const spot = this._fishingSpot;
+    this._fishingSpot = null;
+    this.panels.fishingMode?.classList.add("hidden");
+    if (mode === "manual") {
+      if (!this.hasBlockingOpen()) this.game.paused = false;
+      this.game.startFishing(spot);
+      return;
+    }
+    if (this.game.autoBattle) this.game.setAutoBattle(false);
+    this.toggle("afk");
+  }
 
   currentRegion() {
     const p = this.game?.player; if (!p) return "Verdant Wilds";
@@ -304,10 +369,7 @@ export class UI {
     set("menu-location", this.currentRegion());
     set("menu-clock", document.getElementById("clock")?.textContent || "Day 06:00");
     set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
-    const afk = afkFishingStatus(this.game.afkFishingJob);
-    set("menu-afk-state", afk.state === "ready" ? "Catch ready to claim" : afk.state === "running" ? `${this.formatDuration(afk.remainingMs)} remaining` : "Dock is ready");
-    const battle = afkBattleStatus(this.game.afkBattleJob);
-    set("menu-battle-state", battle.state === "ready" ? "Patrol rewards ready" : battle.state === "running" ? `${this.formatDuration(battle.remainingMs)} remaining` : "Patrol board ready");
+    this.syncAutoBattle(true);
     set("menu-pet-progress", `${ownedPets} / ${MON_IDS.length} bonded`);
     set("menu-cooking-state", `${knownMeals}/${COOKING_RECIPES.length} recipes · ${servings} packed`);
     this.setOnlineState(this.online, this.onlineCount);
@@ -410,11 +472,11 @@ export class UI {
       set("afk-eyebrow", "CATCH READY"); set("afk-state", "Your keepnet is full.");
       set("afk-description", "Claim now to move every fish into the Chronicle, update fishing quests, and receive the dock's reduced gold payout.");
       set("afk-time", "CLAIM");
-      if (this._afkReadyToken !== status.job.id) { this._afkReadyToken = status.job.id; this.audio?.sfx("coin"); this.toast("AFK Fishing catch is ready to claim!"); }
+      if (this._afkReadyToken !== status.job.id) { this._afkReadyToken = status.job.id; this.audio?.sfx("coin"); this.toast("Auto Fishing catch ready · return to a fishing spot"); }
     } else {
-      set("afk-eyebrow", this.game.lastAfkFishingClaim ? "WATCH COMPLETE" : "DOCK READY");
+      set("afk-eyebrow", this.game.lastAfkFishingClaim ? "WATCH COMPLETE" : "AUTO LINE READY");
       set("afk-state", this.game.lastAfkFishingClaim ? "Catch secured in your pack." : "Choose a fishing watch.");
-      set("afk-description", this.game.lastAfkFishingClaim ? "Your collection, quest progress, fish inventory, and gold were updated together." : "The Angler watches your line while you are away—even after closing the tab. Return when the timer ends to claim the catch once.");
+      set("afk-description", this.game.lastAfkFishingClaim ? "Your collection, quest progress, fish inventory, and gold were updated together." : "Your automatic line continues by timestamp. Return to a fishing spot and choose Auto Fishing when the watch ends.");
       set("afk-time", "READY");
     }
 
@@ -462,71 +524,6 @@ export class UI {
     const cancel = document.getElementById("afk-cancel");
     if (cancel) { cancel.classList.toggle("hidden", state !== "running"); cancel.onclick = () => this.game.cancelAfkFishing(); }
     if (state === "running" && !this.panels.afk?.classList.contains("hidden")) this._afkClock = setInterval(() => this.renderAfkFishing(), 1000);
-  }
-
-  renderAfkBattle() {
-    if (!this.game) return;
-    clearInterval(this._battleClock);
-    const status = afkBattleStatus(this.game.afkBattleJob, Date.now());
-    if (!status.valid) this.game.afkBattleJob = null;
-    const state = status.valid ? status.state : "idle";
-    const classId = status.job?.classId || this.game.player.cls || "warrior";
-    const profile = AFK_BATTLE_CLASS_PROFILES[classId] || AFK_BATTLE_CLASS_PROFILES.warrior;
-    const classMeta = CLASSES[classId] || CLASSES.warrior;
-    const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
-    const progress = document.getElementById("battle-progress-fill"); if (progress) progress.style.width = `${Math.round(status.progress * 100)}%`;
-    set("battle-art-crest", classMeta.crest || profile.name.charAt(0)); set("battle-class-name", profile.name); set("battle-class-role", profile.role);
-    this.panels.battle?.style.setProperty("--battle-accent", classMeta.color || "#bf7652");
-    if (state === "running") {
-      set("battle-eyebrow", "PATROL IN PROGRESS"); set("battle-state", `${profile.name} is clearing monster waves.`);
-      set("battle-description", "The expedition is timestamped in this save. Combat continues while this tab is hidden or closed."); set("battle-time", this.formatDuration(status.remainingMs));
-    } else if (state === "ready") {
-      set("battle-eyebrow", "EXPEDITION COMPLETE"); set("battle-state", "The patrol returned with a sealed field report.");
-      set("battle-description", "Claim once to add every kill, material, gold reward, and experience point to this traveler."); set("battle-time", "CLAIM");
-      if (this._battleReadyToken !== status.job.id) { this._battleReadyToken = status.job.id; this.audio?.sfx("coin"); this.toast("AFK Battle patrol rewards are ready!"); }
-    } else {
-      set("battle-eyebrow", this.game.lastAfkBattleClaim ? "FIELD REPORT ARCHIVED" : "PATROL BOARD READY");
-      set("battle-state", this.game.lastAfkBattleClaim ? "Rewards secured. Choose the next route." : "Choose an expedition.");
-      set("battle-description", this.game.lastAfkBattleClaim ? "Your Chronicle now includes the patrol's kills, experience, gold, and gathered materials." : "Your active class clears simulated monster waves while you are away. Return to claim battle XP, gold, materials, and kill progress once."); set("battle-time", "READY");
-    }
-
-    const expeditions = document.getElementById("battle-expedition-list");
-    if (expeditions) {
-      expeditions.innerHTML = "";
-      for (const option of AFK_BATTLE_OPTIONS) {
-        const selected = option.id === this._battleSelection;
-        const button = document.createElement("button"); button.type = "button"; button.className = `battle-expedition${selected ? " selected" : ""}`;
-        button.disabled = state === "running" || state === "ready"; button.setAttribute("aria-pressed", String(selected));
-        const danger = Array.from({ length: 3 }, (_, index) => `<i class="${index < option.difficulty ? "on" : ""}"></i>`).join("");
-        button.innerHTML = `<div class="battle-route-mark"><span>${option.waveCount}</span><small>WAVES</small></div><div><small>${option.label.toUpperCase()}</small><strong>${option.minutes} MIN EXPEDITION</strong><p>${option.description}</p><em>${danger}<b>THREAT ${option.difficulty}</b></em></div><kbd>${selected ? "SELECTED" : "DEPLOY"}</kbd>`;
-        button.addEventListener("click", () => { this._battleSelection = option.id; this.audio?.sfx("ui"); this.renderAfkBattle(); }); expeditions.appendChild(button);
-      }
-    }
-
-    const summary = document.getElementById("battle-reward-summary"), last = this.game.lastAfkBattleClaim;
-    if (summary) {
-      summary.classList.toggle("hidden", !last); summary.innerHTML = "";
-      if (last) {
-        const head = document.createElement("div"); head.className = "battle-report-head";
-        head.innerHTML = `<div><span>${String(last.overallRating || "victory").toUpperCase()} REPORT</span><strong>${last.expedition.label} · ${last.className}</strong></div><dl><div><dt>KILLS</dt><dd>${last.kills}</dd></div><div><dt>GOLD</dt><dd>+${last.gold}</dd></div><div><dt>XP</dt><dd>+${last.xp}</dd></div></dl>`; summary.appendChild(head);
-        const materials = document.createElement("div"); materials.className = "battle-materials";
-        for (const [id, amount] of Object.entries(last.materials || {})) { const chip = document.createElement("span"); chip.innerHTML = `<i class="${id}"></i><b>${ITEMS[id]?.name || id}</b> ×${amount}`; materials.appendChild(chip); }
-        summary.appendChild(materials);
-        const waves = document.createElement("div"); waves.className = "battle-wave-log";
-        for (const wave of last.waves || []) { const row = document.createElement("article"); row.dataset.rating = wave.rating; row.innerHTML = `<i>${String(wave.number).padStart(2, "0")}</i><div><b>${wave.enemy}</b><span>${wave.rating} · ${wave.kills} defeated</span></div><em>+${wave.gold}g · +${wave.xp}xp</em>`; waves.appendChild(row); }
-        summary.appendChild(waves);
-      }
-    }
-
-    const primary = document.getElementById("battle-primary");
-    if (primary) {
-      const selected = AFK_BATTLE_OPTIONS.find((entry) => entry.id === this._battleSelection) || AFK_BATTLE_OPTIONS[0];
-      primary.disabled = state === "running" || state === "claimed";
-      primary.textContent = state === "ready" ? "CLAIM PATROL REWARDS" : state === "running" ? `PATROL ACTIVE · ${this.formatDuration(status.remainingMs)}` : `DEPLOY ${selected.minutes} MIN PATROL`;
-      primary.onclick = () => state === "ready" ? this.game.claimAfkBattle() : this.game.startAfkBattle(selected.id);
-    }
-    const cancel = document.getElementById("battle-cancel"); if (cancel) { cancel.classList.toggle("hidden", state !== "running"); cancel.onclick = () => this.game.cancelAfkBattle(); }
-    if (state === "running" && !this.panels.battle?.classList.contains("hidden")) this._battleClock = setInterval(() => this.renderAfkBattle(), 1000);
   }
 
   renderCollection() {
@@ -764,15 +761,16 @@ export class UI {
     }
     const service = npc.name === "Merchant"
       ? { panel: "shop", kicker: "TRAIL MARKET", title: "Buy supplies or sell spare loot", copy: "Instant trade using the gold and inventory in this save.", action: "OPEN MARKET" }
-      : npc.name === "Angler"
-        ? { panel: "afk", kicker: "MOONWATER DOCK", title: "Leave a line while you are away", copy: "Choose a 2, 10, or 30 minute offline-safe fishing watch.", action: "OPEN AFK DOCK" }
-        : npc.name === "Warden"
-          ? { panel: "battle", kicker: "AUTONOMOUS PATROL", title: "Farm monster waves while away", copy: "Deploy your active class for timed XP, gold, materials, and kill progress.", action: "OPEN PATROL BOARD" }
+      : npc.name === "Warden"
+        ? { autoBattle: true, panel: "battle", kicker: "AUTO BATTLE", title: "Let your class hunt nearby monsters", copy: "Toggle real-time auto combat. Your traveler selects targets, closes distance, attacks, and uses class skills.", action: "TOGGLE AUTO BATTLE" }
         : null;
     if (service) {
       const row = document.createElement("section"); row.className = "npc-service-card";
       row.innerHTML = `<i class="${service.panel}"></i><div><span>${service.kicker}</span><strong>${service.title}</strong><p>${service.copy}</p></div><button type="button">${service.action}</button>`;
-      row.querySelector("button")?.addEventListener("click", () => this.toggle(service.panel));
+      row.querySelector("button")?.addEventListener("click", () => {
+        if (service.autoBattle) { this.close("dialog"); this.toggleAutoBattle(); }
+        else this.toggle(service.panel);
+      });
       wrap.prepend(row);
     }
     wrap.querySelectorAll("[data-accept]").forEach(b => b.addEventListener("click", () => {
@@ -833,6 +831,7 @@ export class UI {
     this.syncBoss(g.boss);
     this.syncFishing(g.fishing);
     this.syncCatch(g.catchReveal);
+    this.syncAutoBattle();
     this.syncMount(false);
     this.syncFoodBuffs(false);
     if (!this.panels.menu?.classList.contains("hidden")) this.renderMenu();

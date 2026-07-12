@@ -18,7 +18,6 @@ import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
 import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
-import { afkBattleStatus, normalizeAfkBattleJob } from "./afkbattle.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -273,9 +272,9 @@ function wireSettings() {
   const dpadHold = {};
   document.querySelectorAll(".dpad-btn").forEach(b => {
     const dir = b.dataset.dir;
-    const on = (e) => { e.preventDefault(); if (!game) return; const map = { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD" }; game.keys[map[dir]] = true; };
+    const on = (e) => { e.preventDefault(); if (!game || performance.now() < (game.inputSuspendUntil || 0)) return; const map = { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD" }; game.keys[map[dir]] = true; };
     const off = (e) => { e.preventDefault(); if (!game) return; const map = { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD" }; game.keys[map[dir]] = false; };
-    b.addEventListener("touchstart", on, { passive: false }); b.addEventListener("touchend", off, { passive: false });
+    b.addEventListener("touchstart", on, { passive: false }); b.addEventListener("touchend", off, { passive: false }); b.addEventListener("touchcancel", off, { passive: false });
     b.addEventListener("mousedown", on); b.addEventListener("mouseup", off); b.addEventListener("mouseleave", off);
   });
 }
@@ -312,7 +311,6 @@ function savePayload(g) {
     fishing: g.fishingStats,
     quests: g.quests?.serialize?.(),
     afkFishing: g.afkFishingJob || null,
-    afkBattle: g.afkBattleJob || null,
     flags: g.flags,
     equipped: p.equipped,
     pets: Array.isArray(g.pets) ? [...g.pets] : [],
@@ -450,10 +448,6 @@ function startGame(savedLook, savedName, saveData) {
         const restoredAfk = normalizeAfkFishingJob(saveData.afkFishing);
         game.afkFishingJob = restoredAfk?.claimedAt ? null : restoredAfk;
       }
-      if (saveData.afkBattle) {
-        const restoredBattle = normalizeAfkBattleJob(saveData.afkBattle);
-        game.afkBattleJob = restoredBattle?.claimedAt ? null : restoredBattle;
-      }
       if (Array.isArray(saveData.activeFoodBuffs)) {
         game.activeFoodBuffs = normalizeActiveBuffs(saveData.activeFoodBuffs, Date.now());
       }
@@ -493,10 +487,7 @@ function startGame(savedLook, savedName, saveData) {
     game.start();
     showArrivalGuide(!!saveData);
     if (afkFishingStatus(game.afkFishingJob).state === "ready") {
-      setTimeout(() => ui.toast("AFK Fishing catch ready · open the Dock to claim"), 700);
-    }
-    if (afkBattleStatus(game.afkBattleJob).state === "ready") {
-      setTimeout(() => ui.toast("AFK Battle patrol complete · rewards ready"), 1050);
+      setTimeout(() => ui.toast("Auto Fishing catch ready · interact with water to claim"), 700);
     }
     // Auto-save every 15s
     setInterval(persist, 15000);
