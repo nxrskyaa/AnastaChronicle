@@ -4,6 +4,7 @@ import { view } from "./view.js";
 import { updateNpcWorld } from "./npcworld.js";
 import { net, sendBossHit, sendPvpHit } from "./net.js";
 import { CLASSES } from "./classes.js";
+import { COOKING_RECIPES, activeBuffTotals, cookRecipe, knownRecipeIds, normalizeActiveBuffs, useFood } from "./cooking.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -28,7 +29,7 @@ const projectileSpeed = (kind) => PROJECTILE_SPEED[kind] || PROJECTILE_SPEED.fir
 
 function rangedAim(game, kind, preview = false) {
   const p = game.player;
-  const ox = p.x, oy = p.y - 14;
+  const ox = p.x, oy = p.y - 14 - game.riderVisualLift();
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
   const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
   const fallback = fx || fy ? { dx: fx, dy: fy } : { dx: 0, dy: 1 };
@@ -85,6 +86,9 @@ Game.prototype.update = function (dt) {
   for (const f of this.fx) f.t += dt;
   this.fx = this.fx.filter(f => f.t < f.dur);
   const p = this.player;
+  const foodNow = Date.now();
+  this.activeFoodBuffs = normalizeActiveBuffs(this.activeFoodBuffs, foodNow);
+  this.foodBuffTotals = activeBuffTotals(this.activeFoodBuffs, foodNow);
   this.time = (this.time + dt * 6) % 1440;
 
   // weather scheduler
@@ -142,7 +146,8 @@ Game.prototype.update = function (dt) {
     const l = Math.hypot(ix, iy); if (l > 1) { ix /= l; iy /= l; }
   }
 
-  const maxSp = p.speed * (p.shield ? 0.5 : 1) * (p.attackT > 0 ? 0.4 : 1);
+  const travelBoost = this.mountSpeedMultiplier() * (1 + (this.foodBuffTotals?.speed || 0));
+  const maxSp = p.speed * travelBoost * (p.shield ? 0.5 : 1) * (p.attackT > 0 ? 0.4 : 1);
   if (p.evadeT <= 0) {
     if (Math.hypot(ix, iy) > 0.05) {
       p.vx += ix * p.accel * dt; p.vy += iy * p.accel * dt;
@@ -256,7 +261,10 @@ Game.prototype.doAttack = function (damageMul = 1) {
   const fx = p.dir === "left" ? -1 : p.dir === "right" ? 1 : 0;
   const fy = p.dir === "up" ? -1 : p.dir === "down" ? 1 : 0;
   const activeBuff = p.buffT > 0 ? (p.buffMul || 1) : 1;
-  const rawDmg = (w.dmg + p.level * 2) * (p.dmgMul || 1) * Math.max(.1, Number(damageMul) || 1);
+  const foodPower = 1 + (this.foodBuffTotals?.damage || 0);
+  const rawDmg = (w.dmg + p.level * 2) * (p.dmgMul || 1) * foodPower * Math.max(.1, Number(damageMul) || 1);
+  const riderLift = this.riderVisualLift();
+  const attackY = p.y - 14 - riderLift;
   // Projectiles flow through hurtEnemy()/hurtBossDirect(), which apply buffs;
   // direct melee paths resolve the active buff here exactly once.
   const dmg = w.ranged ? rawDmg : rawDmg * activeBuff;
@@ -265,13 +273,13 @@ Game.prototype.doAttack = function (damageMul = 1) {
     const kind = w.projectile || "arrow";
     const { dx, dy } = rangedAim(this, kind);
     const variant = p.equipped.startsWith("dragon") ? "dragon" : kind === "fire" ? "arcane" : "basic";
-    this.spawnProjectile(p.x, p.y - 14, dx, dy, kind, Math.round(dmg), w.pierce, variant);
+    this.spawnProjectile(p.x, attackY, dx, dy, kind, Math.round(dmg), w.pierce, variant);
     p.vx -= dx * 14; p.vy -= dy * 14;
-    this.fx.push({ kind: kind === "arrow" ? "bowrelease" : "castburst", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant, t: 0, dur: .3 });
+    this.fx.push({ kind: kind === "arrow" ? "bowrelease" : "castburst", x: p.x, y: attackY, angle: Math.atan2(dy, dx), variant, t: 0, dur: .3 });
     return;
   }
   p.vx += fx * 55; p.vy += fy * 55;
-  this.fx.push({ kind: "weaponslash", x: p.x, y: p.y, dir: p.dir, weapon: p.equipped, combo: p.comboStep, t: 0, dur: p.attackDur });
+  this.fx.push({ kind: "weaponslash", x: p.x, y: p.y - riderLift, dir: p.dir, weapon: p.equipped, combo: p.comboStep, t: 0, dur: p.attackDur });
   let anyHit = false;
   for (const e of this.enemies) {
     if (e.dead) continue;
@@ -435,6 +443,9 @@ Game.prototype.useSkill = function (i) {
   const skill = (CLASSES[cls] || CLASSES.warrior).skills[i];
   if (!skill) return;
   const skillId = skill.id, cooldown = skill.cd;
+  const foodPower = 1 + (this.foodBuffTotals?.damage || 0);
+  const riderLift = this.riderVisualLift();
+  const attackY = p.y - 14 - riderLift;
 
   switch (skillId) {
     case "powerstrike": {
@@ -442,15 +453,15 @@ Game.prototype.useSkill = function (i) {
       if (!this.doAttack(1.65)) { this._nextDuelKind = null; this.ui.toast("Not enough stamina"); break; }
       p.skillCd[i] = cooldown;
       const { fx, fy } = dirVec();
-      this.fx.push({ kind: "crescent", x: p.x + fx * 20, y: p.y + fy * 20, dir: p.dir, t: 0, dur: .42 });
+      this.fx.push({ kind: "crescent", x: p.x + fx * 20, y: p.y - riderLift + fy * 20, dir: p.dir, t: 0, dur: .42 });
       this.shake = Math.max(this.shake, 2); this.ui.toast("Moon Cleave!"); break;
     }
     case "whirlwind": {
       p.skillCd[i] = cooldown; const w = WEAPONS[p.equipped] || WEAPONS.fist; p.attackDur = .56; p.attackT = p.attackDur; p.attackStyle = "melee";
       this.audio.sfx("whirl"); this.fx.push({ kind: "whirl", x: p.x, y: p.y, variant: "steel", t: 0, dur: .62 }); this.shake = Math.max(this.shake, 3);
-      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 70) { const hit = Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)); this.hurtEnemy(e, hit, true); } }
-      this.hurtBoss(p.x, p.y, 70, Math.round(40 * (p.dmgMul || 1)));
-      this.tryDuelStrike(p.x, p.y, 82, Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1)), "skill");
+      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 70) { const hit = Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1) * foodPower); this.hurtEnemy(e, hit, true); } }
+      this.hurtBoss(p.x, p.y, 70, Math.round(40 * (p.dmgMul || 1) * foodPower));
+      this.tryDuelStrike(p.x, p.y, 82, Math.round((w.dmg + p.level * 2) * 1.3 * (p.dmgMul || 1) * foodPower), "skill");
       this.ui.toast("Tempest Wheel!"); break;
     }
     case "warcry": {
@@ -461,42 +472,42 @@ Game.prototype.useSkill = function (i) {
     case "fireball": {
       p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "fire");
       p.attackDur = .42; p.attackT = p.attackDur; p.attackStyle = "cast";
-      this.spawnProjectile(p.x, p.y - 14, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1)), false, "comet");
-      this.fx.push({ kind: "castburst", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "comet", t: 0, dur: .5 });
+      this.spawnProjectile(p.x, attackY, dx, dy, "fire", Math.round((26 + p.level * 3) * (p.dmgMul || 1) * foodPower), false, "comet");
+      this.fx.push({ kind: "castburst", x: p.x, y: attackY, angle: Math.atan2(dy, dx), variant: "comet", t: 0, dur: .5 });
       this.audio.sfx("whirl"); this.ui.toast("Ember Comet!"); break;
     }
     case "frostnova": {
       p.skillCd[i] = cooldown; p.attackDur = .48; p.attackT = p.attackDur; p.attackStyle = "cast";
       this.fx.push({ kind: "frost", x: p.x, y: p.y, variant: "lotus", t: 0, dur: .82 }); this.shake = Math.max(this.shake, 2); this.audio.sfx("crit");
-      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 80) { this.hurtEnemy(e, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), true); e.frozen = 2.2; } }
-      this.hurtBoss(p.x, p.y, 80, Math.round(30 * (p.dmgMul || 1)));
-      this.tryDuelStrike(p.x, p.y, 92, Math.round((22 + p.level * 2) * (p.dmgMul || 1)), "skill");
+      for (const e of this.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < 80) { this.hurtEnemy(e, Math.round((22 + p.level * 2) * (p.dmgMul || 1) * foodPower), true); e.frozen = 2.2; } }
+      this.hurtBoss(p.x, p.y, 80, Math.round(30 * (p.dmgMul || 1) * foodPower));
+      this.tryDuelStrike(p.x, p.y, 92, Math.round((22 + p.level * 2) * (p.dmgMul || 1) * foodPower), "skill");
       this.ui.toast("Winter Lotus!"); break;
     }
     case "arrowshot": {
       p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow");
       p.attackDur = .4; p.attackT = p.attackDur; p.attackStyle = "bow";
-      this.spawnProjectile(p.x, p.y - 14, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1)), true, "falcon");
-      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: Math.atan2(dy, dx), variant: "falcon", t: 0, dur: .42 });
+      this.spawnProjectile(p.x, attackY, dx, dy, "arrow", Math.round((24 + p.level * 3) * (p.dmgMul || 1) * foodPower), true, "falcon");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: attackY, angle: Math.atan2(dy, dx), variant: "falcon", t: 0, dur: .42 });
       this.audio.sfx("attack"); this.ui.toast("Falcon Pierce!"); break;
     }
     case "multishot": {
       p.skillCd[i] = cooldown; const { dx, dy } = rangedAim(this, "arrow");
       const base = Math.atan2(dy, dx);
       p.attackDur = .44; p.attackT = p.attackDur; p.attackStyle = "bow";
-      for (const off of [-.34, -.17, 0, .17, .34]) this.spawnProjectile(p.x, p.y - 14, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((13 + p.level * 1.7) * (p.dmgMul || 1)), false, "sakura");
-      this.fx.push({ kind: "bowrelease", x: p.x, y: p.y - 14, angle: base, variant: "sakura", t: 0, dur: .5 });
+      for (const off of [-.34, -.17, 0, .17, .34]) this.spawnProjectile(p.x, attackY, Math.cos(base + off), Math.sin(base + off), "arrow", Math.round((13 + p.level * 1.7) * (p.dmgMul || 1) * foodPower), false, "sakura");
+      this.fx.push({ kind: "bowrelease", x: p.x, y: attackY, angle: base, variant: "sakura", t: 0, dur: .5 });
       this.audio.sfx("attack"); this.ui.toast("Sakura Volley!"); break;
     }
     case "heal": {
-      if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[i] = cooldown; p.attackDur = .52; p.attackT = p.attackDur; p.attackStyle = "cast"; this.addFloater(p.x, p.y - 36, 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, variant: "sutra", t: 0, dur: .9 }); this.ui.toast("Verdant Sutra · +30 HP"); }
+      if ((p.inv.herb || 0) > 0) { p.inv.herb--; p.hp = Math.min(p.maxHp, p.hp + 30); p.skillCd[i] = cooldown; p.attackDur = .52; p.attackT = p.attackDur; p.attackStyle = "cast"; this.addFloater(p.x, p.y - 36 - this.riderVisualLift(), 30, false, false, true); this.audio.sfx("heal"); this.fx.push({ kind: "heal", x: p.x, y: p.y, variant: "sutra", t: 0, dur: .9 }); this.ui.toast("Verdant Sutra · +30 HP"); }
       else this.ui.toast("No herbs"); break;
     }
     case "windward": {
       if (p.stamina < 22) { this.ui.toast("Not enough stamina"); break; }
       p.stamina -= 22; p.skillCd[i] = cooldown; p.wardT = 4; p.hp = Math.min(p.maxHp, p.hp + 12);
       p.attackDur = .4; p.attackT = p.attackDur; p.attackStyle = "bow";
-      this.addFloater(p.x, p.y - 36, 12, false, false, true); this.audio.sfx("heal");
+      this.addFloater(p.x, p.y - 36 - this.riderVisualLift(), 12, false, false, true); this.audio.sfx("heal");
       this.fx.push({ kind: "windward", x: p.x, y: p.y, t: 0, dur: .9 }); this.ui.toast("Wind Ward · damage reduced"); break;
     }
     case "blink": {
@@ -594,6 +605,54 @@ Game.prototype.craft = function (rid) {
   this.audio.sfx(isRare ? "level" : "pickup");
   this.shake = Math.max(this.shake, isRare ? 6 : 2);
   this.ui.renderCraft(); this.ui.renderInv();
+};
+
+Game.prototype.cookFood = function (recipeId) {
+  const recipe = COOKING_RECIPES.find((entry) => entry.id === recipeId);
+  if (!recipe) return false;
+  if (!knownRecipeIds({ level: this.player.level }).includes(recipe.id)) {
+    this.ui.toast(`Recipe unlocks at level ${recipe.unlockLevel}`);
+    return false;
+  }
+  const result = cookRecipe(this.player.inv, recipe);
+  if (!result.ok) {
+    const first = result.missing?.[0];
+    this.ui.toast(first ? `Need ${first.missing} more ${first.name}` : "Missing cooking ingredients");
+    return false;
+  }
+  for (let i = 0; i < 14; i++) {
+    this.particles.push({
+      x: this.player.x + (Math.random() - .5) * 12,
+      y: this.player.y - 18,
+      vx: (Math.random() - .5) * 30,
+      vy: -24 - Math.random() * 34,
+      life: .55 + Math.random() * .3,
+      color: i % 3 === 0 ? "rgba(255,220,142,.9)" : i % 2 ? "rgba(113,211,153,.86)" : "rgba(240,126,70,.84)",
+    });
+  }
+  this.audio.sfx("pickup");
+  this.ui.toast(`Cooked · ${recipe.name} ×${result.result.qty}`);
+  this.ui.renderCooking?.();
+  this.ui.renderInv?.();
+  return true;
+};
+
+Game.prototype.eatFood = function (foodId) {
+  const result = useFood(this.player.inv, foodId, this.player, this.activeFoodBuffs, Date.now());
+  if (!result.ok) {
+    this.ui.toast("That serving is no longer in your pack.");
+    return false;
+  }
+  this.activeFoodBuffs = result.activeBuffs;
+  this.foodBuffTotals = activeBuffTotals(this.activeFoodBuffs, Date.now());
+  this.fx.push({ kind: "heal", x: this.player.x, y: this.player.y, variant: "meal", t: 0, dur: .75 });
+  this.audio.sfx("heal");
+  const healText = result.healed > 0 ? ` · +${Math.round(result.healed)} HP` : "";
+  this.ui.toast(`${result.food.name}${healText} · buff active`);
+  this.ui.renderCooking?.();
+  this.ui.renderInv?.();
+  this.ui.sync?.();
+  return true;
 };
 
 Game.prototype.respawn = function () {
@@ -886,7 +945,8 @@ Game.prototype.damagePlayer = function (raw) {
   if (p.invuln > 0) return;
   if (p.shield) { p.stamina = Math.max(0, p.stamina - 6); if (p.stamina > 0) { p.invuln = 0.2; return; } }
   const ward = p.wardT > 0 ? .62 : 1;
-  const dmg = Math.max(1, Math.round(raw * (p.defense || 1) * ward));
+  const foodGuard = Math.max(.55, 1 - (this.foodBuffTotals?.defense || 0));
+  const dmg = Math.max(1, Math.round(raw * (p.defense || 1) * ward * foodGuard));
   p.hp -= dmg; p.invuln = 0.6;
   this.addFloater(p.x, p.y - 36, dmg, false, true);
   this.audio.sfx("hurt"); this.shake = Math.max(this.shake, 5);
@@ -894,7 +954,8 @@ Game.prototype.damagePlayer = function (raw) {
 Game.prototype.damagePlayerPvp = function (acceptedDamage) {
   const p = this.player;
   const ward = p.wardT > 0 ? .62 : 1;
-  const dmg = Math.max(1, Math.round((Number(acceptedDamage) || 0) * ward));
+  const foodGuard = Math.max(.55, 1 - (this.foodBuffTotals?.defense || 0));
+  const dmg = Math.max(1, Math.round((Number(acceptedDamage) || 0) * ward * foodGuard));
   p.hp -= dmg;
   p.hurtT = Math.max(p.hurtT || 0, .2);
   this.addFloater(p.x, p.y - 36, dmg, false, true);
@@ -903,6 +964,7 @@ Game.prototype.damagePlayerPvp = function (acceptedDamage) {
   return dmg;
 };
 Game.prototype.addFloater = function (x, y, val, crit, dmgToPlayer, heal) {
+  if (dmgToPlayer && this.mounted) y -= this.riderVisualLift();
   const sx = (x - this.cam.x) * (this.canvas.clientWidth / view.w);
   const sy = (y - this.cam.y) * (this.canvas.clientHeight / view.h);
   this.ui.dmg(sx, sy, heal ? "+" + val : String(val), crit, heal);

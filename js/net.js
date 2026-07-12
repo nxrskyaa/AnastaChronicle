@@ -43,6 +43,8 @@ function remotePlayer(state) {
     name: state.name,
     look: state.look,
     duel: !!state.duel,
+    mounted: !!state.mounted,
+    mountId: typeof state.mountId === "string" ? state.mountId : null,
     frame: 0,
     frameT: 0,
     cache: null,
@@ -57,6 +59,8 @@ function applyState(remote, state) {
   if (state.name !== undefined) remote.name = state.name;
   if (state.look !== undefined) remote.look = state.look;
   if (state.duel !== undefined) remote.duel = !!state.duel;
+  if (state.mounted !== undefined) remote.mounted = !!state.mounted;
+  if (state.mountId !== undefined) remote.mountId = typeof state.mountId === "string" ? state.mountId : null;
 }
 
 function canSend() {
@@ -223,7 +227,7 @@ export async function connectMultiplayer(look, name, spawn) {
 }
 
 // Throttled position push (call every frame; sends about 12 times per second).
-export function sendMove(player, now) {
+export function sendMove(player, now, presence = null) {
   if (!canSend() || now - net._lastSend < 84) return false;
   net._lastSend = now;
   return send({
@@ -232,6 +236,8 @@ export function sendMove(player, now) {
     y: Math.round(player.y),
     dir: player.dir,
     moving: !!player.moving,
+    mounted: !!presence?.mounted,
+    mountId: presence?.mounted && typeof presence.mountId === "string" ? presence.mountId : null,
   });
 }
 

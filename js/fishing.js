@@ -33,7 +33,8 @@ export function fishingContext(game, spot) {
   const night = game.time >= 19 * 60 || game.time < 5 * 60;
   const time = night ? "night" : "day";
   const weather = game.weather || "clear";
-  const rod = activeRod(game.player?.inv);
+  const baseRod = activeRod(game.player?.inv);
+  const rod = { ...baseRod, luck: baseRod.luck + Math.max(0, Number(game.foodBuffTotals?.fishingLuck) || 0) };
   const condition = `${zone === "lake" ? "Lake" : "Pond"} · ${time === "night" ? "Moonlit" : "Daylight"}${weather !== "clear" ? ` · ${weather}` : ""}`;
   return { zone, time, weather, rod, condition };
 }

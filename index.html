@@ -43,7 +43,7 @@
       <h1>Your legend begins<br/>before the first step.</h1>
       <p>Create a traveler, master a class, bond with wild companions, and leave your mark across a shared living realm.</p>
       <div class="login-hero-art" aria-hidden="true"><div class="hero-shadow"></div><div class="hero-cape"></div><div class="hero-body"></div><div class="hero-head"></div><div class="hero-hair"></div><div class="hero-blade"></div><i class="hero-spark s1"></i><i class="hero-spark s2"></i><i class="hero-spark s3"></i></div>
-      <div class="realm-pillars"><div><b>3</b><span>CLASSES</span></div><div><b>14</b><span>COMPANIONS</span></div><div><b>&infin;</b><span>CHRONICLES</span></div></div>
+      <div class="realm-pillars"><div><b>3</b><span>CLASSES</span></div><div><b>25</b><span>COMPANIONS</span></div><div><b>&infin;</b><span>CHRONICLES</span></div></div>
     </section>
     <section class="login-card">
       <div class="login-glow"></div><div class="login-sigil"><span>A</span></div><span class="login-step">REALM ACCESS / 01</span>
@@ -94,6 +94,7 @@
 
 <div id="game-wrap" class="hidden">
   <canvas id="game" width="420" height="236"></canvas>
+  <div id="world-chat-layer" aria-live="polite" aria-label="Nearby traveler messages"></div>
 
   <div id="hud">
     <div id="status-card">
@@ -101,8 +102,9 @@
       <div class="bar-row"><span class="bar-label">HP</span><div class="bar hp"><div class="bar-fill" id="hp-fill"></div></div><span class="bar-val" id="hp-text">50</span></div>
       <div class="bar-row"><span class="bar-label">SP</span><div class="bar sp"><div class="bar-fill" id="stamina-fill"></div></div><span class="bar-val" id="stamina-text">100</span></div>
       <div class="bar-row xp-row"><div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div></div>
-      <div class="clock-row"><span id="clock">Day 06:00</span><button id="pet-chip" class="hidden" type="button" aria-label="Open companion collection"><span class="pet-chip-orb"></span><b id="pet-chip-name">No companion</b><small id="pet-chip-count">0/14</small></button></div>
+      <div class="clock-row"><span id="clock">Day 06:00</span><button id="pet-chip" class="hidden" type="button" aria-label="Open companion collection"><span class="pet-chip-orb"></span><b id="pet-chip-name">No companion</b><small id="pet-chip-count">0/25</small></button><button id="mount-chip" class="hidden" type="button" aria-label="Ride active mount"><i></i><span id="mount-chip-label">RIDE</span><kbd>M</kbd></button></div>
     </div>
+    <div id="food-buff-hud" class="food-buff-hud hidden" aria-live="polite"></div>
 
     <div id="boss-hud" class="hidden" aria-live="polite">
       <div class="boss-hud-top">
@@ -219,9 +221,10 @@
     <nav class="realm-menu-grid" aria-label="Realm features">
       <button type="button" data-open-panel="inv"><i class="menu-rune bag"></i><span><b>Inventory</b><small>Gear &amp; materials</small></span><em>I</em></button>
       <button type="button" data-open-panel="craft"><i class="menu-rune forge"></i><span><b>Forge</b><small>Craft your arsenal</small></span><em>C</em></button>
+      <button type="button" data-open-panel="cooking"><i class="menu-rune cooking"></i><span><b>Hearth Kitchen</b><small id="menu-cooking-state">12 camp recipes</small></span><em>K</em></button>
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
-      <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 14 bonded</small></span><em>P NEXT</em></button>
+      <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 25 bonded</small></span><em>P NEXT</em></button>
       <button type="button" data-open-panel="chat"><i class="menu-rune chat"></i><span><b>Realm Chat</b><small id="menu-chat-state">Offline</small></span><em>ENTER</em></button>
       <button type="button" data-open-panel="settings"><i class="menu-rune settings"></i><span><b>Settings</b><small>Controls &amp; audio</small></span><em>OPEN</em></button>
     </nav>
@@ -256,10 +259,21 @@
     <div id="forge-summary"></div>
     <div id="craft-list"></div>
   </div>
+  <div id="panel-cooking" class="panel panel-wide cooking-panel hidden" role="dialog" aria-modal="true" aria-labelledby="cooking-title">
+    <div class="panel-head"><div><span class="panel-kicker">HEARTH CAMP · FIELD CUISINE</span><h2 id="cooking-title">Hearth Kitchen</h2></div><button class="panel-close" data-close="cooking" aria-label="Close Hearth Kitchen">&times;</button></div>
+    <div class="cooking-hero">
+      <div class="cooking-hearth" aria-hidden="true"><i class="flame-a"></i><i class="flame-b"></i><i class="pot"></i><span></span></div>
+      <div><span>COOK · PACK · EAT</span><strong>Turn the wilds into useful trail food.</strong><p>Fish, herbs, gel, and crystal ore become meals with healing and timed field effects. New recipes unlock as your Chronicle grows.</p></div>
+      <dl><div><dt>Known</dt><dd id="cooking-known-count">2 / 12</dd></div><div><dt>Active</dt><dd id="cooking-active-count">No meal</dd></div></dl>
+    </div>
+    <div id="cooking-buff-strip" class="cooking-buff-strip" aria-live="polite"></div>
+    <div class="cooking-guide"><span><i>1</i> Gather ingredients</span><b></b><span><i>2</i> Cook a serving</span><b></b><span><i>3</i> Eat from your pack</span></div>
+    <div id="cooking-list" class="cooking-list"></div>
+  </div>
   <div id="panel-quest" class="panel hidden"><div class="panel-head"><h2>Quest Log</h2><button class="panel-close" data-close="quest">×</button></div><div id="quest-list"></div></div>
   <div id="panel-companions" class="panel panel-wide companion-panel hidden">
     <div class="panel-head"><div><span class="panel-kicker">WILD BONDS</span><h2>Companion Sanctuary</h2></div><button class="panel-close" data-close="companions">×</button></div>
-    <div class="companion-hero"><div class="companion-hero-art"><canvas id="companion-active-art" width="96" height="96"></canvas><i id="companion-element-orb"></i></div><div class="companion-hero-copy"><span id="companion-active-element">NO ACTIVE BOND</span><strong id="companion-active-name">Find your first companion</strong><p id="companion-active-desc">Rare supply caches may reveal wild spirits. Bonded companions remain in your sanctuary and can be summoned at any time.</p><div class="companion-progress"><div><i id="companion-progress-fill"></i></div><b id="companion-owned-count">0 / 14 BONDED</b></div></div><button id="btn-cycle-pet" class="companion-cycle" type="button"><span>NEXT BOND</span><kbd>P</kbd></button></div>
+    <div class="companion-hero"><div class="companion-hero-art"><canvas id="companion-active-art" width="96" height="96"></canvas><i id="companion-element-orb"></i></div><div class="companion-hero-copy"><span id="companion-active-element">NO ACTIVE BOND</span><strong id="companion-active-name">Find your first companion</strong><p id="companion-active-desc">Rare supply caches may reveal wild spirits. Bonded companions remain in your sanctuary and can be summoned at any time.</p><div class="companion-progress"><div><i id="companion-progress-fill"></i></div><b id="companion-owned-count">0 / 25 BONDED</b></div></div><div class="companion-actions"><button id="btn-cycle-pet" class="companion-cycle" type="button"><span>NEXT BOND</span><kbd>P</kbd></button><button id="btn-mount-toggle" class="companion-mount hidden" type="button"><span>RIDE MOUNT</span><kbd>M</kbd></button></div></div>
     <div class="companion-grid-head"><div><span>COMPANION ARCHIVE</span><small>Tap any bonded spirit to summon it.</small></div><div class="element-key"><i class="grass"></i><i class="fire"></i><i class="water"></i><i class="arcane"></i></div></div>
     <div id="companion-grid" class="companion-grid"></div>
   </div>
@@ -287,7 +301,7 @@
     <div class="set-row"><span>Movement</span>
       <div class="seg"><button id="move-btn-btn" class="seg-btn active">Button</button><button id="move-tap-btn" class="seg-btn">Tap</button></div>
     </div>
-    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · I bag · C forge · Q quests</div>
+    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · I bag · C forge · K cook · M mount · Q quests</div>
   </div>
   <div id="panel-level" class="panel hidden modal level-ceremony" role="dialog" aria-modal="true" aria-labelledby="level-title">
     <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>

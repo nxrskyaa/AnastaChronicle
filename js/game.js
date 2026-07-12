@@ -2,7 +2,7 @@ import { buildCharacter, buildWeapon, DEFAULT_LOOK } from "./chargen.js";
 import { QuestLog, NPC_DEFS } from "./quests.js";
 import { buildVillage } from "./buildings.js";
 import { audio } from "./audio.js";
-import { buildMonsters, MON_IDS, monHeight } from "./monsters.js";
+import { buildMonsters, MON_IDS, MON_META, monHeight } from "./monsters.js";
 import { view } from "./view.js";
 import { buildTiles } from "./tilegen.js";
 import { buildBoss } from "./boss.js";
@@ -45,6 +45,10 @@ export class Game {
     this.pet = null;
     this.pets = [];
     this.activePetId = null;
+    this.mountId = null;
+    this.mounted = false;
+    this.activeFoodBuffs = [];
+    this.foodBuffTotals = { speed: 0, damage: 0, defense: 0, fishingLuck: 0 };
     this.flags = { starterCache: false };
     this.fishingStats = { total: 0, best: 0, records: {} };
     this.catchReveal = null;
@@ -99,6 +103,7 @@ export class Game {
 
     const player = this.player;
     if (!player) return false;
+    if (this.mounted && this.mountId !== id) this.mounted = false;
     const oldPet = this.pet;
     if (oldPet) this._summonPetFx(oldPet.x, oldPet.y, false);
 
@@ -135,6 +140,48 @@ export class Game {
     const step = direction < 0 ? -1 : 1;
     const next = current < 0 ? 0 : (current + step + valid.length) % valid.length;
     return this.setActivePet(valid[next]) ? valid[next] : null;
+  }
+
+  mountablePets() {
+    return (this.pets || []).filter((id, index, list) => MON_META[id]?.mountable && list.indexOf(id) === index);
+  }
+
+  setMount(id, ride = true) {
+    if (!MON_META[id]?.mountable || !this.pets?.includes(id)) return false;
+    if (ride && this.fishing) this.failFishing?.("Line reeled in before mounting.");
+    const switchedCompanion = this.activePetId !== id;
+    if (switchedCompanion && !this.setActivePet(id)) return false;
+    this.mountId = id;
+    this.mounted = !!ride;
+    this.moveTarget = null;
+    this.resetInputState?.();
+    if (!switchedCompanion) this._summonPetFx(this.player.x, this.player.y, true);
+    this.ui?.syncMount?.();
+    this.ui?.syncPet?.(true);
+    this.onCompanionChange?.();
+    return true;
+  }
+
+  toggleMount(id = this.activePetId || this.mountId) {
+    if (this.mounted) {
+      this.mounted = false;
+      this._summonPetFx(this.player.x, this.player.y, false);
+      this.ui?.syncMount?.();
+      this.ui?.syncPet?.(true);
+      this.onCompanionChange?.();
+      return this.mountId;
+    }
+    return this.setMount(id, true) ? id : null;
+  }
+
+  mountSpeedMultiplier() {
+    return this.mounted ? Math.max(1, Number(MON_META[this.mountId]?.mountSpeed) || 1) : 1;
+  }
+
+  riderVisualLift() {
+    const meta = this.mounted ? MON_META[this.mountId] : null;
+    if (!meta?.mountable) return 0;
+    return Math.round(17 + ((Number(meta.mountScale) || 1.25) - 1) * 12);
   }
 
   _summonPetFx(x, y, withSound) {
@@ -373,11 +420,17 @@ export class Game {
       x = rand(4 * T, (MAP_W - 4) * T); y = rand(4 * T, (MAP_H - 4) * T); tries++;
     } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 12 * T || Math.hypot(x - this.bossArena.x, y - this.bossArena.y) < this.bossArena.radius) && tries < 30);
     const tier = Math.random() < 0.6 ? 1 : Math.random() < 0.8 ? 2 : 3;
-    const id = MON_IDS[(Math.random() * MON_IDS.length) | 0];
+    const habitat = this.creatureHabitatAt(x, y);
+    const candidates = MON_IDS.filter((candidate) => habitat.includes(MON_META[candidate]?.habitat));
+    const rarityWeight = { common: 5, uncommon: 3, rare: 2, epic: 1 };
+    const pool = (candidates.length ? candidates : MON_IDS).flatMap((candidate) =>
+      Array(rarityWeight[MON_META[candidate]?.rarity] || 2).fill(candidate)
+    );
+    const id = pool[(Math.random() * pool.length) | 0];
     // heavier HP/dmg scaling so combat feels meaningful; tier 3 hits harder
     const baseHp = 18 + tier * 16, baseDmg = 4 + tier * 3;
     this.enemies.push({
-      id, x, y, sortY: y, tier, hx: x, hy: y,       // hx/hy = home anchor for wander
+      id, x, y, sortY: y, tier, habitat: MON_META[id]?.habitat || habitat[0], hx: x, hy: y,       // hx/hy = home anchor for wander
       hp: baseHp, maxHp: baseHp,
       dmg: baseDmg, speed: 18 + tier * 6,
       xp: 6 + tier * 8, gold: tier * 2,
@@ -385,6 +438,21 @@ export class Game {
       atkCd: 0, hurt: 0, dead: false, h: monHeight(),
       state: "wander", angry: 0, wanderT: Math.random() * 2, wdx: 0, wdy: 0,
     });
+  }
+
+  creatureHabitatAt(x, y) {
+    const tile = this.tileAt(x, y);
+    const tx = x / T, ty = y / T;
+    const nearLake = Math.hypot(tx - 80, ty - 28) < 18;
+    const nearPond = Math.hypot(tx - 64, ty - 50) < 8;
+    const nearRuins = Math.hypot(x - this.bossArena.x, y - this.bossArena.y) < this.bossArena.radius + 190;
+    const night = this.time >= 19 * 60 || this.time < 5 * 60;
+    if (tile === 4 || (ty < 23 && tx < 46)) return ["snow", "highland"];
+    if (tile === 3 || nearLake) return ["coast", "meadow"];
+    if (nearPond) return ["marsh", "coast", "meadow"];
+    if (nearRuins) return night ? ["ruins", "night", "forest"] : ["ruins", "forest"];
+    if (tile === 5 || (tx > 73 && ty > 64)) return night ? ["forest", "night"] : ["forest"];
+    return ["meadow", "forest", "highland"];
   }
 
   spawnChest() {
@@ -425,11 +493,10 @@ export class Game {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (this.inputLocked) return;
       this.keys[e.code] = true;
-      if (e.repeat && ["KeyI", "KeyC", "KeyQ", "KeyM", "KeyF", "Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code)) return;
+      if (e.repeat && ["KeyI", "KeyC", "KeyQ", "KeyF", "Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code)) return;
       if (e.code === "KeyI") this.ui.toggle("inv");
       if (e.code === "KeyC") this.ui.toggle("craft");
       if (e.code === "KeyQ") this.ui.toggle("quest");
-      if (e.code === "KeyM") this.toggleMoveMode();
       if (e.code === "KeyF" && !e.repeat && !this.paused) this.interact();
       if (["Digit1", "Digit2", "Digit3", "Digit4"].includes(e.code) && !e.repeat && !this.paused) this.useSkill(Number(e.code.slice(5)) - 1);
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
@@ -586,7 +653,7 @@ export class Game {
           if (this.catchReveal.elapsed >= this.catchReveal.duration) this.catchReveal = null;
         }
       }
-      if (net.connected) sendMove(this.player, now);
+      if (net.connected) sendMove(this.player, now, { mounted: this.mounted, mountId: this.mountId });
       this.render();
       requestAnimationFrame(loop);
     };

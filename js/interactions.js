@@ -24,6 +24,7 @@ Game.prototype.resolveInteract = function (point = null) {
   for (const chest of this.chests) {
     if (!chest.opened) offer(actors, chest, "chest", chest.pet ? "Claim Companion Cache" : "Claim Supply Cache", focusRadius);
   }
+  if (this.camp) offer(actors, this.camp, "cook", "Cook at the Hearth", focusRadius);
   actors.sort((a, b) => a.focusDistance - b.focusDistance || a.distance - b.distance);
   if (actors.length) return actors[0];
 
@@ -84,6 +85,7 @@ Game.prototype.updateInteract = function () {
 
 Game.prototype.startFishing = function (spot) {
   const player = this.player;
+  if (this.mounted) this.toggleMount?.();
   this.moveTarget = null;
   this._pendingInteraction = null;
   player.dir = spot.y < player.y ? "up" : spot.y > player.y ? "down" : (spot.x < player.x ? "left" : "right");
@@ -245,9 +247,11 @@ Game.prototype.interact = function (resolved = null) {
   if (this.paused) return;
   if (this.fishing) { this.reelFish(); return; }
   resolved = resolved?.target ? resolved : this.resolveInteract();
+  if (!resolved?.target) return;
   const target = resolved.target, kind = resolved.kind;
   if (!target) return;
   if (kind === "fish") { this.startFishing(target); return; }
+  if (kind === "cook") { this.ui.toggle("cooking"); return; }
   if (kind === "npc") { this.ui.showDialog(target, this); return; }
   if (kind !== "chest" || target.opened) return;
 

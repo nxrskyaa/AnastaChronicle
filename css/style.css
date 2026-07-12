@@ -86,7 +86,7 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
 /* GAME */
 #game-wrap{position:fixed;inset:0;background:#0a0f0a;overflow:hidden}
 #game{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;background:#3a5a38;cursor:crosshair}
-#hud{position:absolute;inset:0;pointer-events:none}
+#hud{position:absolute;inset:0;z-index:2;pointer-events:none}
 #status-card{position:absolute;left:14px;top:14px;width:230px;padding:11px 13px;background:var(--glass);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(12px);box-shadow:0 10px 30px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.05);animation:slideDown .4s}
 .status-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
 .status-name{font-family:"Cinzel",serif;font-size:.86rem;font-weight:600}
@@ -1110,5 +1110,231 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
     animation:none!important;
   }
   #status-card{animation:none!important}
+}
+
+/* Crisp speech layer -------------------------------------------------------
+   The world stays deliberately pixelated; readable conversation does not. */
+#world-chat-layer{
+  position:fixed;
+  inset:0;
+  z-index:1;
+  overflow:hidden;
+  pointer-events:none;
+  contain:layout paint style;
+}
+.world-chat-bubble{
+  --chat-accent:#63c69e;
+  position:fixed;
+  width:max-content;
+  min-width:96px;
+  max-width:min(230px,calc(100vw - 24px));
+  padding:8px 11px 9px 13px;
+  transform:translate(-50%,calc(-100% - 10px));
+  border:1px solid color-mix(in srgb,var(--chat-accent) 54%,#25352f);
+  border-radius:11px 11px 11px 4px;
+  background:linear-gradient(145deg,rgba(18,31,29,.97),rgba(6,14,16,.97));
+  box-shadow:0 7px 18px rgba(0,0,0,.36),inset 3px 0 0 var(--chat-accent),inset 0 1px 0 rgba(255,255,255,.07);
+  color:#f1f5f1;
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-synthesis:none;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  will-change:left,top,opacity;
+}
+.world-chat-bubble::before{
+  content:"";
+  position:absolute;
+  left:calc(50% - 7px + var(--chat-tail-shift,0px));
+  bottom:-8px;
+  width:13px;
+  height:9px;
+  border-left:1px solid color-mix(in srgb,var(--chat-accent) 50%,#25352f);
+  background:linear-gradient(135deg,transparent 48%,#091315 50%);
+  clip-path:polygon(0 0,100% 0,50% 100%);
+}
+.world-chat-bubble>span{
+  display:block;
+  margin:0 0 3px;
+  color:color-mix(in srgb,var(--chat-accent) 80%,white);
+  font-size:10px;
+  font-weight:700;
+  line-height:1.15;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+.world-chat-bubble>p{
+  display:-webkit-box;
+  margin:0;
+  overflow:hidden;
+  color:#f1f5f1;
+  font-size:13px;
+  font-weight:500;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+}
+.world-chat-bubble.self{background:linear-gradient(145deg,rgba(37,34,23,.98),rgba(14,16,15,.97))}
+.world-chat-bubble.duel{box-shadow:0 7px 18px rgba(0,0,0,.36),0 0 15px rgba(223,102,85,.14),inset 3px 0 0 var(--chat-accent)}
+.world-chat-bubble.arrive{animation:worldChatArrive .18s cubic-bezier(.2,.85,.3,1.1)}
+@keyframes worldChatArrive{
+  from{transform:translate(-50%,calc(-100% - 4px)) scale(.92)}
+  to{transform:translate(-50%,calc(-100% - 10px)) scale(1)}
+}
+
+/* Realm Chat typography is UI text, so it stays anti-aliased and comfortably
+   sized instead of inheriting tiny bitmap-label treatments. */
+.chat-messages,.chat-compose input,.chat-bubble,.chat-empty{
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-synthesis:none;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+.chat-meta b{font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.01em}
+.chat-meta time{font-family:inherit;font-size:10px;font-weight:500;letter-spacing:.02em}
+.chat-bubble p{font-size:13px;line-height:1.5;letter-spacing:.005em}
+.chat-message.system p{font-family:inherit;font-size:11px;font-weight:600;line-height:1.45;letter-spacing:.035em}
+.chat-empty strong{font-family:"Cinzel",serif;font-size:15px}
+.chat-empty p{font-size:12px;line-height:1.5}
+
+@media(max-width:600px){
+  .world-chat-bubble{min-width:86px;max-width:min(190px,calc(100vw - 20px));padding:7px 10px 8px 12px}
+  .world-chat-bubble>span{font-size:9px}
+  .world-chat-bubble>p{font-size:12.5px;line-height:1.32}
+  .chat-bubble p{font-size:13px!important;line-height:1.48}
+}
+
+@media(prefers-reduced-motion:reduce){.world-chat-bubble.arrive{animation:none}}
+
+/* Companion mounts -------------------------------------------------------- */
+#mount-chip{
+  pointer-events:auto;
+  min-width:31px;
+  height:28px;
+  display:grid;
+  grid-template-columns:15px minmax(0,1fr);
+  align-items:center;
+  gap:4px;
+  padding:3px 6px;
+  overflow:hidden;
+  border:1px solid rgba(205,168,87,.34);
+  border-radius:3px;
+  background:linear-gradient(145deg,rgba(72,52,28,.4),rgba(18,25,25,.82));
+  color:#e5cd88;
+}
+#mount-chip>i{position:relative;width:14px;height:10px;border:2px solid currentColor;border-radius:7px 7px 4px 4px}
+#mount-chip>i::before{content:"";position:absolute;left:1px;top:-7px;width:5px;height:7px;border:2px solid currentColor;border-bottom:0;transform:skewX(-15deg)}
+#mount-chip>i::after{content:"";position:absolute;left:1px;bottom:-6px;width:2px;height:5px;background:currentColor;box-shadow:7px 0 currentColor}
+#mount-chip span{overflow:hidden;font-family:"IBM Plex Sans",sans-serif;font-size:9px;font-weight:700;letter-spacing:.04em;text-overflow:ellipsis;white-space:nowrap}
+#mount-chip kbd{display:none}
+#mount-chip.active{border-color:#70d2a4;background:linear-gradient(145deg,rgba(33,101,70,.52),rgba(11,26,27,.9));color:#a8f0c9;box-shadow:0 0 10px rgba(83,202,145,.16)}
+.companion-actions{display:grid;gap:7px;min-width:108px}
+.companion-mount{min-width:108px;padding:10px 9px;display:flex;flex-direction:column;align-items:center;gap:5px;border:1px solid #7b6537;background:linear-gradient(180deg,#2d271b,#171b1c);color:#e5cc81;font-family:"Press Start 2P",monospace;font-size:.34rem}
+.companion-mount.active{border-color:#58b884;background:linear-gradient(180deg,#214b39,#10231f);color:#baf0d1}
+.companion-mount kbd{font-size:.32rem}
+.mount-badge{position:absolute;left:4px;top:4px;padding:2px 3px;border:1px solid rgba(226,190,94,.38);background:rgba(61,46,22,.88);color:#edcf79;font-family:"Press Start 2P",monospace;font-size:.22rem;font-style:normal;letter-spacing:.03em}
+.companion-card small{display:-webkit-box;min-height:2.4em;overflow:hidden;line-height:1.25;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+
+/* Timed food buffs stay visible without adding another large HUD card. */
+.food-buff-hud{position:absolute;left:14px;top:190px;display:flex;flex-wrap:wrap;gap:5px;max-width:246px;pointer-events:none}
+.food-buff-hud>span{display:grid;grid-template-columns:7px auto auto;align-items:center;gap:5px;padding:4px 6px;border:1px solid rgba(216,179,92,.3);background:rgba(9,18,18,.9);box-shadow:0 5px 13px rgba(0,0,0,.28);color:#d9cfad;font-family:"IBM Plex Sans",sans-serif;font-size:9px}
+.food-buff-hud i{width:6px;height:6px;background:#e1b85e;transform:rotate(45deg);box-shadow:0 0 6px rgba(225,184,94,.45)}
+.food-buff-hud b{font-size:9px;letter-spacing:.06em}.food-buff-hud em{color:#76c89c;font-size:9px;font-style:normal;font-variant-numeric:tabular-nums}
+
+/* Hearth Kitchen ---------------------------------------------------------- */
+.cooking-panel{width:min(860px,94%);max-height:min(780px,92vh);display:flex;flex-direction:column;padding:0;overflow:hidden;background:linear-gradient(155deg,rgba(22,25,22,.99),rgba(8,15,17,.99));border-color:rgba(204,152,75,.3);clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px)}
+.cooking-panel>.panel-head{flex:0 0 auto;margin:0;padding:15px 18px;background:linear-gradient(90deg,rgba(119,67,33,.35),rgba(31,48,40,.16),transparent)}
+.cooking-hero{flex:0 0 auto;display:grid;grid-template-columns:116px minmax(0,1fr) auto;align-items:center;gap:17px;padding:15px 19px;border-bottom:1px solid rgba(255,255,255,.06);background:radial-gradient(circle at 72px 44px,rgba(236,119,46,.14),transparent 85px),linear-gradient(100deg,rgba(75,45,28,.3),rgba(19,36,31,.28))}
+.cooking-hearth{position:relative;width:102px;height:88px;border:1px solid rgba(204,143,69,.2);background:radial-gradient(circle at 50% 62%,rgba(233,112,40,.2),transparent 48%),repeating-linear-gradient(0deg,transparent 0 7px,rgba(255,255,255,.018) 7px 8px)}
+.cooking-hearth .pot{position:absolute;left:27px;bottom:14px;width:48px;height:24px;border:4px solid #302b29;border-top:0;border-radius:3px 3px 18px 18px;background:linear-gradient(90deg,#4b4743,#82766a 45%,#443f3c)}
+.cooking-hearth .pot::before{content:"";position:absolute;left:-7px;top:-6px;width:54px;height:7px;border:3px solid #292626;border-radius:50%;background:#756b60}
+.cooking-hearth .pot::after{content:"";position:absolute;left:5px;bottom:-8px;width:7px;height:8px;background:#302725;box-shadow:27px 0 #302725}
+.cooking-hearth .flame-a,.cooking-hearth .flame-b{position:absolute;bottom:4px;left:42px;width:20px;height:25px;background:#e85e2e;clip-path:polygon(50% 0,75% 34%,100% 58%,79% 100%,20% 100%,0 58%,27% 35%);animation:hearthFlame .72s steps(3,end) infinite;filter:drop-shadow(0 0 7px rgba(235,93,42,.55))}
+.cooking-hearth .flame-b{left:47px;bottom:5px;width:11px;height:17px;background:#ffd56b;animation-direction:reverse}
+.cooking-hearth>span{position:absolute;left:20px;right:20px;bottom:3px;height:4px;background:#5b3426;box-shadow:0 -3px #8d5731;transform:rotate(4deg)}
+@keyframes hearthFlame{50%{transform:translateY(-2px) scaleX(.86)}75%{transform:translateX(2px) scaleY(1.06)}}
+.cooking-hero>div:nth-child(2)>span{font-family:"Press Start 2P",monospace;font-size:.32rem;letter-spacing:.08em;color:#dd9250}
+.cooking-hero strong{display:block;margin:5px 0 3px;font-family:"Cinzel",serif;font-size:1rem;color:#f1dfb5}
+.cooking-hero p{max-width:510px;margin:0;color:#87968c;font-size:.65rem;line-height:1.5}
+.cooking-hero dl{display:grid;grid-template-columns:repeat(2,minmax(88px,1fr));gap:6px;margin:0}
+.cooking-hero dl>div{padding:8px 9px;border:1px solid rgba(199,151,77,.17);background:rgba(8,15,15,.46)}
+.cooking-hero dt{color:#7d887e;font-size:.5rem}.cooking-hero dd{margin-top:3px;color:#dfc680;font-family:"VT323",monospace;font-size:.88rem}
+.cooking-guide{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 15px;border-bottom:1px solid rgba(255,255,255,.055);color:#7c8d83;font-family:"IBM Plex Sans",sans-serif;font-size:11px;font-weight:600}
+.cooking-guide span{display:flex;align-items:center;gap:6px}.cooking-guide i{width:19px;height:19px;display:grid;place-items:center;border:1px solid #6e5a35;color:#e0b760;font-family:"VT323",monospace;font-size:.8rem;font-style:normal;clip-path:polygon(4px 0,calc(100% - 4px) 0,100% 4px,100% calc(100% - 4px),calc(100% - 4px) 100%,4px 100%,0 calc(100% - 4px),0 4px)}
+.cooking-guide b{width:35px;height:1px;background:linear-gradient(90deg,#5c4b30,transparent)}
+.cooking-buff-strip{flex:0 0 auto;display:flex;gap:6px;min-height:35px;padding:7px 18px;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,.055);background:rgba(5,11,12,.45)}
+.cooking-buff-strip>p{margin:auto 0;color:#697871;font-size:11px}
+.cooking-buff-strip article{position:relative;min-width:184px;padding:6px 54px 6px 8px;border:1px solid rgba(99,174,130,.22);background:rgba(22,45,36,.37)}
+.cooking-buff-strip article>span{display:block;color:#64b98a;font-family:"Press Start 2P",monospace;font-size:.25rem}.cooking-buff-strip strong{display:block;margin:2px 0;color:#d6e0d8;font-size:11px}.cooking-buff-strip p{margin:0;color:#789087;font-size:9px}.cooking-buff-strip time{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#e0c06e;font-family:"VT323",monospace;font-size:1rem}
+.cooking-list{min-height:0;flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:7px;padding:7px 17px 18px;overflow:auto;scrollbar-width:thin;scrollbar-color:#6b5432 #0b1212}
+.cooking-group-title{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:9px 0 1px;color:#cfaa66;font-family:"Press Start 2P",monospace;font-size:.35rem;letter-spacing:.05em}.cooking-group-title::after{content:"";height:1px;flex:1;background:linear-gradient(90deg,rgba(207,170,102,.28),transparent)}
+.cooking-recipe{position:relative;display:grid;grid-template-columns:68px minmax(0,1fr);gap:10px;padding:10px;border:1px solid rgba(255,255,255,.075);background:linear-gradient(120deg,rgba(28,35,31,.92),rgba(9,16,18,.92));clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.cooking-recipe.ready{border-color:rgba(88,184,129,.34);box-shadow:inset 3px 0 0 rgba(88,184,129,.52)}
+.cooking-recipe.locked{filter:saturate(.35);opacity:.62}
+.cooking-recipe-art{width:66px;height:66px;display:grid;place-items:center;border:1px solid rgba(208,160,83,.15);background:radial-gradient(circle,rgba(197,139,66,.13),transparent 68%)}
+.cooking-recipe-art canvas{width:60px;height:60px;image-rendering:pixelated;filter:drop-shadow(0 5px 4px rgba(0,0,0,.4))}
+.cooking-recipe-copy h4{margin:0 0 3px;color:#eee2c0;font-family:"Cinzel",serif;font-size:.75rem}.cooking-recipe-copy>p{margin:0 0 6px;color:#7d8c84;font-size:.56rem;line-height:1.42}.cooking-recipe-copy>small{display:block;margin:0 0 6px;color:#b18364;font-size:.52rem}
+.cooking-ingredients{display:flex;flex-wrap:wrap;gap:3px}.cooking-ingredients span{padding:2px 4px;border:1px solid #32453c;color:#6e8b7c;font-size:.46rem}.cooking-ingredients span.ok{border-color:rgba(81,166,120,.3);color:#7bc79d}.cooking-ingredients span.missing{border-color:rgba(176,91,67,.24);color:#b87867}
+.cooking-effects{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.cooking-effects span{padding:2px 4px;background:rgba(90,142,111,.13);color:#a5cbb2;font-family:"Press Start 2P",monospace;font-size:.23rem}
+.cooking-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr auto;gap:6px}.cooking-actions button{min-height:32px;padding:6px 9px;font-family:"Press Start 2P",monospace;font-size:.27rem}.cook-button{border:1px solid #6c5532;background:linear-gradient(180deg,#6f4a2d,#412d22);color:#f0cd83}.cook-button:disabled{opacity:.35}.eat-button{border:1px solid #3e795d;background:linear-gradient(180deg,#316448,#1b3b31);color:#b9e5ca}
+.menu-rune.cooking::before{width:20px;height:12px;bottom:6px;border:2px solid #d39c57;border-top:0;border-radius:0 0 9px 9px;background:#5d3f2c}.menu-rune.cooking::after{width:13px;height:12px;top:4px;border-left:2px solid #e6c079;border-right:2px solid #e6c079;clip-path:polygon(0 100%,0 34%,18% 0,36% 45%,54% 6%,72% 50%,100% 20%,100% 100%)}
+.inv-food-art{display:block;width:40px;height:40px;image-rendering:pixelated;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))}.inv-cell.food-entry{cursor:pointer;border-color:rgba(196,146,72,.3);background:radial-gradient(circle,rgba(174,115,57,.14),rgba(0,0,0,.42))}.inv-cell.food-entry:hover{border-color:#bf9658}.inv-cell.food-entry .inv-name{color:#ddc78d}
+
+@media(max-width:760px){
+  #mount-chip{width:29px;min-width:29px;padding:3px 5px;grid-template-columns:1fr}#mount-chip span{display:none}
+  .food-buff-hud{left:7px;top:166px;max-width:184px}.food-buff-hud>span{padding:3px 5px}.food-buff-hud b{display:none}
+  .companion-actions{grid-column:1/-1;grid-template-columns:1fr 1fr;width:100%}.companion-cycle,.companion-mount{min-width:0;min-height:42px;flex-direction:row;justify-content:center}
+  .cooking-panel{width:calc(100% - 12px);max-height:calc(100dvh - 12px)}
+  .cooking-hero{grid-template-columns:76px minmax(0,1fr);gap:10px;padding:11px}.cooking-hearth{width:72px;height:72px;transform:scale(.82);transform-origin:left center}.cooking-hero dl{grid-column:1/-1;width:100%}.cooking-hero p{font-size:.58rem}.cooking-guide{justify-content:flex-start;overflow-x:auto}.cooking-guide b{width:16px;flex:0 0 16px}.cooking-list{grid-template-columns:1fr;padding:7px 10px 14px}.cooking-recipe{grid-template-columns:60px minmax(0,1fr);padding:8px}.cooking-recipe-art{width:58px;height:58px}.cooking-recipe-art canvas{width:54px;height:54px}
+}
+
+@media(max-width:390px){.cooking-hero>div:nth-child(2)>span{display:none}.cooking-hero strong{font-size:.82rem}.cooking-guide{display:none}.companion-card small{font-size:.24rem}}
+
+@media(prefers-reduced-motion:reduce){.cooking-hearth .flame-a,.cooking-hearth .flame-b{animation:none}}
+
+/* Final readability and responsive composition pass. */
+.clock-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px}
+#pet-chip{width:100%;min-width:0;max-width:none;margin:-4px 0;padding-inline:5px}
+#mount-chip{width:32px;min-width:32px;grid-template-columns:1fr;justify-items:center;padding-inline:5px}
+#mount-chip span{display:none}
+#mount-chip>i{justify-self:center}
+.realm-menu-grid>button:last-child{grid-column:auto}
+.realm-menu-grid>button[data-open-panel="inv"]{--menu-ink:#68aa7c}
+.realm-menu-grid>button[data-open-panel="craft"]{--menu-ink:#c07a47}
+.realm-menu-grid>button[data-open-panel="cooking"]{--menu-ink:#d49a4f}
+.realm-menu-grid>button[data-open-panel="quest"]{--menu-ink:#bd9c50}
+.realm-menu-grid>button[data-open-panel="collection"]{--menu-ink:#4c9aaa}
+.realm-menu-grid>button[data-open-panel="companions"]{--menu-ink:#70a975}
+.realm-menu-grid>button[data-open-panel="chat"]{--menu-ink:#629a8a}
+.realm-menu-grid>button[data-open-panel="settings"]{--menu-ink:#8b8795}
+.companion-card small{font-family:"IBM Plex Sans",sans-serif;font-size:9px;font-weight:600;line-height:1.25;text-transform:none}
+.companion-hero-copy>span{font-size:8px}
+.companion-mount{font-family:"IBM Plex Sans",sans-serif;font-size:10px;font-weight:700;letter-spacing:.04em}
+.companion-mount kbd{font-family:"VT323",monospace;font-size:12px}
+.food-buff-hud{z-index:20}
+#hud.boss-active .food-buff-hud{top:250px}
+.cooking-hero>div:nth-child(2)>span{font-size:8px}
+.cooking-guide span{flex:0 0 auto;white-space:nowrap}
+.cooking-list{padding-bottom:max(18px,env(safe-area-inset-bottom))}
+.cooking-recipe-copy>p{font-family:"IBM Plex Sans",sans-serif;font-size:11px}
+.cooking-recipe-copy>small{font-family:"IBM Plex Sans",sans-serif;font-size:10px;line-height:1.35}
+.cooking-ingredients span{font-family:"IBM Plex Sans",sans-serif;font-size:10px;line-height:1.3}
+.cooking-effects span{font-family:"IBM Plex Sans",sans-serif;font-size:9.5px;font-weight:700;letter-spacing:.02em}
+.cooking-actions button{min-height:36px;font-family:"IBM Plex Sans",sans-serif;font-size:10px;font-weight:700;letter-spacing:.04em}
+
+@media(max-width:760px){
+  #pet-chip{grid-template-columns:12px minmax(0,1fr);gap:4px}
+  #pet-chip small{display:none}
+  #mount-chip{width:32px;min-width:32px;padding-inline:5px}
+  .food-buff-hud{top:190px;max-width:184px}
+  #hud.boss-active .food-buff-hud{top:250px}
+  .companion-actions .companion-cycle{grid-column:auto}
+  .cooking-actions button{min-height:44px;font-size:11px}
+  .cooking-list{padding-bottom:max(14px,env(safe-area-inset-bottom))}
+}
+
+@media(max-width:390px){
+  .cooking-hero>div:nth-child(2)>span{display:block}
+  .companion-card small{font-size:8.5px}
 }
 

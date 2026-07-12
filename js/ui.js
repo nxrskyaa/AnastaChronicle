@@ -4,14 +4,19 @@ import { CLASSES } from "./classes.js";
 import { FISH, RODS, activeRod } from "./fishing.js";
 import { getFishSprite } from "./fishart.js";
 import { img } from "./assets.js";
-import { MON_IDS, MON_ELEMENT } from "./monsters.js";
+import { MON_IDS, MON_ELEMENT, MON_META } from "./monsters.js";
+import {
+  COOKING_RECIPES, FOOD_ITEMS, canCook, knownRecipeIds,
+  displayIngredientName, activeBuffTotals, normalizeActiveBuffs,
+} from "./cooking.js";
 
 const PET_COLORS = {
   grass: ["#baf39a", "#55b878"], fire: ["#ffd070", "#e45f3d"], water: ["#a4efff", "#4aa6d4"],
   rock: ["#ead9ae", "#987757"], electric: ["#fff49a", "#e5bd38"], bug: ["#eac2fa", "#a96fc2"],
   ice: ["#e8ffff", "#71cae2"], dark: ["#d1b4ff", "#6c4f9f"],
+  wind: ["#dcf6df", "#67bda1"], light: ["#fff0a5", "#d69b45"],
 };
-const petName = (id) => String(id || "companion").replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+const petName = (id) => MON_META[id]?.name || String(id || "companion").replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
 export class UI {
   constructor(audio) {
@@ -23,6 +28,7 @@ export class UI {
       chat: document.getElementById("panel-chat"),
       collection: document.getElementById("panel-collection"),
       craft: document.getElementById("panel-craft"),
+      cooking: document.getElementById("panel-cooking"),
       quest: document.getElementById("panel-quest"),
       companions: document.getElementById("panel-companions"),
       dialog: document.getElementById("panel-dialog"),
@@ -48,6 +54,8 @@ export class UI {
     document.getElementById("chat-dock")?.addEventListener("click", () => this.openChat());
     document.getElementById("pet-chip")?.addEventListener("click", () => this.toggle("companions"));
     document.getElementById("btn-cycle-pet")?.addEventListener("click", () => this.cyclePet());
+    document.getElementById("btn-mount-toggle")?.addEventListener("click", () => this.toggleMount());
+    document.getElementById("mount-chip")?.addEventListener("click", () => this.toggleMount());
     document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
     const chatInput = document.getElementById("chat-input");
@@ -74,6 +82,12 @@ export class UI {
         event.preventDefault(); this.openChat(true);
       }
       if (event.code === "KeyJ" && !event.repeat) { event.preventDefault(); this.toggle("collection"); }
+      if (event.code === "KeyK" && !event.repeat) { event.preventDefault(); this.toggle("cooking"); }
+      if (event.code === "KeyM" && !event.repeat) {
+        const sanctuaryOpen = !this.panels.companions?.classList.contains("hidden");
+        if (this.anyOpen() && !sanctuaryOpen) return;
+        event.preventDefault(); this.toggleMount();
+      }
     });
     this._petCb = null;
     document.getElementById("btn-pet-ok")?.addEventListener("click", () => {
@@ -81,7 +95,7 @@ export class UI {
       const callback = this._petCb; this._petCb = null; if (callback) callback();
     });
   }
-  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); this.syncPet(true); }
+  bind(g) { this.game = g; this.renderSkillbar(); this.sync(); this.syncPet(true); this.syncMount(true); this.syncFoodBuffs(true); }
 
   renderSkillbar() {
     if (!this.game) return;
@@ -221,6 +235,7 @@ export class UI {
       p.classList.remove("hidden");
       if (name === "inv") this.renderInv();
       if (name === "craft") this.renderCraft();
+      if (name === "cooking") this.renderCooking();
       if (name === "quest") this.renderQuestLog();
       if (name === "companions") this.renderCompanions();
       if (name === "menu") this.renderMenu();
@@ -232,9 +247,9 @@ export class UI {
     }
   }
   close(name) { this.panels[name]?.classList.add("hidden"); if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "craft", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  anyOpen() { return ["menu", "chat", "collection", "inv", "craft", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
-  hasBlockingOpen() { return ["menu", "collection", "inv", "craft", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  anyOpen() { return ["menu", "chat", "collection", "inv", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "collection", "inv", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   currentRegion() {
     const p = this.game?.player; if (!p) return "Verdant Wilds";
@@ -253,6 +268,8 @@ export class UI {
     const p = this.game.player;
     const discovered = FISH.filter(fish => (this.game.fishingStats?.records?.[fish.id]?.count || 0) > 0).length;
     const ownedPets = Array.isArray(this.game.pets) ? this.game.pets.length : 0;
+    const knownMeals = knownRecipeIds({ level: p.level }).length;
+    const servings = Object.keys(FOOD_ITEMS).reduce((sum, id) => sum + Math.max(0, p.inv[id] || 0), 0);
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
     set("menu-player-name", document.getElementById("hud-name")?.textContent || "Traveler");
     set("menu-level", `Level ${p.level}`);
@@ -260,6 +277,7 @@ export class UI {
     set("menu-clock", document.getElementById("clock")?.textContent || "Day 06:00");
     set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
     set("menu-pet-progress", `${ownedPets} / ${MON_IDS.length} bonded`);
+    set("menu-cooking-state", `${knownMeals}/${COOKING_RECIPES.length} recipes · ${servings} packed`);
     this.setOnlineState(this.online, this.onlineCount);
     this.updateDuel(this.duelActive);
   }
@@ -336,9 +354,10 @@ export class UI {
     ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.imageSmoothingEnabled = false;
     const sprite = this.game.monCache[id][frame % this.game.monCache[id].length];
     const size = Math.min(canvas.width, canvas.height);
+    const artSize = Math.round(size * Math.max(.72, Math.min(.98, MON_META[id]?.petScale || .84)));
     ctx.fillStyle = "rgba(0,0,0,.24)";
     ctx.beginPath(); ctx.ellipse(canvas.width / 2, canvas.height * .77, size * .27, size * .075, 0, 0, 7); ctx.fill();
-    ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, Math.round((canvas.width - size) / 2), Math.round((canvas.height - size) / 2) - 3, size, size);
+    ctx.drawImage(sprite, 0, 0, sprite.width, sprite.height, Math.round((canvas.width - artSize) / 2), Math.round((canvas.height - artSize) / 2) - 2, artSize, artSize);
   }
 
   cyclePet() {
@@ -351,6 +370,53 @@ export class UI {
     }
     this.audio?.sfx("ui");
     this.toast(`${petName(id)} answered your call.`);
+  }
+
+  toggleMount() {
+    const game = this.game; if (!game) return;
+    if (game.mounted) {
+      const name = petName(game.mountId);
+      game.toggleMount();
+      this.toast(`${name} slowed to a walk beside you.`);
+      this.syncMount(true);
+      return;
+    }
+    const mounts = game.mountablePets?.() || [];
+    const active = game.activePetId || game.pet?.id;
+    const id = MON_META[active]?.mountable ? active : mounts.includes(game.mountId) ? game.mountId : mounts[0];
+    if (!id) {
+      this.toast("No rideable companion bonded yet.");
+      if (this.panels.companions?.classList.contains("hidden")) this.toggle("companions");
+      return;
+    }
+    if (game.setMount(id, true)) {
+      this.toast(`${petName(id)} mount · travel speed +${Math.round(((MON_META[id]?.mountSpeed || 1) - 1) * 100)}%`);
+      this.syncMount(true);
+    }
+  }
+
+  syncMount(force = false) {
+    const game = this.game; if (!game) return;
+    const mounts = game.mountablePets?.() || [];
+    const active = game.activePetId || game.pet?.id;
+    const activeCanRide = !!MON_META[active]?.mountable;
+    const selected = mounts.includes(game.mountId) ? game.mountId : activeCanRide ? active : mounts[0] || null;
+    const token = `${mounts.join(",")}|${selected || ""}|${game.mounted ? 1 : 0}|${active || ""}`;
+    if (!force && token === this._mountToken) return;
+    this._mountToken = token;
+    const chip = document.getElementById("mount-chip");
+    chip?.classList.toggle("hidden", mounts.length === 0);
+    chip?.classList.toggle("active", !!game.mounted);
+    chip?.setAttribute("aria-pressed", String(!!game.mounted));
+    chip?.setAttribute("aria-label", game.mounted ? `Dismount ${petName(game.mountId)}` : selected ? `Ride ${petName(selected)}` : "No rideable companion");
+    const chipLabel = document.getElementById("mount-chip-label");
+    if (chipLabel) chipLabel.textContent = game.mounted ? "DISMOUNT" : selected ? `RIDE ${petName(selected)}` : "RIDE";
+    const button = document.getElementById("btn-mount-toggle");
+    button?.classList.toggle("hidden", !activeCanRide);
+    button?.classList.toggle("active", !!game.mounted && game.mountId === active);
+    const buttonLabel = button?.querySelector("span");
+    if (buttonLabel) buttonLabel.textContent = game.mounted && game.mountId === active ? "DISMOUNT" : `RIDE · +${Math.round(((MON_META[active]?.mountSpeed || 1) - 1) * 100)}%`;
+    document.getElementById("hud")?.classList.toggle("mounted", !!game.mounted);
   }
 
   syncPet(force = false) {
@@ -370,10 +436,11 @@ export class UI {
     const orb = document.getElementById("companion-element-orb");
     if (active) {
       const element = MON_ELEMENT[active] || "arcane";
+      const meta = MON_META[active];
       const colors = PET_COLORS[element] || ["#b9a6e8", "#68539f"];
-      set("companion-active-element", `${element.toUpperCase()} BOND · ACTIVE`);
+      set("companion-active-element", `${element.toUpperCase()} BOND · ${(meta?.role || "trail companion").toUpperCase()}`);
       set("companion-active-name", petName(active));
-      set("companion-active-desc", `${petName(active)} follows your trail. Switch bonds freely; every companion you discover remains in this sanctuary.`);
+      set("companion-active-desc", meta?.description || `${petName(active)} follows your trail. Switch bonds freely; every companion you discover remains in this sanctuary.`);
       this.drawPet(canvas, active, Math.floor((g.t || 0) * 4));
       if (orb) { orb.style.borderColor = colors[0]; orb.style.boxShadow = `0 0 22px ${colors[1]}55, inset 0 0 16px ${colors[0]}22`; }
       if (chip) chip.style.setProperty("--pet-color", colors[0]);
@@ -390,6 +457,7 @@ export class UI {
       this._petToken = token;
       if (!this.panels.companions?.classList.contains("hidden")) this.renderCompanions();
     }
+    this.syncMount(force);
   }
 
   renderCompanions() {
@@ -399,6 +467,7 @@ export class UI {
     grid.innerHTML = "";
     for (const id of MON_IDS) {
       const isOwned = owned.has(id), isActive = id === active;
+      const meta = MON_META[id];
       const button = document.createElement("button");
       button.type = "button";
       button.className = `companion-card ${isOwned ? "owned" : "locked"}${isActive ? " active" : ""}`;
@@ -407,7 +476,8 @@ export class UI {
       button.setAttribute("aria-label", isOwned ? `${isActive ? "Active companion" : "Summon"} ${petName(id)}` : "Undiscovered companion");
       const art = document.createElement("canvas"); art.width = 72; art.height = 72; button.appendChild(art);
       const name = document.createElement("strong"); name.textContent = isOwned ? petName(id) : "Unknown"; button.appendChild(name);
-      const element = document.createElement("small"); element.textContent = isOwned ? MON_ELEMENT[id] || "spirit" : "not bonded"; button.appendChild(element);
+      const element = document.createElement("small"); element.textContent = isOwned ? `${MON_ELEMENT[id] || "spirit"} · ${meta?.role || "companion"}` : `${meta?.habitat || "unknown"} habitat`; button.appendChild(element);
+      if (meta?.mountable) { const badge = document.createElement("i"); badge.className = "mount-badge"; badge.textContent = "MOUNT"; button.appendChild(badge); }
       this.drawPet(art, id, 0);
       if (!isOwned) art.style.filter = "brightness(0)";
       if (isOwned) button.addEventListener("click", () => {
@@ -494,6 +564,8 @@ export class UI {
     this.syncBoss(g.boss);
     this.syncFishing(g.fishing);
     this.syncCatch(g.catchReveal);
+    this.syncMount(false);
+    this.syncFoodBuffs(false);
     if (!this.panels.menu?.classList.contains("hidden")) this.renderMenu();
     if (!this.panels.collection?.classList.contains("hidden")) this.renderCollection();
   }
@@ -502,6 +574,7 @@ export class UI {
     const hud = document.getElementById("boss-hud"); if (!hud) return;
     const visible = !!boss && !boss.dead;
     hud.classList.toggle("hidden", !visible);
+    document.getElementById("hud")?.classList.toggle("boss-active", visible);
     if (!visible) { hud.classList.remove("rage", "warning"); return; }
     const pct = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
     const warning = (boss.breathWindup || 0) > 0;
@@ -571,15 +644,131 @@ export class UI {
     }
   }
 
+  syncFoodBuffs(force = false) {
+    const game = this.game; if (!game) return;
+    const now = Date.now();
+    if (!force && now - (this._foodBuffSyncAt || 0) < 250) return;
+    this._foodBuffSyncAt = now;
+    game.activeFoodBuffs = normalizeActiveBuffs(game.activeFoodBuffs, now);
+    game.foodBuffTotals = activeBuffTotals(game.activeFoodBuffs, now);
+    const token = game.activeFoodBuffs.map((buff) => `${buff.id}:${buff.expiresAt}`).join("|");
+    const hud = document.getElementById("food-buff-hud");
+    const strip = document.getElementById("cooking-buff-strip");
+    const effectText = (buff) => Object.entries(buff.effects || {}).filter(([, value]) => value > 0).map(([key, value]) => `${key === "fishingLuck" ? "angler luck" : key} +${Math.round(value * 100)}%`).join(" · ");
+    if (force || token !== this._foodBuffToken) {
+      this._foodBuffToken = token;
+      if (hud) {
+        hud.innerHTML = "";
+        for (const buff of game.activeFoodBuffs) {
+          const chip = document.createElement("span");
+          chip.dataset.buffExpires = String(buff.expiresAt || 0);
+          chip.title = `${buff.name}: ${effectText(buff)}`;
+          const icon = document.createElement("i");
+          const slot = document.createElement("b"); slot.textContent = buff.slot.toUpperCase();
+          const time = document.createElement("em");
+          chip.append(icon, slot, time);
+          hud.appendChild(chip);
+        }
+      }
+      if (strip) {
+        strip.innerHTML = "";
+        if (!game.activeFoodBuffs.length) {
+          const empty = document.createElement("p"); empty.textContent = "No food effects active. Eat a packed serving to prepare for the trail."; strip.appendChild(empty);
+        } else for (const buff of game.activeFoodBuffs) {
+          const card = document.createElement("article");
+          const slot = document.createElement("span"); slot.textContent = buff.slot.toUpperCase();
+          const name = document.createElement("strong"); name.textContent = buff.name;
+          const effects = document.createElement("p"); effects.textContent = effectText(buff) || "Restorative meal";
+          const time = document.createElement("time"); time.dataset.buffExpires = String(buff.expiresAt || 0);
+          card.append(slot, name, effects, time);
+          strip.appendChild(card);
+        }
+      }
+    }
+    for (const node of document.querySelectorAll("[data-buff-expires]")) {
+      const left = Math.max(0, Math.ceil((Number(node.dataset.buffExpires) - now) / 1000));
+      const value = left >= 60 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : `${left}s`;
+      if (node.tagName === "SPAN") { const target = node.querySelector("em"); if (target) target.textContent = value; }
+      else node.textContent = value;
+    }
+    hud?.classList.toggle("hidden", game.activeFoodBuffs.length === 0);
+    const activeCount = document.getElementById("cooking-active-count");
+    if (activeCount) activeCount.textContent = game.activeFoodBuffs.length ? `${game.activeFoodBuffs.length} effect${game.activeFoodBuffs.length === 1 ? "" : "s"}` : "No meal";
+  }
+
+  renderCooking() {
+    const list = document.getElementById("cooking-list"); if (!list || !this.game) return;
+    const game = this.game, p = game.player;
+    const known = new Set(knownRecipeIds({ level: p.level }));
+    const knownCount = document.getElementById("cooking-known-count");
+    if (knownCount) knownCount.textContent = `${known.size} / ${COOKING_RECIPES.length}`;
+    list.innerHTML = "";
+    const categoryOrder = [...new Set(COOKING_RECIPES.map((recipe) => recipe.category))];
+    const sortedRecipes = [...COOKING_RECIPES].sort((a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category));
+    let group = "";
+    for (const recipe of sortedRecipes) {
+      if (recipe.category !== group) {
+        group = recipe.category;
+        const heading = document.createElement("h3"); heading.className = "cooking-group-title"; heading.textContent = group; list.appendChild(heading);
+      }
+      const unlocked = known.has(recipe.id);
+      const ready = unlocked && canCook(p.inv, recipe);
+      const owned = Math.max(0, p.inv[recipe.result.item] || 0);
+      const row = document.createElement("article");
+      row.className = `cooking-recipe${unlocked ? "" : " locked"}${ready ? " ready" : ""}`;
+      const art = document.createElement("div"); art.className = "cooking-recipe-art";
+      const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 64;
+      const foodSprite = img(`item/${recipe.result.item}`);
+      const artCtx = canvas.getContext("2d");
+      if (artCtx && foodSprite) { artCtx.imageSmoothingEnabled = false; artCtx.drawImage(foodSprite, 4, 4, 56, 56); }
+      art.appendChild(canvas);
+      const copy = document.createElement("div"); copy.className = "cooking-recipe-copy";
+      const title = document.createElement("h4"); title.textContent = recipe.name;
+      const desc = document.createElement("p"); desc.textContent = recipe.description;
+      const ingredients = document.createElement("div"); ingredients.className = "cooking-ingredients";
+      for (const [id, amount] of Object.entries(recipe.ingredients)) {
+        const have = Math.max(0, p.inv[id] || 0);
+        const chip = document.createElement("span"); chip.className = have >= amount ? "ok" : "missing";
+        chip.textContent = `${displayIngredientName(id)} ${have}/${amount}`;
+        ingredients.appendChild(chip);
+      }
+      const stats = document.createElement("div"); stats.className = "cooking-effects";
+      const prep = document.createElement("span"); prep.textContent = `PREP ${recipe.duration}s`; stats.appendChild(prep);
+      if (recipe.buff.hpRestore) { const heal = document.createElement("span"); heal.textContent = `HP +${recipe.buff.hpRestore}`; stats.appendChild(heal); }
+      for (const [key, value] of Object.entries(recipe.buff.effects || {})) if (value > 0) {
+        const effect = document.createElement("span"); effect.textContent = `${key === "fishingLuck" ? "LUCK" : key.toUpperCase()} +${Math.round(value * 100)}%`; stats.appendChild(effect);
+      }
+      if (!unlocked) { const hint = document.createElement("small"); hint.textContent = recipe.unlockHint; copy.append(title, desc, hint, ingredients, stats); }
+      else copy.append(title, desc, ingredients, stats);
+      const actions = document.createElement("div"); actions.className = "cooking-actions";
+      const cook = document.createElement("button"); cook.type = "button"; cook.className = "cook-button"; cook.disabled = !ready;
+      cook.textContent = unlocked ? (ready ? `COOK ×${recipe.result.qty}` : "NEED INGREDIENTS") : `LOCKED · LV ${recipe.unlockLevel}`;
+      if (unlocked) cook.addEventListener("click", () => game.cookFood(recipe.id));
+      actions.appendChild(cook);
+      if (owned > 0) {
+        const eat = document.createElement("button"); eat.type = "button"; eat.className = "eat-button"; eat.textContent = `EAT · ${owned} PACKED`;
+        eat.addEventListener("click", () => game.eatFood(recipe.result.item)); actions.appendChild(eat);
+      }
+      row.append(art, copy, actions); list.appendChild(row);
+    }
+    this.syncFoodBuffs(true);
+    clearInterval(this._cookingClock);
+    this._cookingClock = setInterval(() => {
+      if (this.panels.cooking?.classList.contains("hidden")) { clearInterval(this._cookingClock); return; }
+      this.syncFoodBuffs(false);
+    }, 1000);
+  }
+
   renderInv() {
     const grid = document.getElementById("inv-grid"); if (!grid || !this.game) return;
     const p = this.game.player; grid.innerHTML = "";
     const keys = Object.keys(p.inv).filter(k => (p.inv[k] || 0) > 0);
-    for (let i = 0; i < 20; i++) {
+    const slotCount = Math.max(20, Math.ceil(keys.length / 5) * 5);
+    for (let i = 0; i < slotCount; i++) {
       const cell = document.createElement("div"); cell.className = "inv-cell";
       const id = keys[i];
       if (id) {
-        const item = ITEMS[id] || { name: id, glyph: "?" };
+        const item = ITEMS[id] || FOOD_ITEMS[id] || { name: id, glyph: "?" };
         if (id === "fish") {
           cell.classList.add("fish-entry");
           const records = this.game.fishingStats?.records || {};
@@ -590,6 +779,14 @@ export class UI {
           cell.append(canvas, label);
           cell.title = "Open the Fish Chronicle";
           cell.addEventListener("click", () => this.toggle("collection"));
+        } else if (FOOD_ITEMS[id]) {
+          cell.classList.add("food-entry");
+          const canvas = document.createElement("canvas"); canvas.className = "inv-food-art"; canvas.width = 44; canvas.height = 44;
+          const ctx = canvas.getContext("2d"), foodSprite = img(`item/${id}`);
+          if (ctx && foodSprite) { ctx.imageSmoothingEnabled = false; ctx.drawImage(foodSprite, 0, 0, 44, 44); }
+          const label = document.createElement("span"); label.className = "inv-name"; label.textContent = item.name;
+          cell.append(canvas, label); cell.title = `${item.description} · Tap to eat`;
+          cell.addEventListener("click", () => this.game.eatFood(id));
         } else if (img(`item/${id}`)) {
           const canvas = document.createElement("canvas"); canvas.className = "inv-material-art"; canvas.width = 40; canvas.height = 40;
           const ctx = canvas.getContext("2d"); if (ctx) { ctx.imageSmoothingEnabled = false; ctx.drawImage(img(`item/${id}`), 0, 0, 40, 40); }

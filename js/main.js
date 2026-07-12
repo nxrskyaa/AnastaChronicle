@@ -15,6 +15,7 @@ import {
   sendChat, sendDuel,
 } from "./net.js";
 import { CLASSES } from "./classes.js";
+import { normalizeActiveBuffs } from "./cooking.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -298,6 +299,9 @@ function savePayload(g) {
     equipped: p.equipped,
     pets: Array.isArray(g.pets) ? [...g.pets] : [],
     activePetId: g.activePetId || g.pet?.id || null,
+    mountId: g.mountId || null,
+    mounted: !!g.mounted,
+    activeFoodBuffs: Array.isArray(g.activeFoodBuffs) ? g.activeFoodBuffs : [],
     ts: Date.now(),
   };
 }
@@ -416,6 +420,9 @@ function startGame(savedLook, savedName, saveData) {
       p.hp = saveData.stats.hp || p.maxHp;
       if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
       if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
+      if (Array.isArray(saveData.activeFoodBuffs)) {
+        game.activeFoodBuffs = normalizeActiveBuffs(saveData.activeFoodBuffs, Date.now());
+      }
       if (saveData.flags) {
         game.flags = { ...game.flags, ...saveData.flags };
         if (game.flags.starterCache) { const cache = game.chests.find((chest) => chest.starter); if (cache) cache.opened = true; }
@@ -428,9 +435,14 @@ function startGame(savedLook, savedName, saveData) {
       for (const id of roster) game.registerPet(id);
       const activePet = saveData.activePetId || (typeof saveData.pet === "string" ? saveData.pet : null);
       if (activePet && !game.pets.includes(activePet)) game.registerPet(activePet);
-      const selectedPet = activePet || game.pets[0] || null;
+      const selectedPet = game.pets.includes(activePet) ? activePet : game.pets[0] || null;
       if (selectedPet) game.setActivePet(selectedPet);
+      if (saveData.mountId && game.pets.includes(saveData.mountId)) {
+        game.mountId = saveData.mountId;
+        if (saveData.mounted) game.setMount(saveData.mountId, true);
+      }
       game.ui.syncPet?.();
+      game.ui.syncFoodBuffs?.(true);
     }
     const persist = () => { if (game?.player) putSave(savePayload(game)); };
     game.onCompanionChange = persist;

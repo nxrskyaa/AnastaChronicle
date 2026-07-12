@@ -7,7 +7,7 @@ import { net } from "./net.js";
 import { bossFrame, BOSS_SIZE } from "./boss.js";
 import { activeRod } from "./fishing.js";
 import { drawFishSprite } from "./fishart.js";
-import { MON_ELEMENT } from "./monsters.js";
+import { MON_ELEMENT, MON_META } from "./monsters.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,6 +17,7 @@ const PET_AURA = {
   fire: ["#ffb14c", "#ff6338"], water: ["#9eeaff", "#4daee8"], grass: ["#c8f69a", "#66c76f"],
   rock: ["#ead7a5", "#a88b67"], electric: ["#fff39a", "#efc83d"], bug: ["#efc5ff", "#bd83df"],
   ice: ["#e8ffff", "#7cd8ef"], dark: ["#d4b4ff", "#7655a8"],
+  wind: ["#dff8e4", "#67bda1"], light: ["#fff1a8", "#d9a249"],
 };
 
 function poseFrame(cache, pose, dir, frame, fallback = "walk") {
@@ -29,53 +30,6 @@ function poseFrame(cache, pose, dir, frame, fallback = "walk") {
 function objectPhase(o, salt = 0) {
   const x = Math.round(o.x || 0), y = Math.round(o.y || 0);
   return ((x * 13 + y * 7 + salt * 31) % 97) / 97 * Math.PI * 2;
-}
-
-function worldChatLines(ctx, text) {
-  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
-  const lines = [""];
-  for (const word of words) {
-    const current = lines[lines.length - 1];
-    const next = `${current} ${word}`.trim();
-    if (ctx.measureText(next).width > 84 && lines.length < 3) lines.push(word);
-    else lines[lines.length - 1] = next;
-  }
-  return lines.filter(Boolean).slice(0, 3).map((line) => {
-    if (ctx.measureText(line).width <= 84) return line;
-    let clipped = line;
-    while (clipped.length > 1 && ctx.measureText(`${clipped}…`).width > 84) clipped = clipped.slice(0, -1);
-    return `${clipped}…`;
-  });
-}
-
-function drawWorldChatBubble(ctx, text, x, headY, accent, t, born, until) {
-  if (!text || until <= t) return;
-  ctx.save();
-  ctx.font = "7px 'IBM Plex Sans',sans-serif";
-  const lines = worldChatLines(ctx, text);
-  if (!lines.length) { ctx.restore(); return; }
-  const width = Math.min(100, Math.max(44, ...lines.map(line => Math.ceil(ctx.measureText(line).width) + 14)));
-  const height = lines.length * 9 + 9;
-  const intro = clamp((t - (born ?? t)) / .14, 0, 1);
-  const outro = clamp((until - t) / .38, 0, 1);
-  const alpha = Math.min(intro, outro);
-  const bx = Math.round(clamp(x - width / 2, 2, view.w - width - 2));
-  const by = Math.round(clamp(headY - height - 7 - (1 - intro) * 4, 2, view.h - height - 8));
-  const tailX = Math.round(clamp(x, bx + 7, bx + width - 7));
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = "rgba(6,15,18,.94)";
-  ctx.beginPath();
-  ctx.moveTo(bx + 4, by); ctx.lineTo(bx + width - 3, by); ctx.lineTo(bx + width, by + 3);
-  ctx.lineTo(bx + width, by + height - 3); ctx.lineTo(bx + width - 3, by + height);
-  ctx.lineTo(bx + 3, by + height); ctx.lineTo(bx, by + height - 3); ctx.lineTo(bx, by + 3); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = accent; ctx.fillRect(bx + 3, by, width - 6, 1); ctx.fillRect(bx, by + 4, 2, height - 8);
-  ctx.globalAlpha = alpha * .34; ctx.fillStyle = accent; ctx.fillRect(bx + 5, by + 3, width - 10, height - 6);
-  ctx.globalAlpha = alpha; ctx.fillStyle = "rgba(6,15,18,.94)";
-  ctx.beginPath(); ctx.moveTo(tailX - 4, by + height); ctx.lineTo(tailX + 4, by + height); ctx.lineTo(tailX, by + height + 6); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = accent; ctx.fillRect(tailX - 1, by + height, 2, 3);
-  ctx.fillStyle = "#e6efe9"; ctx.textAlign = "center";
-  lines.forEach((line, index) => ctx.fillText(line, Math.round(bx + width / 2), by + 11 + index * 9));
-  ctx.textAlign = "left"; ctx.restore();
 }
 
 function drawNpcActivity(ctx, npc, x, y, t, dir) {
@@ -273,7 +227,7 @@ Game.prototype.render = function () {
     if (!e.dead || this.t - e._deathSeen < .4) draw.push({ y: e.sortY, k: "enemy", o: e });
   }
   if (this.boss && !this.boss.dead && inv(this.boss.x, this.boss.y, 140)) draw.push({ y: this.boss.sortY, k: "boss", o: this.boss });
-  if (this.pet) draw.push({ y: this.pet.sortY, k: "pet", o: this.pet });
+  if (this.pet && !(this.mounted && this.pet.id === this.mountId)) draw.push({ y: this.pet.sortY, k: "pet", o: this.pet });
   draw.push({ y: p.sortY, k: "player", o: p });
   // remote players (multiplayer presence) — interpolate toward server pos
   for (const id in net.remote) {
@@ -474,15 +428,32 @@ Game.prototype.render = function () {
       const dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
       const cv = o.cache.walk[dir][o.frame % 4];
       const remoteWeapon = o.weaponCache?.walk?.[dir] || null;
+      const remoteMountMeta = o.mounted ? MON_META[o.mountId] : null;
+      const remoteMountFrames = remoteMountMeta?.mountable ? this.monCache[o.mountId] : null;
+      const remoteMountFrame = o.moving ? o.frame : Math.floor(this.t * 2.4 + objectPhase(o));
+      const remoteMountSprite = remoteMountFrames?.[remoteMountFrame % remoteMountFrames.length] || null;
+      const remoteRiding = !!remoteMountSprite;
+      const remoteMountScale = remoteRiding ? remoteMountMeta.mountScale || 1.25 : 1;
+      const remoteLift = remoteRiding ? Math.round(17 + (remoteMountScale - 1) * 12) : 0;
+      const remoteBob = remoteRiding
+        ? (o.moving ? -Math.round(Math.abs(Math.sin(this.t * 13 + objectPhase(o))) * 2) : Math.round(Math.sin(this.t * 2.4 + objectPhase(o)) * .22))
+        : 0;
       // soft shadow for remote player
-      ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(rsx, rsy + 1, 12, 3.5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,0.2)"; ctx.beginPath(); ctx.ellipse(rsx, rsy + (remoteRiding ? 3 : 1), remoteRiding ? 18 * remoteMountScale : 12, remoteRiding ? 4.5 : 3.5, 0, 0, 7); ctx.fill();
+      if (remoteRiding) {
+        ctx.save(); ctx.translate(rsx, rsy + 2 + remoteBob); ctx.scale(remoteMountScale, remoteMountScale);
+        ctx.drawImage(remoteMountSprite, -remoteMountSprite.width / 2, -remoteMountSprite.height); ctx.restore();
+        ctx.fillStyle = "#2a2424"; ctx.fillRect(rsx - 9, rsy - 22 + remoteBob, 18, 4);
+        ctx.fillStyle = "#9a623c"; ctx.fillRect(rsx - 8, rsy - 23 + remoteBob, 16, 3);
+        ctx.fillStyle = "#d5a95c"; ctx.fillRect(rsx - 2, rsy - 24 + remoteBob, 4, 2);
+      }
       if (o.duel) {
         const pulse = .52 + Math.sin(this.t * 5 + objectPhase(o)) * .18;
         ctx.strokeStyle = `rgba(239,92,73,${pulse})`; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.ellipse(rsx, rsy, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
-        ctx.save(); ctx.translate(rsx, rsy - 51); ctx.rotate(.6); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.rotate(-1.2); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.restore();
+        ctx.save(); ctx.translate(rsx, rsy - 51 - remoteLift + remoteBob); ctx.rotate(.6); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.rotate(-1.2); ctx.fillStyle = "#e9d9c6"; ctx.fillRect(-1, -6, 2, 12); ctx.fillStyle = "#c65d4c"; ctx.fillRect(-4, 3, 8, 2); ctx.restore();
       }
-      ctx.save(); ctx.translate(rsx, rsy);
+      ctx.save(); ctx.translate(rsx, rsy - remoteLift + remoteBob);
       const weaponBehind = dir === "up" || dir === "left";
       if (weaponBehind && remoteWeapon) ctx.drawImage(remoteWeapon, -16, -36);
       ctx.drawImage(cv, -16, -36);
@@ -490,9 +461,9 @@ Game.prototype.render = function () {
       ctx.restore();
       // name tag (blue tint to distinguish other players)
       ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
-      ctx.fillStyle = o.duel ? "rgba(76,25,29,.78)" : "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 20, rsy - 46, 40, 9);
-      if (o.duel) { ctx.fillStyle = "#d95348"; ctx.fillRect(rsx - 20, rsy - 46, 2, 9); }
-      ctx.fillStyle = o.duel ? "#ffc0ab" : "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39); ctx.textAlign = "left";
+      ctx.fillStyle = o.duel ? "rgba(76,25,29,.78)" : "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 20, rsy - 46 - remoteLift + remoteBob, 40, 9);
+      if (o.duel) { ctx.fillStyle = "#d95348"; ctx.fillRect(rsx - 20, rsy - 46 - remoteLift + remoteBob, 2, 9); }
+      ctx.fillStyle = o.duel ? "#ffc0ab" : "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39 - remoteLift + remoteBob); ctx.textAlign = "left";
     }
     else if (d.k === "enemy") {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
@@ -593,8 +564,9 @@ Game.prototype.render = function () {
         const bob = moving ? Math.round(Math.abs(stride) * -3) : Math.round(stride * 1.3);
         const dx = p.x - o.x, dy = p.y - o.y, dist = Math.hypot(dx, dy) || 1;
         const leanX = moving ? clamp(dx / dist, -1, 1) * 2 : 0;
-        const scaleX = .72 + (moving ? Math.abs(stride) * .025 : Math.sin(this.t * 2 + phase) * .012);
-        const scaleY = .72 - (moving ? Math.abs(stride) * .025 : Math.sin(this.t * 2 + phase) * .012);
+        const petScale = MON_META[o.id]?.petScale || .82;
+        const scaleX = petScale + (moving ? Math.abs(stride) * .025 : Math.sin(this.t * 2 + phase) * .012);
+        const scaleY = petScale - (moving ? Math.abs(stride) * .025 : Math.sin(this.t * 2 + phase) * .012);
         if (summon > 0) {
           const radius = Math.round(10 + (1 - summon) * 15);
           ctx.globalAlpha = summon;
@@ -603,7 +575,7 @@ Game.prototype.render = function () {
           for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + this.t * 4; ctx.fillRect(Math.round(sx + Math.cos(a) * radius) - 1, Math.round(sy - 10 + Math.sin(a) * radius * .65) - 1, 2, 2); }
           ctx.globalAlpha = 1;
         }
-        ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, im.width * .25 * scaleX / .72, 2.5, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, im.width * .25 * scaleX / petScale, 2.5, 0, 0, 7); ctx.fill();
         ctx.save();
         ctx.translate(Math.round(sx + leanX), Math.round(sy + bob));
         ctx.scale(scaleX, scaleY);
@@ -617,6 +589,39 @@ Game.prototype.render = function () {
       }
     }
     else if (d.k === "player") {
+      const mountMeta = this.mounted ? MON_META[this.mountId] : null;
+      const mountFrames = this.mounted ? this.monCache[this.mountId] : null;
+      const mountFrame = p.moving ? p.frame || 0 : Math.floor(this.t * 2.4);
+      const mountSprite = mountFrames?.[mountFrame % mountFrames.length] || null;
+      const riding = !!(mountMeta?.mountable && mountSprite);
+      const mountScale = riding ? mountMeta.mountScale || 1.25 : 1;
+      const riderLift = riding ? this.riderVisualLift() : 0;
+      let mountBob = 0;
+      if (riding) {
+        const stride = p.moving ? Math.sin(this.t * 13) : Math.sin(this.t * 2.4) * .22;
+        mountBob = p.moving ? -Math.round(Math.abs(stride) * 2) : Math.round(stride);
+        const scaleX = mountScale + (p.moving ? Math.abs(stride) * .025 : 0);
+        const scaleY = mountScale - (p.moving ? Math.abs(stride) * .025 : 0);
+        const palette = PET_AURA[mountMeta.element] || PET_AURA.grass;
+        ctx.fillStyle = "rgba(7,12,13,.29)"; ctx.beginPath(); ctx.ellipse(sx, sy + 3, 19 * mountScale, 5, 0, 0, Math.PI * 2); ctx.fill();
+        if (p.moving) {
+          ctx.fillStyle = `${palette[0]}88`;
+          const wake = (Math.floor(this.t * 18) % 3) * 5;
+          ctx.fillRect(sx - 18 - wake, sy - 2, Math.max(2, 8 - wake / 2), 2);
+          ctx.fillRect(sx + 10 + wake / 2, sy + 1, Math.max(2, 6 - wake / 3), 1);
+        }
+        ctx.save();
+        ctx.translate(sx, sy + mountBob + 2); ctx.scale(scaleX, scaleY);
+        ctx.drawImage(mountSprite, -mountSprite.width / 2, -mountSprite.height);
+        ctx.restore();
+        // Code-drawn saddle and harness make the relationship read as riding,
+        // rather than a companion sprite accidentally overlapping the hero.
+        ctx.fillStyle = "#2a2424"; ctx.fillRect(sx - 9, sy - 22 + mountBob, 18, 4);
+        ctx.fillStyle = "#9a623c"; ctx.fillRect(sx - 8, sy - 23 + mountBob, 16, 3);
+        ctx.fillStyle = "#d5a95c"; ctx.fillRect(sx - 2, sy - 24 + mountBob, 4, 2);
+      }
+      ctx.save();
+      if (riderLift) ctx.translate(0, mountBob - riderLift);
       const dir = ["down", "up", "left", "right"].includes(p.dir) ? p.dir : "down";
       const hurtT = p.hurtT || p.damageT || 0;
       const attackPhase = p.attackT > 0 ? clamp(1 - p.attackT / (p.attackDur || .25), 0, 1) : 0;
@@ -665,8 +670,8 @@ Game.prototype.render = function () {
         rotation = (dvec[0] || 1) * ((p.comboStep || 0) === 1 ? -.055 : .035) * strike;
       }
 
-      // soft shadow
-      ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12 * scaleX, 3.5 * scaleY, 0, 0, 7); ctx.fill();
+      // The mount owns the ground shadow while riding.
+      if (!riding) { ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.ellipse(sx, sy + 1, 12 * scaleX, 3.5 * scaleY, 0, 0, 7); ctx.fill(); }
       if (pose === "cast" && p.attackT > 0) {
         ctx.save(); ctx.globalCompositeOperation = "lighter";
         for (let i = 0; i < 6; i++) {
@@ -712,6 +717,7 @@ Game.prototype.render = function () {
         ctx.strokeStyle = "rgba(189,239,249,.85)"; ctx.lineWidth = 1; ctx.strokeRect(gx - 6, gy - 8, 12, 16);
         ctx.fillStyle = "rgba(231,253,255,.9)"; ctx.fillRect(gx - 1, gy - 5, 2, 10); ctx.fillRect(gx - 4, gy - 1, 8, 2);
       }
+      ctx.restore();
     }
   }
 
@@ -850,18 +856,83 @@ Game.prototype.render = function () {
   this.renderMinimap();
 };
 
-// A final overhead pass keeps speech legible above trees, weather, and night
-// grading while preserving the same pixel-art language as the world.
-Game.prototype.renderWorldChat = function (ctx, camx, camy) {
+// World speech is a DOM overlay. Canvas text was rendered at the low internal
+// game resolution and then enlarged, which made the letters look broken.
+Game.prototype.renderWorldChat = function (_ctx, camx, camy) {
+  const layer = document.getElementById("world-chat-layer");
+  if (!layer) return;
+  const rectKey = `${innerWidth}x${innerHeight}:${view.w}x${view.h}`;
+  if (this._worldChatRectKey !== rectKey) {
+    this._worldChatRectKey = rectKey;
+    this._worldChatRect = this.canvas.getBoundingClientRect();
+  }
+  const rect = this._worldChatRect;
+  const scaleX = rect.width / view.w;
+  const scaleY = rect.height / view.h;
+  const active = [];
   const p = this.player;
   if (p?.chatText && p.chatUntil > this.t) {
-    drawWorldChatBubble(ctx, p.chatText, p.x - camx, p.y - camy - 43, "#e1bd61", this.t, p.chatBorn, p.chatUntil);
+    active.push({
+      key: "self", name: p.name || "Traveler", text: p.chatText,
+      x: p.x - camx, y: p.y - camy - (this.mounted ? 60 : 43),
+      accent: "#e1bd61", born: p.chatBorn, until: p.chatUntil, self: true,
+    });
   }
-  for (const remote of Object.values(net.remote)) {
+  for (const [id, remote] of Object.entries(net.remote)) {
     if (!remote.chatText || remote.chatUntil <= this.t) continue;
     const x = remote.rx - camx, y = remote.ry - camy;
-    if (x < -110 || x > view.w + 110 || y < -100 || y > view.h + 80) continue;
-    drawWorldChatBubble(ctx, remote.chatText, x, y - 51, remote.duel ? "#df6655" : "#63c69e", this.t, remote.chatBorn, remote.chatUntil);
+    if (x < -90 || x > view.w + 90 || y < -90 || y > view.h + 70) continue;
+    active.push({
+      key: `remote-${id}`, name: remote.name || "Traveler", text: remote.chatText,
+      x, y: y - (remote.mounted ? 60 : 51), accent: remote.duel ? "#df6655" : "#63c69e",
+      born: remote.chatBorn, until: remote.chatUntil, duel: !!remote.duel,
+    });
+  }
+
+  const keep = new Set();
+  this._worldChatEls ||= new Map();
+  for (const bubble of active) {
+    keep.add(bubble.key);
+    let el = this._worldChatEls.get(bubble.key);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "world-chat-bubble";
+      el.append(document.createElement("span"), document.createElement("p"));
+      layer.appendChild(el);
+      this._worldChatEls.set(bubble.key, el);
+    }
+    const [label, message] = el.children;
+    const displayName = bubble.self ? `${bubble.name} · YOU` : bubble.name;
+    if (label.textContent !== displayName) label.textContent = displayName;
+    if (message.textContent !== bubble.text) {
+      message.textContent = bubble.text;
+      el.classList.remove("arrive");
+      void el.offsetWidth;
+      el.classList.add("arrive");
+      // Measure only when the copy changes. This keeps the whole bubble on
+      // screen without forcing layout reads on every animation frame.
+      el._bubbleHalf = Math.ceil(el.offsetWidth / 2) + 8;
+    }
+    el.classList.toggle("self", !!bubble.self);
+    el.classList.toggle("duel", !!bubble.duel);
+    el.style.setProperty("--chat-accent", bubble.accent);
+    const rawPx = rect.left + bubble.x * scaleX;
+    const fallbackHalf = innerWidth <= 600 ? 98 : 118;
+    const bubbleMargin = Math.min(rect.width / 2, el._bubbleHalf || fallbackHalf);
+    const px = clamp(rawPx, rect.left + bubbleMargin, rect.right - bubbleMargin);
+    const py = clamp(rect.top + bubble.y * scaleY, rect.top + 58, rect.bottom - 28);
+    const intro = clamp((this.t - (bubble.born ?? this.t)) / .16, 0, 1);
+    const outro = clamp((bubble.until - this.t) / .42, 0, 1);
+    el.style.left = `${Math.round(px)}px`;
+    el.style.top = `${Math.round(py)}px`;
+    const tailLimit = Math.max(0, bubbleMargin - 23);
+    el.style.setProperty("--chat-tail-shift", `${Math.round(clamp(rawPx - px, -tailLimit, tailLimit))}px`);
+    el.style.opacity = String(Math.min(intro, outro));
+  }
+  for (const [key, el] of this._worldChatEls) {
+    if (keep.has(key)) continue;
+    el.remove();
+    this._worldChatEls.delete(key);
   }
 };
 

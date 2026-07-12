@@ -286,6 +286,115 @@ function materialSprite(kind) {
   return cv;
 }
 
+function foodSprite(kind) {
+  const cv = canvas(44, 44), ctx = cv.getContext("2d");
+  const sprite = canvas(44, 44), s = sprite.getContext("2d");
+  ctx.imageSmoothingEnabled = false; s.imageSmoothingEnabled = false;
+  shadow(ctx, 22, 39, 31);
+  const isDrink = /tea|tonic/.test(kind);
+  const isSnack = /jelly|crisp/.test(kind);
+  const isFish = /skewer|smoked/.test(kind);
+  const isPlatter = /dragon/.test(kind);
+  const liquid = /chowder/.test(kind) ? "#e8cf9b" : /spirit/.test(kind) ? "#82c9c6" : /warden/.test(kind) ? "#6e9c64" : /hotpot/.test(kind) ? "#d86d3e" : "#8fbd72";
+
+  if (isDrink) {
+    // Clear handled cup with visible liquid, leaf garnish, and rising steam.
+    px(s, 11, 14, 22, 22, "#263035"); px(s, 13, 15, 18, 18, "#d9e6d5");
+    px(s, 14, 20, 16, 12, /tonic/.test(kind) ? "#55aa78" : "#9fc36f");
+    px(s, 16, 20, 12, 3, /tonic/.test(kind) ? "#8de0a9" : "#d8e89a");
+    px(s, 32, 18, 6, 13, "#263035"); px(s, 33, 20, 3, 8, "#c7d7ca");
+    px(s, 8, 34, 28, 3, "#263035"); px(s, 11, 34, 22, 2, "#7b5b3b");
+    px(s, 19, 10, 2, 6, "rgba(235,244,231,.8)"); px(s, 23, 7, 2, 8, "rgba(235,244,231,.65)");
+    px(s, 14, 16, 8, 3, "#3e824d"); px(s, 15, 15, 5, 2, "#8fd06f");
+  } else if (isSnack) {
+    // Leaf-lined tray with three deliberately chunky, readable morsels.
+    px(s, 6, 29, 32, 8, "#263035"); px(s, 8, 27, 28, 8, "#587f4c"); px(s, 11, 29, 23, 5, "#8eb06a");
+    const colors = /jelly/.test(kind) ? ["#67c79e", "#9ce8bd", "#d5ffe2"] : ["#8ec8d4", "#d5eef1", "#fff7c7"];
+    for (const [x, y, w] of [[9, 20, 9], [19, 17, 10], [29, 21, 7]]) {
+      px(s, x, y, w, 10, "#293235"); px(s, x + 1, y - 1, w - 2, 9, colors[0]);
+      px(s, x + 2, y, Math.max(2, w - 5), 2, colors[1]); px(s, x + 2, y + 2, 2, 2, colors[2]);
+    }
+  } else if (isFish) {
+    // Bamboo skewer or whole smoked fish over a broad aromatic leaf.
+    px(s, 5, 31, 34, 6, "#263035"); px(s, 7, 28, 30, 7, "#49784c"); px(s, 9, 28, 24, 3, "#75aa63");
+    if (/skewer/.test(kind)) {
+      pixelStem(s, 8, 33, 35, 12, "#3b2a22", 3); pixelStem(s, 8, 32, 35, 11, "#c09255", 1);
+      for (const [x, y, c] of [[14, 26, "#de7a42"], [20, 21, "#f0b35e"], [26, 17, "#d65c3d"], [31, 13, "#f0d27d"]]) {
+        px(s, x - 3, y - 3, 8, 8, "#293035"); px(s, x - 2, y - 3, 6, 6, c); px(s, x - 1, y - 2, 3, 2, "#ffe2a0");
+      }
+    } else {
+      px(s, 8, 19, 27, 12, "#293035"); px(s, 10, 18, 22, 11, "#b66b45");
+      px(s, 13, 19, 15, 3, "#e3a064"); px(s, 29, 20, 8, 8, "#8b4937");
+      px(s, 8, 21, 5, 8, "#d28a55"); px(s, 10, 23, 3, 2, "#f0c78b"); px(s, 29, 21, 2, 2, "#fff0c5");
+    }
+  } else if (isPlatter) {
+    px(s, 4, 27, 36, 11, "#263035"); px(s, 7, 25, 30, 10, "#c5a15c"); px(s, 10, 27, 24, 5, "#ead394");
+    for (const [x, y, c] of [[8, 20, "#cf5d3c"], [17, 16, "#e69b50"], [26, 18, "#6baa63"], [32, 22, "#c64a3d"]]) {
+      px(s, x, y, 8, 9, "#263035"); px(s, x + 1, y - 1, 6, 8, c); px(s, x + 2, y, 3, 2, "#ffe0a3");
+    }
+    px(s, 19, 9, 6, 9, "#573c55"); px(s, 20, 7, 4, 9, "#ad72c0"); px(s, 21, 8, 2, 4, "#f0b7ff");
+  } else {
+    // Heavy ceramic bowl/pot with a broad surface so each broth color reads.
+    px(s, 7, 19, 30, 18, "#252e32"); px(s, 5, 17, 34, 8, "#252e32");
+    px(s, 8, 19, 28, 16, "#78523b"); px(s, 7, 18, 30, 6, "#b4774d");
+    px(s, 9, 18, 26, 4, liquid); px(s, 12, 18, 10, 2, "#dce49e");
+    px(s, 13, 22, 5, 4, "#6ca35d"); px(s, 24, 20, 6, 4, /hotpot/.test(kind) ? "#f0a34d" : "#e8d08f");
+    px(s, 10, 34, 24, 3, "#4d342d"); px(s, 12, 36, 5, 2, "#252e32"); px(s, 27, 36, 5, 2, "#252e32");
+    px(s, 15, 10, 2, 7, "rgba(237,242,226,.72)"); px(s, 22, 7, 2, 9, "rgba(237,242,226,.58)"); px(s, 28, 11, 2, 6, "rgba(237,242,226,.48)");
+  }
+  outlined(sprite, "#1d292b");
+  ctx.drawImage(sprite, 0, 0);
+  return cv;
+}
+
+function fieldGearSprite(kind) {
+  const cv = canvas(44, 44), ctx = cv.getContext("2d");
+  const sprite = canvas(44, 44), s = sprite.getContext("2d");
+  ctx.imageSmoothingEnabled = false; s.imageSmoothingEnabled = false;
+  shadow(ctx, 22, 39, 28);
+
+  if (kind === "dragonscale") {
+    // A layered boss scale: broad silhouette, hot inner ridge, cold facets.
+    const outline = "#241e2d", deep = "#553251", mid = "#9c4f61", hot = "#e47a50";
+    diamond(s, 22, 21, 13, 17, outline);
+    diamond(s, 22, 20, 11, 15, deep);
+    diamond(s, 20, 18, 8, 11, mid);
+    diamond(s, 19, 15, 5, 7, "#d66e68");
+    pixelStem(s, 22, 7, 22, 34, hot, 2);
+    pixelStem(s, 21, 11, 14, 25, "#f3ad72", 1);
+    pixelStem(s, 23, 15, 31, 25, "#6c3c70", 2);
+    px(s, 17, 12, 3, 3, "#ffd39a"); px(s, 14, 21, 3, 2, "#ca6670");
+  } else {
+    const spirit = kind === "spiritrod", iron = kind === "ironrod";
+    const edge = "#20272b";
+    const shaftD = spirit ? "#304f67" : iron ? "#41484c" : "#5b3929";
+    const shaft = spirit ? "#62b5bd" : iron ? "#879194" : "#a76c3d";
+    const shine = spirit ? "#b9fff0" : iron ? "#d7dedb" : "#e5ad62";
+    // Diagonal rod with a reinforced handle and a visibly separate reel.
+    pixelStem(s, 10, 34, 34, 6, edge, 5);
+    pixelStem(s, 10, 33, 34, 5, shaftD, 3);
+    pixelStem(s, 12, 31, 34, 5, shaft, 2);
+    pixelStem(s, 20, 22, 33, 7, shine, 1);
+    px(s, 7, 31, 9, 7, edge); px(s, 8, 31, 7, 5, iron ? "#704c36" : "#6d4430");
+    px(s, 14, 24, 11, 10, edge); px(s, 16, 25, 7, 7, spirit ? "#5ab9b7" : iron ? "#778083" : "#b37940");
+    px(s, 18, 27, 3, 3, spirit ? "#e6fff3" : "#ead28e");
+    px(s, 23, 27, 5, 2, edge); px(s, 26, 28, 2, 5, edge);
+    // Line, hook, and lure keep the icon readable as fishing gear at a glance.
+    pixelStem(s, 34, 6, 38, 24, spirit ? "#7fe4dc" : "#b8c7bd", 1);
+    px(s, 36, 23, 3, 5, spirit ? "#7bd8d0" : "#c6a357"); px(s, 34, 27, 4, 2, edge);
+    if (spirit) {
+      px(s, 31, 3, 6, 6, "#457f91"); px(s, 32, 2, 4, 5, "#9df6e5"); px(s, 33, 2, 2, 2, "#f0fff9");
+      px(s, 27, 8, 2, 2, "#6ce7d6"); px(s, 37, 12, 2, 2, "#c7fff1");
+    } else if (iron) {
+      px(s, 31, 4, 6, 5, edge); px(s, 32, 4, 4, 3, "#b6c4c3");
+    }
+  }
+
+  outlined(sprite, "#172124");
+  ctx.drawImage(sprite, 0, 0);
+  return cv;
+}
+
 function chestSprite(open, pet = false) {
   const cv = canvas(24, 20);
   const ctx = cv.getContext("2d");
@@ -469,6 +578,22 @@ const BUILDERS = [
   ["item/ore", () => materialSprite("ore")],
   ["item/gel", () => materialSprite("gel")],
   ["item/herb", () => materialSprite("herb")],
+  ["item/dragonscale", () => fieldGearSprite("dragonscale")],
+  ["item/basicrod", () => fieldGearSprite("basicrod")],
+  ["item/ironrod", () => fieldGearSprite("ironrod")],
+  ["item/spiritrod", () => fieldGearSprite("spiritrod")],
+  ["item/food_hearth_skewer", () => foodSprite("skewer")],
+  ["item/food_meadow_tea", () => foodSprite("tea")],
+  ["item/food_forest_jelly", () => foodSprite("jelly")],
+  ["item/food_smoked_lakefish", () => foodSprite("smoked")],
+  ["item/food_stonepot_stew", () => foodSprite("stew")],
+  ["item/food_moonpond_chowder", () => foodSprite("chowder")],
+  ["item/food_crystal_crisp", () => foodSprite("crisp")],
+  ["item/food_warden_broth", () => foodSprite("warden")],
+  ["item/food_swiftleaf_tonic", () => foodSprite("tonic")],
+  ["item/food_hunter_hotpot", () => foodSprite("hotpot")],
+  ["item/food_starlake_soup", () => foodSprite("spirit")],
+  ["item/food_dragonfire_platter", () => foodSprite("dragon")],
   ["fx/hit_0", () => hitSprite(0)],
   ["fx/hit_1", () => hitSprite(1)],
   ["fx/hit_2", () => hitSprite(2)],
