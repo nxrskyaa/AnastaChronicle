@@ -95,7 +95,7 @@ Game.prototype.tryDuelStrike = function (x, y, radius, damage, kind = "basic", f
 Game.prototype.setAutoBattle = function (enabled) {
   const next = !!enabled;
   if (next === !!this.autoBattle) { this.ui.syncAutoBattle?.(true); return next; }
-  if (next && this.fishing) this.failFishing?.("Fishing stopped · Auto Battle enabled.");
+  if (next && this.fishing) this.failFishing?.("Fishing stopped · AFK Auto Battle enabled.");
   this.autoBattle = next;
   this.autoBattleTarget = null;
   this.autoBattleScanT = 0;
@@ -105,7 +105,7 @@ Game.prototype.setAutoBattle = function (enabled) {
   this.autoBattleState = next ? "SCANNING NEARBY" : "OFF";
   this.resetInputState?.();
   this.ui.syncAutoBattle?.(true);
-  this.ui.toast(next ? "AUTO BATTLE ON · hunting nearby monsters" : "Auto Battle stopped.");
+  this.ui.toast(next ? "AFK AUTO BATTLE ON · hunting nearby monsters" : "AFK Auto Battle stopped.");
   return next;
 };
 

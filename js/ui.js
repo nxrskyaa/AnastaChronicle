@@ -305,7 +305,7 @@ export class UI {
     if (menuState) menuState.textContent = enabled ? `ON · ${label.toLowerCase()}` : "OFF · hunts nearby monsters";
     const chip = document.getElementById("auto-battle-chip");
     chip?.classList.toggle("hidden", !enabled);
-    if (chip) chip.setAttribute("aria-label", enabled ? `Disable Auto Battle. ${label}` : "Enable Auto Battle");
+    if (chip) chip.setAttribute("aria-label", enabled ? `Disable AFK Auto Battle. ${label}` : "Enable AFK Auto Battle");
     const status = document.getElementById("auto-battle-status");
     if (status) status.textContent = label;
   }
@@ -762,7 +762,7 @@ export class UI {
     const service = npc.name === "Merchant"
       ? { panel: "shop", kicker: "TRAIL MARKET", title: "Buy supplies or sell spare loot", copy: "Instant trade using the gold and inventory in this save.", action: "OPEN MARKET" }
       : npc.name === "Warden"
-        ? { autoBattle: true, panel: "battle", kicker: "AUTO BATTLE", title: "Let your class hunt nearby monsters", copy: "Toggle real-time auto combat. Your traveler selects targets, closes distance, attacks, and uses class skills.", action: "TOGGLE AUTO BATTLE" }
+        ? { autoBattle: true, panel: "battle", kicker: "AFK AUTO BATTLE", title: "Let your class hunt nearby monsters", copy: "Toggle real-time auto combat. Your traveler selects targets, closes distance, attacks, and uses class skills.", action: "TOGGLE AFK BATTLE" }
         : null;
     if (service) {
       const row = document.createElement("section"); row.className = "npc-service-card";
