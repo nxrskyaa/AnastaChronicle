@@ -5,6 +5,11 @@ import { updateNpcWorld } from "./npcworld.js";
 import { net, sendBossHit, sendPvpHit } from "./net.js";
 import { CLASSES } from "./classes.js";
 import { COOKING_RECIPES, activeBuffTotals, cookRecipe, knownRecipeIds, normalizeActiveBuffs, useFood } from "./cooking.js";
+import { activeRod } from "./fishing.js";
+import { buyItem, getShopListing, marketDayKey, sellItem } from "./shop.js";
+import {
+  afkFishingStatus, claimAfkFishingJob, createAfkFishingJob,
+} from "./afkfishing.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -591,6 +596,122 @@ Game.prototype.hurtEnemy = function (e, hit, crit) {
 };
 
 Game.prototype.equip = function (id) { this.player.equipped = id; this.ui.toast("Equipped " + (ITEMS[id]?.name || id)); this.ui.renderInv(); };
+
+Game.prototype.tradeAtMarket = function (side, itemId, quantity = 1) {
+  const player = this.player;
+  const listing = getShopListing(itemId);
+  if (!listing) { this.ui.toast("That ware is not listed today."); return false; }
+  if (side !== "sell" && listing.tags?.includes("rod") && (player.inv[itemId] || 0) > 0) {
+    this.ui.toast("You already own that fishing rod.");
+    return false;
+  }
+  const protectedItems = new Set([
+    player.equipped, "basicrod", "ironrod", "spiritrod", "dragonscale",
+    "dragonblade", "dragonbow", "dragonstaff",
+  ]);
+  if (listing.tags?.some((tag) => tag === "rod" || tag === "boss" || tag === "rare")) protectedItems.add(listing.id);
+  const options = { level: player.level, dayKey: marketDayKey(), protectedItems };
+  const result = side === "sell"
+    ? sellItem(player.inv, player.gold, itemId, quantity, options)
+    : buyItem(player.inv, player.gold, itemId, quantity, options);
+  if (!result.ok) {
+    const messages = {
+      insufficient_gold: `Need ${result.shortfall || 0} more gold.`,
+      insufficient_items: `Only ${result.have || 0} in your pack.`,
+      level_locked: `Market stock unlocks at level ${result.requiredLevel}.`,
+      protected_item: "That item is protected from accidental sale.",
+      not_for_sale: "The Merchant cannot source that item.",
+      merchant_refuses: "The Merchant will not buy that item.",
+      invalid_quantity: "Choose a valid trade quantity.",
+    };
+    this.ui.toast(messages[result.code] || "The trade could not be completed.");
+    return false;
+  }
+  player.gold = result.gold;
+  this.audio.sfx("coin");
+  for (let i = 0; i < 8; i++) this.particles.push({
+    x: player.x + (Math.random() - .5) * 12, y: player.y - 18,
+    vx: (Math.random() - .5) * 42, vy: -20 - Math.random() * 28,
+    life: .4 + Math.random() * .22, color: i % 2 ? "rgba(246,205,96,.9)" : "rgba(112,205,155,.82)",
+  });
+  this.ui.toast(`${side === "sell" ? "Sold" : "Purchased"} · ${listing.name} ×${result.quantity} ${side === "sell" ? "+" : "−"}${result.total}g`);
+  this.onProgressChange?.();
+  this.ui.renderShop?.();
+  this.ui.renderInv?.();
+  this.ui.sync?.();
+  return true;
+};
+
+Game.prototype.startAfkFishing = function (durationMinutes) {
+  const current = afkFishingStatus(this.afkFishingJob);
+  if (current.state === "running" || current.state === "ready") {
+    this.ui.toast(current.state === "ready" ? "Your catch is ready to claim." : "A fishing watch is already running.");
+    return false;
+  }
+  const baseRod = activeRod(this.player.inv);
+  const rod = { ...baseRod, luck: baseRod.luck + Math.max(0, Number(this.foodBuffTotals?.fishingLuck) || 0) };
+  const night = this.time >= 19 * 60 || this.time < 5 * 60;
+  const job = createAfkFishingJob({
+    durationMinutes, rod, zone: "pond", time: night ? "night" : "day",
+    weather: this.weather === "rain" ? "rain" : "clear", now: Date.now(),
+  });
+  if (!job) { this.ui.toast("That fishing watch is unavailable."); return false; }
+  this.afkFishingJob = job;
+  this.lastAfkFishingClaim = null;
+  this.audio.sfx("pickup");
+  this.ui.toast(`${durationMinutes} minute fishing watch started.`);
+  this.onProgressChange?.();
+  this.ui.renderAfkFishing?.();
+  return true;
+};
+
+Game.prototype.cancelAfkFishing = function () {
+  const status = afkFishingStatus(this.afkFishingJob);
+  if (status.state !== "running") return false;
+  this.afkFishingJob = null;
+  this.lastAfkFishingClaim = null;
+  this.ui.toast("Fishing watch cancelled.");
+  this.onProgressChange?.();
+  this.ui.renderAfkFishing?.();
+  return true;
+};
+
+Game.prototype.claimAfkFishing = function () {
+  const claim = claimAfkFishingJob(this.afkFishingJob, Date.now());
+  if (!claim.ok) {
+    this.ui.toast(claim.code === "not_ready" ? "The line is still being watched." : claim.code === "already_claimed" ? "That catch was already claimed." : "No finished fishing watch found.");
+    return false;
+  }
+
+  // Mark first in memory so a second click cannot enter the reward path.
+  this.afkFishingJob = claim.job;
+  const rewards = claim.rewards;
+  const player = this.player;
+  const afkGold = Math.max(0, Math.floor(rewards.gold * .55));
+  player.inv.fish = (player.inv.fish || 0) + rewards.fishCount;
+  player.gold += afkGold;
+  this.quests.fishCount += rewards.fishCount;
+  const stats = this.fishingStats || (this.fishingStats = { total: 0, best: 0, records: {} });
+  stats.total = (stats.total || 0) + rewards.fishCount;
+  stats.best = Math.max(stats.best || 0, rewards.bestSize || 0);
+  stats.records = stats.records || {};
+  for (const [fishId, earned] of Object.entries(rewards.records || {})) {
+    const record = stats.records[fishId] || { count: 0, best: 0 };
+    record.count += earned.count || 0;
+    record.best = Math.max(record.best || 0, earned.best || 0);
+    stats.records[fishId] = record;
+  }
+  this.lastAfkFishingClaim = { ...rewards, gold: afkGold, claimedAt: Date.now() };
+  this.afkFishingJob = null;
+  this.audio.sfx(rewards.summary?.some((fish) => fish.rarity === "legendary") ? "level" : "coin");
+  this.ui.toast(`Dock claimed · ${rewards.fishCount} fish · +${afkGold}g`);
+  this.onProgressChange?.();
+  this.ui.renderAfkFishing?.();
+  this.ui.renderCollection?.();
+  this.ui.renderInv?.();
+  this.ui.sync?.();
+  return true;
+};
 
 Game.prototype.craft = function (rid) {
   const r = RECIPES.find(x => x.id === rid); if (!r) return;

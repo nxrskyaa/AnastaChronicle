@@ -5,6 +5,8 @@ import { FISH, RODS, activeRod } from "./fishing.js";
 import { getFishSprite } from "./fishart.js";
 import { img } from "./assets.js";
 import { MON_IDS, MON_ELEMENT, MON_META, STARTER_MOUNT_ID } from "./monsters.js";
+import { marketDayKey, shopView } from "./shop.js";
+import { AFK_FISHING_OPTIONS, afkFishingStatus } from "./afkfishing.js";
 import {
   COOKING_RECIPES, FOOD_ITEMS, canCook, knownRecipeIds,
   displayIngredientName, activeBuffTotals, normalizeActiveBuffs,
@@ -24,6 +26,8 @@ export class UI {
     this.audio = audio || null;
     this.panels = {
       inv: document.getElementById("panel-inv"),
+      shop: document.getElementById("panel-shop"),
+      afk: document.getElementById("panel-afk"),
       menu: document.getElementById("panel-menu"),
       chat: document.getElementById("panel-chat"),
       collection: document.getElementById("panel-collection"),
@@ -45,6 +49,8 @@ export class UI {
     this.duelSupported = false;
     this._chatSender = null;
     this._duelSender = null;
+    this._shopMode = "buy";
+    this._afkSelection = AFK_FISHING_OPTIONS[0]?.minutes || 2;
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
     document.getElementById("btn-level-ok")?.addEventListener("click", () => { this.panels.level.classList.add("hidden"); if (this.game && !this.hasBlockingOpen()) this.game.paused = false; });
     document.getElementById("btn-respawn")?.addEventListener("click", () => this.game?.respawn());
@@ -84,6 +90,8 @@ export class UI {
       }
       if (event.code === "KeyJ" && !event.repeat) { event.preventDefault(); this.toggle("collection"); }
       if (event.code === "KeyK" && !event.repeat) { event.preventDefault(); this.toggle("cooking"); }
+      if (event.code === "KeyB" && !event.repeat) { event.preventDefault(); this.toggle("shop"); }
+      if (event.code === "KeyL" && !event.repeat) { event.preventDefault(); this.toggle("afk"); }
       if (event.code === "KeyM" && !event.repeat) {
         const sanctuaryOpen = !this.panels.companions?.classList.contains("hidden");
         if (this.anyOpen() && !sanctuaryOpen) return;
@@ -247,6 +255,8 @@ export class UI {
     if (open) {
       p.classList.remove("hidden");
       if (name === "inv") this.renderInv();
+      if (name === "shop") this.renderShop();
+      if (name === "afk") this.renderAfkFishing();
       if (name === "craft") this.renderCraft();
       if (name === "cooking") this.renderCooking();
       if (name === "quest") this.renderQuestLog();
@@ -259,10 +269,10 @@ export class UI {
       if (name !== "chat") setTimeout(() => p.querySelector(".panel-close,button,input")?.focus(), 0);
     }
   }
-  close(name) { this.panels[name]?.classList.add("hidden"); if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  anyOpen() { return ["menu", "chat", "collection", "inv", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
-  hasBlockingOpen() { return ["menu", "collection", "inv", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  close(name) { this.panels[name]?.classList.add("hidden"); if (name === "afk") clearInterval(this._afkClock); if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "shop", "afk", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); clearInterval(this._afkClock); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "afk", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "afk", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   currentRegion() {
     const p = this.game?.player; if (!p) return "Verdant Wilds";
@@ -289,10 +299,162 @@ export class UI {
     set("menu-location", this.currentRegion());
     set("menu-clock", document.getElementById("clock")?.textContent || "Day 06:00");
     set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
+    const afk = afkFishingStatus(this.game.afkFishingJob);
+    set("menu-afk-state", afk.state === "ready" ? "Catch ready to claim" : afk.state === "running" ? `${this.formatDuration(afk.remainingMs)} remaining` : "Dock is ready");
     set("menu-pet-progress", `${ownedPets} / ${MON_IDS.length} bonded`);
     set("menu-cooking-state", `${knownMeals}/${COOKING_RECIPES.length} recipes · ${servings} packed`);
     this.setOnlineState(this.online, this.onlineCount);
     this.updateDuel(this.duelActive);
+  }
+
+  formatDuration(milliseconds) {
+    const seconds = Math.max(0, Math.ceil((Number(milliseconds) || 0) / 1000));
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  }
+
+  drawMarketItem(canvas, listing) {
+    const ctx = canvas?.getContext("2d"); if (!ctx) return;
+    ctx.imageSmoothingEnabled = false;
+    if (listing.visualKind === "fish") {
+      const records = this.game?.fishingStats?.records || {};
+      const featured = [...FISH].reverse().find((fish) => (records[fish.id]?.count || 0) > 0) || FISH[0];
+      ctx.drawImage(getFishSprite(featured), 2, 8, 60, 42);
+      return;
+    }
+    if (listing.visualKind === "weapon") {
+      const frame = this.game?.weaponFrames?.(listing.id)?.walk?.down;
+      if (frame) ctx.drawImage(frame, 0, 0, frame.width, frame.height, 8, 2, 48, 58);
+      return;
+    }
+    const sprite = img(listing.iconKey || `item/${listing.id}`);
+    if (sprite) ctx.drawImage(sprite, 5, 5, 54, 54);
+  }
+
+  renderShop() {
+    const list = document.getElementById("shop-list"); if (!list || !this.game) return;
+    const player = this.game.player;
+    const mode = this._shopMode === "sell" ? "sell" : "buy";
+    const dayKey = marketDayKey();
+    const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+    set("shop-gold", player.gold);
+    document.querySelectorAll("[data-shop-tab]").forEach((button) => {
+      const active = button.dataset.shopTab === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.onclick = () => { this._shopMode = button.dataset.shopTab; this.audio?.sfx("ui"); this.renderShop(); };
+    });
+    list.innerHTML = "";
+    const wares = shopView({ mode, level: player.level, inventory: player.inv, dayKey });
+    if (!wares.length) {
+      const empty = document.createElement("div"); empty.className = "shop-empty";
+      empty.innerHTML = `<i></i><strong>Your sell pouch is empty.</strong><p>Gather wood, herbs, ore, gel, fish, or cook spare meals first.</p>`;
+      list.appendChild(empty); return;
+    }
+    for (const ware of wares) {
+      const protectedItem = mode === "sell" && (ware.id === player.equipped || ware.tags.includes("rod") || ware.tags.includes("boss") || ware.tags.includes("rare"));
+      const uniqueOwned = mode === "buy" && ware.tags.includes("rod") && ware.owned > 0;
+      const row = document.createElement("article");
+      row.className = `shop-row${ware.featured ? " featured" : ""}${ware.locked ? " locked" : ""}${protectedItem ? " protected" : ""}`;
+      const art = document.createElement("div"); art.className = "shop-item-art";
+      const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 64; this.drawMarketItem(canvas, ware); art.appendChild(canvas);
+      const copy = document.createElement("div"); copy.className = "shop-item-copy";
+      const kicker = document.createElement("span"); kicker.textContent = ware.featured ? "DAILY FEATURE · 15% OFF" : `${ware.category.toUpperCase()} · OWNED ${ware.owned}`;
+      const title = document.createElement("h3"); title.textContent = ware.name;
+      const description = document.createElement("p"); description.textContent = ware.description;
+      copy.append(kicker, title, description);
+      const trade = document.createElement("div"); trade.className = "shop-trade";
+      const price = document.createElement("b"); price.innerHTML = `<i></i>${ware.unitPrice || 0}<small> G / EA</small>`; trade.appendChild(price);
+      if (ware.locked) {
+        const lock = document.createElement("span"); lock.className = "shop-lock"; lock.textContent = `UNLOCK LV ${ware.unlockLevel}`; trade.appendChild(lock);
+      } else if (protectedItem || uniqueOwned) {
+        const lock = document.createElement("span"); lock.className = "shop-lock protected"; lock.textContent = uniqueOwned ? "ALREADY OWNED" : "PROTECTED"; trade.appendChild(lock);
+      } else {
+        for (const quantity of [1, 5]) {
+          const button = document.createElement("button"); button.type = "button"; button.className = quantity === 1 ? "trade-one" : "trade-five";
+          button.textContent = `${mode === "buy" ? "BUY" : "SELL"} ×${quantity}`;
+          button.disabled = mode === "buy" ? player.gold < ware.unitPrice * quantity : ware.owned < quantity;
+          button.addEventListener("click", () => this.game.tradeAtMarket(mode, ware.id, quantity));
+          trade.appendChild(button);
+        }
+      }
+      row.append(art, copy, trade); list.appendChild(row);
+    }
+  }
+
+  renderAfkFishing() {
+    if (!this.game) return;
+    clearInterval(this._afkClock);
+    const status = afkFishingStatus(this.game.afkFishingJob, Date.now());
+    if (!status.valid) this.game.afkFishingJob = null;
+    const state = status.valid ? status.state : "idle";
+    const rod = activeRod(this.game.player.inv);
+    const luck = rod.luck + Math.max(0, Number(this.game.foodBuffTotals?.fishingLuck) || 0);
+    const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+    const progress = document.getElementById("afk-progress-fill"); if (progress) progress.style.width = `${Math.round(status.progress * 100)}%`;
+    set("afk-rod", rod.name);
+    set("afk-efficiency", luck > .25 ? `Rare current +${Math.round(luck * 100)}%` : luck > 0 ? `Luck +${Math.round(luck * 100)}%` : "Safe waters");
+    if (state === "running") {
+      set("afk-eyebrow", "WATCH IN PROGRESS"); set("afk-state", "The Angler is tending your line.");
+      set("afk-description", "You may close this tab. The timestamped watch continues and will be waiting in this save when you return.");
+      set("afk-time", this.formatDuration(status.remainingMs));
+    } else if (state === "ready") {
+      set("afk-eyebrow", "CATCH READY"); set("afk-state", "Your keepnet is full.");
+      set("afk-description", "Claim now to move every fish into the Chronicle, update fishing quests, and receive the dock's reduced gold payout.");
+      set("afk-time", "CLAIM");
+      if (this._afkReadyToken !== status.job.id) { this._afkReadyToken = status.job.id; this.audio?.sfx("coin"); this.toast("AFK Fishing catch is ready to claim!"); }
+    } else {
+      set("afk-eyebrow", this.game.lastAfkFishingClaim ? "WATCH COMPLETE" : "DOCK READY");
+      set("afk-state", this.game.lastAfkFishingClaim ? "Catch secured in your pack." : "Choose a fishing watch.");
+      set("afk-description", this.game.lastAfkFishingClaim ? "Your collection, quest progress, fish inventory, and gold were updated together." : "The Angler watches your line while you are away—even after closing the tab. Return when the timer ends to claim the catch once.");
+      set("afk-time", "READY");
+    }
+
+    const durations = document.getElementById("afk-duration-list");
+    if (durations) {
+      durations.innerHTML = "";
+      for (const option of AFK_FISHING_OPTIONS) {
+        const selected = option.minutes === this._afkSelection;
+        const button = document.createElement("button"); button.type = "button";
+        button.className = `afk-duration${selected ? " selected" : ""}`; button.disabled = state === "running" || state === "ready";
+        button.setAttribute("aria-pressed", String(selected));
+        button.innerHTML = `<i><span></span></i><div><small>${option.label.toUpperCase()}</small><strong>${option.minutes} MIN</strong><p>About ${option.baseCatches}${rod.luck ? "+" : ""} catches · offline-safe</p></div><em>${selected ? "SELECTED" : "CHOOSE"}</em>`;
+        button.addEventListener("click", () => { this._afkSelection = option.minutes; this.audio?.sfx("ui"); this.renderAfkFishing(); });
+        durations.appendChild(button);
+      }
+    }
+
+    const summary = document.getElementById("afk-reward-summary");
+    const last = this.game.lastAfkFishingClaim;
+    if (summary) {
+      summary.classList.toggle("hidden", !last);
+      summary.innerHTML = "";
+      if (last) {
+        const heading = document.createElement("div"); heading.className = "afk-reward-head";
+        heading.innerHTML = `<span>LAST KEEP</span><strong>${last.fishCount} FISH · +${last.gold} GOLD</strong>`; summary.appendChild(heading);
+        const species = document.createElement("div"); species.className = "afk-species";
+        for (const caught of last.summary || []) {
+          const fish = FISH.find((entry) => entry.id === caught.id); if (!fish) continue;
+          const card = document.createElement("article"); card.dataset.rarity = fish.rarity;
+          const canvas = document.createElement("canvas"); canvas.width = 62; canvas.height = 38; const ctx = canvas.getContext("2d");
+          if (ctx) { ctx.imageSmoothingEnabled = false; ctx.drawImage(getFishSprite(fish), 1, 2, 60, 34); }
+          const label = document.createElement("div"); label.innerHTML = `<b>${fish.name}</b><span>×${caught.count} · best ${caught.bestSize.toFixed(1)} cm</span>`;
+          card.append(canvas, label); species.appendChild(card);
+        }
+        summary.appendChild(species);
+      }
+    }
+
+    const primary = document.getElementById("afk-primary");
+    if (primary) {
+      primary.disabled = state === "running" || state === "claimed";
+      primary.textContent = state === "ready" ? "CLAIM KEEP" : state === "running" ? `WATCH RUNNING · ${this.formatDuration(status.remainingMs)}` : `START ${this._afkSelection} MIN WATCH`;
+      primary.onclick = () => state === "ready" ? this.game.claimAfkFishing() : this.game.startAfkFishing(this._afkSelection);
+    }
+    const cancel = document.getElementById("afk-cancel");
+    if (cancel) { cancel.classList.toggle("hidden", state !== "running"); cancel.onclick = () => this.game.cancelAfkFishing(); }
+    if (state === "running" && !this.panels.afk?.classList.contains("hidden")) this._afkClock = setInterval(() => this.renderAfkFishing(), 1000);
   }
 
   renderCollection() {
@@ -528,6 +690,17 @@ export class UI {
       row.innerHTML = `<div class="q-info"><h4>${it.q.title}</h4><p>${it.q.desc}</p><p class="q-reward">Reward: ${rwt}</p></div>${btn}`;
       wrap.appendChild(row);
     }
+    const service = npc.name === "Merchant"
+      ? { panel: "shop", kicker: "TRAIL MARKET", title: "Buy supplies or sell spare loot", copy: "Instant trade using the gold and inventory in this save.", action: "OPEN MARKET" }
+      : npc.name === "Angler"
+        ? { panel: "afk", kicker: "MOONWATER DOCK", title: "Leave a line while you are away", copy: "Choose a 2, 10, or 30 minute offline-safe fishing watch.", action: "OPEN AFK DOCK" }
+        : null;
+    if (service) {
+      const row = document.createElement("section"); row.className = "npc-service-card";
+      row.innerHTML = `<i class="${service.panel}"></i><div><span>${service.kicker}</span><strong>${service.title}</strong><p>${service.copy}</p></div><button type="button">${service.action}</button>`;
+      row.querySelector("button")?.addEventListener("click", () => this.toggle(service.panel));
+      wrap.prepend(row);
+    }
     wrap.querySelectorAll("[data-accept]").forEach(b => b.addEventListener("click", () => {
       const q = QUESTS.find(x => x.id === b.dataset.accept);
       if (game.quests.accept(q)) { this.audio?.sfx("quest"); this.toast("Quest accepted: " + q.title); this.showDialog(npc, game); }
@@ -552,6 +725,7 @@ export class UI {
       let prog = 0;
       if (it.type === "kill") prog = Math.min(it.target, q.killCount - a.startKills);
       else if (it.type === "chest") prog = Math.min(it.target, q.chestCount - a.startChests);
+      else if (it.type === "fish") prog = Math.min(it.target, q.fishCount - a.startFish);
       else prog = Math.min(it.target, this.game.player.inv[it.item] || 0);
       const row = document.createElement("div"); row.className = "quest-row";
       row.innerHTML = `<div class="q-info"><h4>${it.title} <span style="color:var(--muted);font-weight:400">· ${it.giver}</span></h4><p>${it.desc}</p><div class="q-prog"><div class="q-prog-fill" style="width:${prog / it.target * 100}%"></div></div></div><span class="q-status">${prog}/${it.target}</span>`;

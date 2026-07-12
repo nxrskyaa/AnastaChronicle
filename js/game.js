@@ -51,6 +51,8 @@ export class Game {
     this.foodBuffTotals = { speed: 0, damage: 0, defense: 0, fishingLuck: 0 };
     this.flags = { starterCache: false };
     this.fishingStats = { total: 0, best: 0, records: {} };
+    this.afkFishingJob = null;
+    this.lastAfkFishingClaim = null;
     this.catchReveal = null;
     this.time = 6 * 60;
     this.weather = "clear";     // clear | rain | snow

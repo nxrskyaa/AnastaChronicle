@@ -17,6 +17,7 @@ import {
 import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
+import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -300,6 +301,8 @@ function savePayload(g) {
     stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
     inv: p.inv,
     fishing: g.fishingStats,
+    quests: g.quests?.serialize?.(),
+    afkFishing: g.afkFishingJob || null,
     flags: g.flags,
     equipped: p.equipped,
     pets: Array.isArray(g.pets) ? [...g.pets] : [],
@@ -427,6 +430,11 @@ function startGame(savedLook, savedName, saveData) {
       p.hp = saveData.stats.hp || p.maxHp;
       if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
       if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
+      if (saveData.quests) game.quests.restore?.(saveData.quests);
+      if (saveData.afkFishing) {
+        const restoredAfk = normalizeAfkFishingJob(saveData.afkFishing);
+        game.afkFishingJob = restoredAfk?.claimedAt ? null : restoredAfk;
+      }
       if (Array.isArray(saveData.activeFoodBuffs)) {
         game.activeFoodBuffs = normalizeActiveBuffs(saveData.activeFoodBuffs, Date.now());
       }
@@ -456,6 +464,7 @@ function startGame(savedLook, savedName, saveData) {
     }
     const persist = () => { if (game?.player) putSave(savePayload(game)); };
     game.onCompanionChange = persist;
+    game.onProgressChange = persist;
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
     window.__ANASTA__ = game;
     wireSettings();
@@ -464,6 +473,9 @@ function startGame(savedLook, savedName, saveData) {
     addEventListener("resize", () => computeView(canvas));
     game.start();
     showArrivalGuide(!!saveData);
+    if (afkFishingStatus(game.afkFishingJob).state === "ready") {
+      setTimeout(() => ui.toast("AFK Fishing catch ready · open the Dock to claim"), 700);
+    }
     // Auto-save every 15s
     setInterval(persist, 15000);
     // Save on page hide / unload

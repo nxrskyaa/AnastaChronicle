@@ -220,10 +220,12 @@
     </div>
     <nav class="realm-menu-grid" aria-label="Realm features">
       <button type="button" data-open-panel="inv"><i class="menu-rune bag"></i><span><b>Inventory</b><small>Gear &amp; materials</small></span><em>I</em></button>
+      <button type="button" data-open-panel="shop"><i class="menu-rune shop"></i><span><b>Trail Market</b><small>Buy supplies &amp; sell loot</small></span><em>B</em></button>
       <button type="button" data-open-panel="craft"><i class="menu-rune forge"></i><span><b>Forge</b><small>Craft your arsenal</small></span><em>C</em></button>
       <button type="button" data-open-panel="cooking"><i class="menu-rune cooking"></i><span><b>Hearth Kitchen</b><small id="menu-cooking-state">12 camp recipes</small></span><em>K</em></button>
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
+      <button type="button" data-open-panel="afk"><i class="menu-rune afk"></i><span><b>AFK Fishing Dock</b><small id="menu-afk-state">Dock is ready</small></span><em>L</em></button>
       <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 25 bonded</small></span><em>P NEXT</em></button>
       <button type="button" data-open-panel="chat"><i class="menu-rune chat"></i><span><b>Realm Chat</b><small id="menu-chat-state">Offline</small></span><em>ENTER</em></button>
       <button type="button" data-open-panel="settings"><i class="menu-rune settings"></i><span><b>Settings</b><small>Controls &amp; audio</small></span><em>OPEN</em></button>
@@ -246,6 +248,28 @@
     <div id="fish-collection-grid" class="fish-collection-grid"></div>
   </div>
   <div id="panel-inv" class="panel hidden"><div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div><div id="inv-grid"></div><div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div></div>
+  <div id="panel-shop" class="panel panel-wide market-panel hidden" role="dialog" aria-modal="true" aria-labelledby="market-title">
+    <div class="panel-head"><div><span class="panel-kicker">HEARTH CAMP · TRAVELER ECONOMY</span><h2 id="market-title">Hearth Trail Market</h2></div><div class="market-wallet"><small>WALLET</small><b><i></i><span id="shop-gold">0</span> G</b></div><button class="panel-close" data-close="shop" aria-label="Close Trail Market">&times;</button></div>
+    <section class="market-hero">
+      <div class="market-stall-art" aria-hidden="true"><i class="awning"></i><i class="shelf"></i><span class="jar one"></span><span class="jar two"></span><span class="crate"></span></div>
+      <div><span>FAIR PRICES · INSTANT TRADE</span><strong>Stock the journey. Turn spare loot into gold.</strong><p>Buy field essentials or sell gathered materials. Relics, active weapons, and treasured fishing gear stay protected.</p></div>
+      <dl><div><dt>Market rule</dt><dd>No hidden fee</dd></div><div><dt>Trade unit</dt><dd>1 or 5 items</dd></div></dl>
+    </section>
+    <div class="market-tabs" role="tablist" aria-label="Market sections"><button type="button" class="active" data-shop-tab="buy" role="tab" aria-selected="true">BUY SUPPLIES</button><button type="button" data-shop-tab="sell" role="tab" aria-selected="false">SELL FROM PACK</button></div>
+    <div id="shop-list" class="shop-list" aria-live="polite"></div>
+  </div>
+  <div id="panel-afk" class="panel panel-wide afk-panel hidden" role="dialog" aria-modal="true" aria-labelledby="afk-title">
+    <div class="panel-head"><div><span class="panel-kicker">ANGLER'S MOONWATER SERVICE</span><h2 id="afk-title">AFK Fishing Dock</h2></div><button class="panel-close" data-close="afk" aria-label="Close AFK Fishing Dock">&times;</button></div>
+    <section class="afk-hero">
+      <div class="afk-water-art" aria-hidden="true"><i class="moon"></i><i class="rod"></i><i class="line"></i><i class="bobber"></i><span></span></div>
+      <div class="afk-hero-copy"><span id="afk-eyebrow">DOCK READY</span><strong id="afk-state">Choose a fishing watch.</strong><p id="afk-description">The Angler watches your line while you are away—even after closing the tab. Return when the timer ends to claim the catch once.</p><div class="afk-progress"><div><i id="afk-progress-fill"></i></div><b id="afk-time">READY</b></div></div>
+      <dl><div><dt>Active rod</dt><dd id="afk-rod">Willow Rod</dd></div><div><dt>Efficiency</dt><dd id="afk-efficiency">Safe waters</dd></div></dl>
+    </section>
+    <div id="afk-duration-list" class="afk-duration-list" aria-label="Fishing watch duration"></div>
+    <div id="afk-reward-summary" class="afk-reward-summary hidden" aria-live="polite"></div>
+    <div class="afk-actions"><button id="afk-cancel" class="afk-cancel hidden" type="button">CANCEL WATCH</button><button id="afk-primary" class="afk-primary" type="button" disabled>SELECT A WATCH</button></div>
+    <p class="afk-note"><i></i> Local offline timer for the current prototype. Future onchain rewards will be server-authoritative and wallet-bound.</p>
+  </div>
   <div id="panel-craft" class="panel panel-wide hidden">
     <div class="panel-head"><div><span class="panel-kicker">CAMP SMITHY</span><h2>Forge & Arsenal</h2></div><button class="panel-close" data-close="craft">×</button></div>
     <div class="forge-guide">
@@ -302,7 +326,7 @@
     <div class="set-row"><span>Movement</span>
       <div class="seg"><button id="move-btn-btn" class="seg-btn active">Button</button><button id="move-tap-btn" class="seg-btn">Tap</button></div>
     </div>
-    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · I bag · C forge · K cook · M mount · Q quests</div>
+    <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact · B shop · L AFK dock · J fish book · K cook · M mount · P pet</div>
   </div>
   <div id="panel-level" class="panel hidden modal level-ceremony" role="dialog" aria-modal="true" aria-labelledby="level-title">
     <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>
