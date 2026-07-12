@@ -22,7 +22,10 @@ Game.prototype.resolveInteract = function (point = null) {
   const focusRadius = point ? TAP_TARGET_RADIUS : INTERACT_RADIUS;
   for (const npc of this.npcs) offer(actors, npc, "npc", `Talk to ${npc.name}`, focusRadius);
   for (const chest of this.chests) {
-    if (!chest.opened) offer(actors, chest, "chest", chest.pet ? "Claim Companion Cache" : "Claim Supply Cache", focusRadius);
+    if (!chest.opened) {
+      const label = chest.starter ? "Bond Puffalo · Starter Mount" : chest.pet ? "Claim Companion Cache" : "Claim Supply Cache";
+      offer(actors, chest, "chest", label, focusRadius);
+    }
   }
   if (this.camp) offer(actors, this.camp, "cook", "Cook at the Hearth", focusRadius);
   actors.sort((a, b) => a.focusDistance - b.focusDistance || a.distance - b.distance);
@@ -269,25 +272,25 @@ Game.prototype.interact = function (resolved = null) {
   }
   this.fx.push({ kind: "chestburst", x: target.x, y: target.y - 9, pet: !!target.pet, t: 0, dur: target.pet ? 1.05 : .72 });
 
-  if (target.pet) {
-    this.ui.showPet(target.pet, () => {
-      const isNew = this.registerPet(target.pet);
-      if (!this.setActivePet(target.pet)) return;
-      const name = target.pet.charAt(0).toUpperCase() + target.pet.slice(1);
-      if (!isNew) { player.gold += 5; this.onCompanionChange?.(); }
-      this.ui.toast(isNew ? `${name} joined your companions!` : `${name} is already bonded · +5g bond echo.`);
-      this.ui.sync();
-    });
-    return;
-  }
-
   if (target.starter) {
     this.flags.starterCache = true;
     player.gold += 12;
     player.inv.wood = (player.inv.wood || 0) + 3;
     player.inv.ore = (player.inv.ore || 0) + 3;
-    this.ui.toast("Starter cache claimed · +12g · +3 Wood · +3 Ore");
-    this.ui.sync();
+  }
+
+  if (target.pet) {
+    this.ui.showPet(target.pet, () => {
+      const isNew = this.registerPet(target.pet);
+      if (!this.setActivePet(target.pet)) return;
+      const name = target.pet.charAt(0).toUpperCase() + target.pet.slice(1);
+      if (!isNew && !target.starter) { player.gold += 5; this.onCompanionChange?.(); }
+      const message = target.starter
+        ? `${name} bonded · starter mount ready · +12g · +3 Wood · +3 Ore`
+        : isNew ? `${name} joined your companions!` : `${name} is already bonded · +5g bond echo.`;
+      this.ui.toast(message);
+      this.ui.sync();
+    });
     return;
   }
 

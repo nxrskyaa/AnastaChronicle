@@ -16,6 +16,7 @@ import {
 } from "./net.js";
 import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
+import { STARTER_MOUNT_ID } from "./monsters.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -274,8 +275,12 @@ function showArrivalGuide(isReturning) {
   if (!banner) return;
   const title = document.getElementById("arrival-title");
   const kicker = document.getElementById("arrival-kicker");
+  const guide = document.getElementById("arrival-guide-text");
   if (title) title.textContent = isReturning ? `Chronicle resumed, ${look.name}` : `Welcome to Anasta, ${look.name}`;
   if (kicker) kicker.textContent = isReturning ? "THE FOREST REMEMBERS" : "THE FOREST AGE";
+  if (guide) guide.textContent = isReturning && game?.flags?.starterCache
+    ? "Open Sanctuary to switch bonds. Press M or tap the saddle button to ride a mount."
+    : "Claim the golden cache just south of camp to bond Puffalo, your guaranteed starter mount.";
   banner.classList.remove("hidden", "leaving");
   const hide = () => {
     if (banner.classList.contains("hidden")) return;
@@ -309,9 +314,11 @@ function savePayload(g) {
 function wireMultiplayer(g, ui) {
   ui.setChatSender(sendChat);
   ui.setDuelSender(sendDuel);
+  ui.setDuelSupported(false);
   ui.setOnlineState(false, 1);
 
   net.onWelcome = (message) => {
+    ui.setDuelSupported((Number(message.protocol) || 1) >= 2);
     if (!Number.isFinite(message.x) || !Number.isFinite(message.y)) return;
     const drift = Math.hypot(g.player.x - message.x, g.player.y - message.y);
     if (drift > 32) {
@@ -364,7 +371,7 @@ function wireMultiplayer(g, ui) {
   };
   net.onPvpReject = (message) => {
     if (message.reason === "rate_limited") return;
-    const reasons = { mutual_duel_required: "Both travelers must arm Duel Mode.", out_of_range: "Duel target moved out of range.", invalid_target: "Duel target is no longer in the realm." };
+    const reasons = { mutual_duel_required: "Both travelers must arm Duel Mode.", out_of_range: "Duel target moved out of range.", invalid_target: "Duel target is no longer in the realm.", invalid_damage: "That attack exceeded the realm's duel limit." };
     ui.toast(reasons[message.reason] || "The realm rejected that duel strike.");
   };
   net.onBossState = (boss) => g.applySharedBoss?.(boss);
@@ -433,6 +440,9 @@ function startGame(savedLook, savedName, saveData) {
     if (saveData) {
       const roster = Array.isArray(saveData.pets) ? saveData.pets : [];
       for (const id of roster) game.registerPet(id);
+      // Save migration: old starter caches predated Puffalo. Grant the bond
+      // once without replaying materials or replacing an existing active pet.
+      if (game.flags.starterCache && !game.pets.includes(STARTER_MOUNT_ID)) game.registerPet(STARTER_MOUNT_ID);
       const activePet = saveData.activePetId || (typeof saveData.pet === "string" ? saveData.pet : null);
       if (activePet && !game.pets.includes(activePet)) game.registerPet(activePet);
       const selectedPet = game.pets.includes(activePet) ? activePet : game.pets[0] || null;

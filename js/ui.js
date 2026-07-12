@@ -4,7 +4,7 @@ import { CLASSES } from "./classes.js";
 import { FISH, RODS, activeRod } from "./fishing.js";
 import { getFishSprite } from "./fishart.js";
 import { img } from "./assets.js";
-import { MON_IDS, MON_ELEMENT, MON_META } from "./monsters.js";
+import { MON_IDS, MON_ELEMENT, MON_META, STARTER_MOUNT_ID } from "./monsters.js";
 import {
   COOKING_RECIPES, FOOD_ITEMS, canCook, knownRecipeIds,
   displayIngredientName, activeBuffTotals, normalizeActiveBuffs,
@@ -42,6 +42,7 @@ export class UI {
     this.online = false;
     this.onlineCount = 1;
     this.duelActive = false;
+    this.duelSupported = false;
     this._chatSender = null;
     this._duelSender = null;
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
@@ -121,6 +122,15 @@ export class UI {
 
   setChatSender(sender) { this._chatSender = typeof sender === "function" ? sender : null; }
   setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
+  setDuelSupported(supported) {
+    this.duelSupported = !!supported;
+    const button = document.getElementById("duel-toggle");
+    button?.classList.toggle("unavailable", this.online && !this.duelSupported);
+    button?.setAttribute("aria-disabled", String(this.online && !this.duelSupported));
+    if (button) button.title = this.online && !this.duelSupported ? "Duel service is updating" : "Mutual opt-in player duel";
+    if (!this.duelSupported) this.duelActive = false;
+    this.updateDuel(this.duelActive);
+  }
 
   setOnlineState(online, count = this.onlineCount) {
     this.online = !!online;
@@ -130,18 +140,21 @@ export class UI {
     document.getElementById("chat-presence-text")?.parentElement?.classList.toggle("online", this.online);
     const dock = document.getElementById("chat-dock"); if (dock) dock.dataset.online = this.online ? "true" : "false";
     if (!this.online) this.updateDuel(false);
+    this.setDuelSupported(this.duelSupported);
   }
 
   updateDuel(active) {
     this.duelActive = !!active;
     const button = document.getElementById("duel-toggle");
     button?.setAttribute("aria-checked", String(this.duelActive));
-    const label = document.getElementById("duel-toggle-label"); if (label) label.textContent = this.duelActive ? "DUEL ARMED" : "SAFE MODE";
+    const label = document.getElementById("duel-toggle-label");
+    if (label) label.textContent = this.duelActive ? "DUEL ARMED" : this.online && !this.duelSupported ? "SERVICE UPDATING" : "SAFE MODE";
     document.getElementById("hud")?.classList.toggle("duel-armed", this.duelActive);
   }
 
   requestDuel(active) {
     if (!this.online || !this._duelSender) { this.toast("Realm connection required for Duel Mode."); return; }
+    if (!this.duelSupported) { this.toast("Duel service is updating. Safe Mode remains active."); return; }
     if (!this._duelSender(!!active)) { this.toast("Duel request could not reach the realm."); return; }
     this.toast(active ? "Duel request armed. Damage needs mutual consent." : "Returning to Safe Mode...");
   }
@@ -344,7 +357,10 @@ export class UI {
     this.audio?.sfx("pet");
     const im = document.getElementById("pet-img");
     if (im && this.game && this.game.monCache[id]) { im.src = this.game.monCache[id][0].toDataURL(); im.alt = `${petName(id)} companion`; }
-    const msg = document.getElementById("pet-msg"); if (msg) msg.textContent = `A wild ${petName(id)} appeared! It wants to join you.`;
+    const msg = document.getElementById("pet-msg");
+    if (msg) msg.textContent = MON_META[id]?.mountable
+      ? `${petName(id)} bonded with you! This companion is a mount—press M or tap RIDE after adopting.`
+      : `A wild ${petName(id)} appeared! It wants to join you.`;
     this.panels.pet?.classList.remove("hidden"); if (this.game) this.game.paused = true;
   }
 
@@ -364,7 +380,7 @@ export class UI {
     if (!this.game) return;
     const id = this.game.cyclePet();
     if (!id) {
-      this.toast("No bonded companion yet — explore supply caches.");
+      this.toast("Claim the golden cache south of camp for Puffalo, then follow yellow cache markers.");
       if (this.panels.companions?.classList.contains("hidden")) this.toggle("companions");
       return;
     }
@@ -385,7 +401,7 @@ export class UI {
     const active = game.activePetId || game.pet?.id;
     const id = MON_META[active]?.mountable ? active : mounts.includes(game.mountId) ? game.mountId : mounts[0];
     if (!id) {
-      this.toast("No rideable companion bonded yet.");
+      this.toast("Starter mount: claim Puffalo from the golden cache just south of camp.");
       if (this.panels.companions?.classList.contains("hidden")) this.toggle("companions");
       return;
     }
@@ -399,23 +415,26 @@ export class UI {
     const game = this.game; if (!game) return;
     const mounts = game.mountablePets?.() || [];
     const active = game.activePetId || game.pet?.id;
-    const activeCanRide = !!MON_META[active]?.mountable;
-    const selected = mounts.includes(game.mountId) ? game.mountId : activeCanRide ? active : mounts[0] || null;
+    const selected = mounts.includes(game.mountId) ? game.mountId : MON_META[active]?.mountable ? active : mounts[0] || null;
     const token = `${mounts.join(",")}|${selected || ""}|${game.mounted ? 1 : 0}|${active || ""}`;
     if (!force && token === this._mountToken) return;
     this._mountToken = token;
     const chip = document.getElementById("mount-chip");
-    chip?.classList.toggle("hidden", mounts.length === 0);
+    chip?.classList.remove("hidden");
     chip?.classList.toggle("active", !!game.mounted);
+    chip?.classList.toggle("locked", mounts.length === 0);
     chip?.setAttribute("aria-pressed", String(!!game.mounted));
-    chip?.setAttribute("aria-label", game.mounted ? `Dismount ${petName(game.mountId)}` : selected ? `Ride ${petName(selected)}` : "No rideable companion");
+    chip?.setAttribute("aria-label", game.mounted ? `Dismount ${petName(game.mountId)}` : selected ? `Ride ${petName(selected)}` : "Claim starter mount Puffalo from the golden cache south of camp");
     const chipLabel = document.getElementById("mount-chip-label");
-    if (chipLabel) chipLabel.textContent = game.mounted ? "DISMOUNT" : selected ? `RIDE ${petName(selected)}` : "RIDE";
+    if (chipLabel) chipLabel.textContent = game.mounted ? "DISMOUNT" : selected ? `RIDE ${petName(selected)}` : "CLAIM PUFFALO";
     const button = document.getElementById("btn-mount-toggle");
-    button?.classList.toggle("hidden", !activeCanRide);
-    button?.classList.toggle("active", !!game.mounted && game.mountId === active);
+    button?.classList.remove("hidden");
+    button?.classList.toggle("locked", mounts.length === 0);
+    button?.classList.toggle("active", !!game.mounted);
     const buttonLabel = button?.querySelector("span");
-    if (buttonLabel) buttonLabel.textContent = game.mounted && game.mountId === active ? "DISMOUNT" : `RIDE · +${Math.round(((MON_META[active]?.mountSpeed || 1) - 1) * 100)}%`;
+    if (buttonLabel) buttonLabel.textContent = !selected
+      ? "CLAIM PUFFALO · CAMP CACHE"
+      : game.mounted ? `DISMOUNT ${petName(game.mountId)}` : `RIDE ${petName(selected)} · +${Math.round(((MON_META[selected]?.mountSpeed || 1) - 1) * 100)}%`;
     document.getElementById("hud")?.classList.toggle("mounted", !!game.mounted);
   }
 
@@ -447,7 +466,7 @@ export class UI {
     } else {
       set("companion-active-element", "NO ACTIVE BOND");
       set("companion-active-name", "Find your first companion");
-      set("companion-active-desc", "Rare supply caches may reveal wild spirits. Bonded companions remain in your sanctuary and can be summoned at any time.");
+      set("companion-active-desc", "Open the golden Companion Cache just south of Hearth Camp for guaranteed Puffalo. Then explore yellow cache markers for more wild bonds.");
       if (ctx) {
         ctx.fillStyle = "rgba(93,190,145,.2)"; ctx.fillRect(45, 24, 6, 48); ctx.fillRect(24, 45, 48, 6);
         ctx.strokeStyle = "rgba(128,220,176,.5)"; ctx.strokeRect(31, 31, 34, 34);
@@ -466,18 +485,20 @@ export class UI {
     const active = this.game.activePetId || this.game.pet?.id;
     grid.innerHTML = "";
     for (const id of MON_IDS) {
-      const isOwned = owned.has(id), isActive = id === active;
+      const isOwned = owned.has(id), isActive = id === active, isStarterHint = id === STARTER_MOUNT_ID && !isOwned;
       const meta = MON_META[id];
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `companion-card ${isOwned ? "owned" : "locked"}${isActive ? " active" : ""}`;
+      button.className = `companion-card ${isOwned ? "owned" : "locked"}${isActive ? " active" : ""}${isStarterHint ? " starter-hint" : ""}`;
       button.disabled = !isOwned || isActive;
       if (isActive) button.setAttribute("aria-current", "true");
-      button.setAttribute("aria-label", isOwned ? `${isActive ? "Active companion" : "Summon"} ${petName(id)}` : "Undiscovered companion");
+      button.setAttribute("aria-label", isOwned
+        ? `${isActive ? "Active companion" : "Summon"} ${petName(id)}`
+        : isStarterHint ? "Puffalo starter mount—claim the golden cache south of camp" : "Undiscovered companion");
       const art = document.createElement("canvas"); art.width = 72; art.height = 72; button.appendChild(art);
-      const name = document.createElement("strong"); name.textContent = isOwned ? petName(id) : "Unknown"; button.appendChild(name);
-      const element = document.createElement("small"); element.textContent = isOwned ? `${MON_ELEMENT[id] || "spirit"} · ${meta?.role || "companion"}` : `${meta?.habitat || "unknown"} habitat`; button.appendChild(element);
-      if (meta?.mountable) { const badge = document.createElement("i"); badge.className = "mount-badge"; badge.textContent = "MOUNT"; button.appendChild(badge); }
+      const name = document.createElement("strong"); name.textContent = isOwned || isStarterHint ? petName(id) : "Unknown"; button.appendChild(name);
+      const element = document.createElement("small"); element.textContent = isOwned ? `${MON_ELEMENT[id] || "spirit"} · ${meta?.role || "companion"}` : isStarterHint ? "golden camp cache" : `${meta?.habitat || "unknown"} habitat`; button.appendChild(element);
+      if (meta?.mountable) { const badge = document.createElement("i"); badge.className = "mount-badge"; badge.textContent = isStarterHint ? "STARTER" : "MOUNT"; button.appendChild(badge); }
       this.drawPet(art, id, 0);
       if (!isOwned) art.style.filter = "brightness(0)";
       if (isOwned) button.addEventListener("click", () => {

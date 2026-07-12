@@ -439,6 +439,7 @@ const SPECIES = {
 
 const cache = {};   // id -> [frame canvases]
 export const MON_IDS = Object.keys(SPECIES);
+export const STARTER_MOUNT_ID = "puffalo";
 export const MON_META = Object.freeze({
   leaflet: {
     name: "Leaflet", element: "grass", habitat: "meadow", role: "seed tender", rarity: "common",

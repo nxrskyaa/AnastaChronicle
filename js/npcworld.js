@@ -34,7 +34,7 @@ const SITES = [
   {
     region: "Reed Pond", roles: ["Reed Angler", "Herbalist", "Pond Keeper"],
     residents: [
-      { at: [64, 44], routine: "fish", face: "down" },
+      { at: [64, 55], routine: "fish", face: "up" },
       { at: [67, 56], routine: "gather", roam: 24 },
       { at: [70, 50], routine: "work", roam: 18 },
     ],
@@ -67,7 +67,7 @@ const SITES = [
   {
     region: "Azure Coast", roles: ["Tide Angler", "Shell Collector", "Beacon Keeper"],
     residents: [
-      { at: [66, 28], routine: "fish", face: "right" },
+      { at: [67, 28], routine: "fish", face: "right" },
       { at: [80, 43], routine: "gather", roam: 22 },
       { at: [94, 28], routine: "work", roam: 14, lantern: true },
     ],
@@ -236,7 +236,7 @@ export function updateNpcWorld(game, dt) {
       npc.emote = npc.routine === "fish" ? "fish" : "wave";
       npc.emoteT = 1.25;
       npc.reactionCd = 8 + nextNpcRandom(npc) * 7;
-      if (!npc.moving) npc.dir = directionFrom(toPlayerX, toPlayerY, npc.dir);
+      if (!npc.moving && npc.activity !== "fish") npc.dir = directionFrom(toPlayerX, toPlayerY, npc.dir);
     }
 
     // At night most residents settle at their home marker. Lantern bearers and

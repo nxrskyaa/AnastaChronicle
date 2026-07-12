@@ -26,6 +26,8 @@ Game.prototype.WEAPONS = WEAPONS;
 const PROJECTILE_SPEED = { arrow: 280, bossfire: 150, fire: 200 };
 const PROJECTILE_LIFE = 1.4;
 const projectileSpeed = (kind) => PROJECTILE_SPEED[kind] || PROJECTILE_SPEED.fire;
+const PVP_DAMAGE_CAP = Object.freeze({ basic: 72, projectile: 92, skill: 120 });
+const pvpDamage = (damage, kind = "basic") => Math.min(PVP_DAMAGE_CAP[kind] || PVP_DAMAGE_CAP.basic, Math.max(1, Math.round(damage)));
 
 function rangedAim(game, kind, preview = false) {
   const p = game.player;
@@ -74,7 +76,7 @@ function nearestDuelTarget(game, x, y, radius, fx = 0, fy = 0) {
 Game.prototype.tryDuelStrike = function (x, y, radius, damage, kind = "basic", fx = 0, fy = 0) {
   const target = nearestDuelTarget(this, x, y, radius, fx, fy);
   if (!target) return false;
-  return sendPvpHit(target.id, Math.min(120, Math.max(1, Math.round(damage))), kind);
+  return sendPvpHit(target.id, pvpDamage(damage, kind), kind);
 };
 
 Game.prototype.update = function (dt) {
@@ -561,7 +563,7 @@ Game.prototype.updateProjectiles = function (dt) {
           if (!remote.duel || pr.hitsRemote.includes(id)) continue;
           if (Math.hypot(pr.x - remote.rx, pr.y - (remote.ry - 18)) >= 17) continue;
           const combatKind = ["skill", "power", "multi", "comet", "falcon", "sakura"].includes(pr.variant) ? "skill" : "projectile";
-          if (sendPvpHit(id, Math.min(120, Math.max(1, Math.round(pr.dmg))), combatKind)) {
+          if (sendPvpHit(id, pvpDamage(pr.dmg, combatKind), combatKind)) {
             impact(); pr.hitsRemote.push(id);
             if (!pr.pierce) { pr.life = 0; consumed = true; }
           }

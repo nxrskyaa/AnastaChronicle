@@ -2,7 +2,7 @@ import { buildCharacter, buildWeapon, DEFAULT_LOOK } from "./chargen.js";
 import { QuestLog, NPC_DEFS } from "./quests.js";
 import { buildVillage } from "./buildings.js";
 import { audio } from "./audio.js";
-import { buildMonsters, MON_IDS, MON_META, monHeight } from "./monsters.js";
+import { buildMonsters, MON_IDS, MON_META, STARTER_MOUNT_ID, monHeight } from "./monsters.js";
 import { view } from "./view.js";
 import { buildTiles } from "./tilegen.js";
 import { buildBoss } from "./boss.js";
@@ -396,8 +396,9 @@ export class Game {
     }
 
     for (let k = 0; k < 46; k++) this.spawnEnemy();
-    // A deliberate starter cache teaches F interaction and funds the first forge.
-    this.chests.push({ x: this.camp.x + 28, y: this.camp.y + 64, sortY: this.camp.y + 64, opened: false, openT: 0, pet: null, starter: true });
+    // The nearby golden cache teaches interaction and guarantees that every
+    // traveler can discover mounts without depending on random world rolls.
+    this.chests.push({ x: this.camp.x + 28, y: this.camp.y + 64, sortY: this.camp.y + 64, opened: false, openT: 0, pet: STARTER_MOUNT_ID, starter: true });
     for (let k = 0; k < 15; k++) this.spawnChest();
 
     // ambient wildlife — butterflies (day) / fireflies (night), passive & harmless

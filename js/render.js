@@ -387,7 +387,8 @@ Game.prototype.render = function () {
     else if (d.k === "npc") {
       const pdx = p.x - o.x, pdy = p.y - o.y, playerNear = Math.hypot(pdx, pdy) < 58;
       let dir = ["down", "up", "left", "right"].includes(o.dir) ? o.dir : "down";
-      if (playerNear && !o.moving) dir = Math.abs(pdx) > Math.abs(pdy) ? (pdx < 0 ? "left" : "right") : (pdy < 0 ? "up" : "down");
+      if (o.activity === "fish" && o.preferredDir) dir = o.preferredDir;
+      else if (playerNear && !o.moving) dir = Math.abs(pdx) > Math.abs(pdy) ? (pdx < 0 ? "left" : "right") : (pdy < 0 ? "up" : "down");
       const pose = o.moving ? "walk" : "idle";
       const frame = o.moving ? o.frame : Math.floor(this.t * 1.8 + objectPhase(o)) % 4;
       const cv = poseFrame(o.cache, pose, dir, frame, "walk");
