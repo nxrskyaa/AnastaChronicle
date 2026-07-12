@@ -1127,6 +1127,7 @@ Game.prototype.updateBoss = function (dt) {
   const b = this.boss; if (!b || b.dead) return;
   const p = this.player;
   b.t += dt; b.hurt = Math.max(0, b.hurt - dt);
+  b.combatLockT = Math.max(0, (b.combatLockT || 0) - dt);
   b.frameT += dt; if (b.frameT > 0.18) { b.frameT = 0; b.frame = (b.frame + 1) % 4; }
   const rageNow = b.hp < b.maxHp * 0.4;
   if (rageNow && !b.rage) {
@@ -1174,7 +1175,7 @@ Game.prototype.updateBoss = function (dt) {
   }
   if (!b.shared && d > desired + 20) {
     b.x += (dx / d) * spd; b.y += (dy / d) * spd;
-  } else if (!b.shared && d >= 62 && b.breathWindup <= 0) {
+  } else if (!b.shared && b.combatLockT <= 0 && d >= 62 && b.breathWindup <= 0) {
     // Rotate around the player to preserve distance exactly instead of
     // introducing a tiny outward drift from a Cartesian tangent step.
     const orbit = (spd * (b.rage ? 0.56 : 0.42)) / d * b.strafeDir;
@@ -1228,6 +1229,9 @@ Game.prototype.hurtBossDirect = function (dmg) {
     return;
   }
   b.hp -= buffed; b.hurt = 0.2;
+  // Hold the boss in its lane after impact. The normal strafe orbit resumes
+  // shortly after, but a hit should never look like the boss is backing away.
+  b.combatLockT = Math.max(b.combatLockT || 0, 0.72);
   this.addFloater(b.x, b.y - 40, buffed, true);
   this.audio.sfx("hit"); this.shake = Math.max(this.shake, 3);
   if (b.hp <= 0) this.killBoss();
