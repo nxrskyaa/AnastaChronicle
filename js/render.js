@@ -285,6 +285,24 @@ Game.prototype.render = function () {
           const ripple = Math.round((this.t * 11 + phase * 5) % 18);
           ctx.fillStyle = `rgba(190,236,245,${.34 * (1 - ripple / 18)})`;
           ctx.fillRect(sx - 18 - ripple / 2, sy + 1, 8 + ripple, 1); ctx.fillRect(sx + 8 - ripple / 3, sy + 4, 5 + ripple / 2, 1);
+        } else if (o.type === "ritual_hall") {
+          // Hand-pixel the Indonesian flag so the landmark feels alive rather
+          // than like a flat pasted decal. Red sits above white, with a subtle
+          // cloth wave driven by the same world clock as grass and lanterns.
+          const flagX = bx + cv.width - 17, flagY = by + 4;
+          const wave = this.t * 3.2 + phase;
+          ctx.fillStyle = "#ead58a"; ctx.fillRect(flagX, flagY - 1, 1, 31);
+          for (let row = 0; row < 10; row++) {
+            for (let col = 0; col < 14; col++) {
+              const flutter = Math.round(Math.sin(wave + col * .55 + row * .18) * (col / 7));
+              ctx.fillStyle = row < 5 ? "#e4483f" : "#f3eee0";
+              ctx.fillRect(flagX + 2 + col, flagY + row + flutter, 2, 1);
+            }
+          }
+          ctx.save(); ctx.globalCompositeOperation = "lighter";
+          ctx.fillStyle = `rgba(106,225,171,${.12 + Math.sin(this.t * 3 + phase) * .04})`;
+          ctx.fillRect(sx - 16, by + 13, 32, 2);
+          ctx.restore();
         }
       }
     }
@@ -1310,6 +1328,7 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     else if (b.type === "pagoda") aperture(x, y - 49, 42, .32);
     else if (b.type === "field_shrine") aperture(x, y - 24, 34, .4);
     else if (b.type === "waystone") aperture(x, y - 19, 24, .22);
+    else if (b.type === "ritual_hall") aperture(x, y - 38, 44, .2);
   }
   for (const npc of this.npcs) if (npc.carriesLantern) {
     const x = npc.x - camx, y = npc.y - camy - 20;
@@ -1343,6 +1362,10 @@ Game.prototype.renderDayNight = function (ctx, camx = this.cam.x, camy = this.ca
     if (x < -50 || x > view.w + 50 || y < -50 || y > view.h + 50) continue;
     const flicker = .84 + Math.sin(this.t * (b.type === "field_shrine" ? 7 : 3) + objectPhase(b)) * .1;
     bloom(x, y, b.type === "field_shrine" ? 25 : 18, b.type === "field_shrine" ? "rgba(255,173,76,A)" : "rgba(96,232,169,A)", dark * (b.type === "field_shrine" ? .2 : .13) * flicker);
+  }
+  for (const b of this.buildings) if (b.type === "ritual_hall") {
+    const x = b.x - camx, y = b.y - camy - 38;
+    if (x > -60 && x < view.w + 60 && y > -60 && y < view.h + 60) bloom(x, y, 38, "rgba(97,218,170,A)", dark * .1);
   }
   for (const npc of this.npcs) if (npc.carriesLantern) {
     const x = npc.x - camx, y = npc.y - camy - 20;

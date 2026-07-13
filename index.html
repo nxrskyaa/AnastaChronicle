@@ -23,6 +23,7 @@
       <main class="boot-card">
         <div class="boot-logo-wrap" aria-label="Anasta Chronicle logo"><img class="boot-logo" src="assets/anasta-logo.png" alt="Anasta Chronicle" /><i class="boot-logo-spark spark-a"></i><i class="boot-logo-spark spark-b"></i><i class="boot-logo-spark spark-c"></i></div>
         <p class="boot-kicker">CHRONICLE OF THE WILDS</p>
+        <div class="ritual-boot-lockup"><img src="assets/ritual-logo.png" alt="Ritual" /><span>BUILD FOR RITUAL CHAIN</span></div>
         <p class="boot-sub">Explore <i></i> Tame <i></i> Forge <i></i> Survive</p>
         <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar-fill"></div></div>
         <div class="boot-load-row"><div id="boot-status">Loading...</div><span id="boot-percent">BUILDING REALM</span></div>
@@ -238,6 +239,11 @@
       <div class="realm-menu-profile"><span id="menu-class-crest" class="menu-class-crest">W</span><div><small id="menu-class-path">VANGUARD PATH</small><strong id="menu-player-name">Anasta</strong><p><span id="menu-level">Level 1</span><i></i><span id="menu-online-state">Entering realm...</span></p></div></div>
       <div class="realm-menu-location"><small>CURRENT TRAIL</small><b id="menu-location">Verdant Wilds</b><span id="menu-clock">Day 06:00</span></div>
     </div>
+    <section class="save-progress-card" aria-label="Save progress">
+      <div class="save-progress-mark" aria-hidden="true"><i></i></div>
+      <div><span>CHRONICLE SAVE</span><strong id="save-progress-state">AUTO-SAVE READY</strong><p>Level, inventory, position, companions, and fishing progress are stored locally or in your connected wallet.</p></div>
+      <button id="btn-save-progress" type="button">SAVE NOW <em>&darr;</em></button>
+    </section>
     <nav class="realm-menu-grid" aria-label="Realm features">
       <button type="button" data-open-panel="inv"><i class="menu-rune bag"></i><span><b>Inventory</b><small>Gear &amp; materials</small></span><em>I</em></button>
       <button type="button" data-open-panel="shop"><i class="menu-rune shop"></i><span><b>Trail Market</b><small>Buy supplies &amp; sell loot</small></span><em>B</em></button>
@@ -280,23 +286,23 @@
   </div>
   <div id="panel-fishing-mode" class="panel fishing-mode-panel hidden" role="dialog" aria-modal="true" aria-labelledby="fishing-mode-title">
     <div class="panel-head"><div><span class="panel-kicker">WATER'S EDGE</span><h2 id="fishing-mode-title">Choose Fishing Style</h2></div><button class="panel-close" data-close="fishingMode" aria-label="Close fishing style chooser">&times;</button></div>
-    <section class="fishing-mode-hero"><div class="fishing-mode-water" aria-hidden="true"><i></i><b></b><span></span></div><div><span>ACTIVE ROD</span><strong id="fishing-mode-rod">Willow Rod</strong><p>Fish hands-on for full control, or leave an automatic line and return later.</p></div></section>
+    <section class="fishing-mode-hero"><div class="fishing-mode-water" aria-hidden="true"><i></i><b></b><span></span></div><div><span>ACTIVE ROD</span><strong id="fishing-mode-rod">Willow Rod</strong><p>Cast manually for precision, or let the same rod fish automatically from this spot.</p></div></section>
     <div class="fishing-mode-grid">
       <button id="fishing-mode-manual" type="button"><i class="manual"></i><span><small>REAL-TIME</small><strong>Manual Fishing</strong><p>Cast now. Set the hook, manage tension, and earn precision bonuses.</p></span><kbd>PLAY</kbd></button>
-      <button id="fishing-mode-auto" type="button"><i class="auto"></i><span><small>HANDS-OFF</small><strong>Auto Fishing</strong><p id="fishing-mode-auto-copy">Choose a timed watch. Return to this fishing spot to claim the catch.</p></span><kbd id="fishing-mode-auto-state">SET WATCH</kbd></button>
+      <button id="fishing-mode-auto" type="button"><i class="auto"></i><span><small>HANDS-OFF</small><strong>Auto Fishing</strong><p id="fishing-mode-auto-copy">Choose an auto-cast duration. The rod keeps fishing here while you explore.</p></span><kbd id="fishing-mode-auto-state">AUTO CAST</kbd></button>
     </div>
     <p class="fishing-mode-note"><i></i> Auto Fishing is available from water interactions—not the general Realm Menu.</p>
   </div>
   <div id="panel-afk" class="panel panel-wide afk-panel hidden" role="dialog" aria-modal="true" aria-labelledby="afk-title">
-    <div class="panel-head"><div><span class="panel-kicker">AUTOMATIC LINE</span><h2 id="afk-title">Auto Fishing Watch</h2></div><button class="panel-close" data-close="afk" aria-label="Close Auto Fishing">&times;</button></div>
+    <div class="panel-head"><div><span class="panel-kicker">AUTOMATIC LINE</span><h2 id="afk-title">Auto Fishing</h2></div><button class="panel-close" data-close="afk" aria-label="Close Auto Fishing">&times;</button></div>
     <section class="afk-hero">
       <div class="afk-water-art" aria-hidden="true"><i class="moon"></i><i class="rod"></i><i class="line"></i><i class="bobber"></i><span></span></div>
-      <div class="afk-hero-copy"><span id="afk-eyebrow">AUTO LINE READY</span><strong id="afk-state">Choose a fishing watch.</strong><p id="afk-description">Your automatic line keeps a timestamped watch while you are away. Return to any fishing spot and choose Auto Fishing to claim.</p><div class="afk-progress"><div><i id="afk-progress-fill"></i></div><b id="afk-time">READY</b></div></div>
+      <div class="afk-hero-copy"><span id="afk-eyebrow">AUTO LINE READY</span><strong id="afk-state">Choose an auto-cast duration.</strong><p id="afk-description">Your rod fishes automatically from the selected water spot. You can keep exploring and come back when the catch is ready.</p><div class="afk-progress"><div><i id="afk-progress-fill"></i></div><b id="afk-time">READY</b></div></div>
       <dl><div><dt>Active rod</dt><dd id="afk-rod">Willow Rod</dd></div><div><dt>Efficiency</dt><dd id="afk-efficiency">Safe waters</dd></div></dl>
     </section>
-    <div id="afk-duration-list" class="afk-duration-list" aria-label="Fishing watch duration"></div>
+    <div id="afk-duration-list" class="afk-duration-list" aria-label="Auto fishing duration"></div>
     <div id="afk-reward-summary" class="afk-reward-summary hidden" aria-live="polite"></div>
-    <div class="afk-actions"><button id="afk-cancel" class="afk-cancel hidden" type="button">CANCEL WATCH</button><button id="afk-primary" class="afk-primary" type="button" disabled>SELECT A WATCH</button></div>
+    <div class="afk-actions"><button id="afk-cancel" class="afk-cancel hidden" type="button">CANCEL AUTO CAST</button><button id="afk-primary" class="afk-primary" type="button" disabled>SELECT DURATION</button></div>
     <p class="afk-note"><i></i> Local offline timer for the current prototype. Future onchain rewards will be server-authoritative and wallet-bound.</p>
   </div>
   <div id="panel-craft" class="panel panel-wide hidden">

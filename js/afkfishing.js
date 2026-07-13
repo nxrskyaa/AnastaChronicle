@@ -5,9 +5,9 @@ import { FISH, RODS, rollFish } from "./fishing.js";
 export const AFK_FISHING_VERSION = 1;
 
 export const AFK_FISHING_OPTIONS = Object.freeze([
-  Object.freeze({ id: "shore-break", label: "Shore Break", minutes: 2, durationMs: 2 * 60 * 1000, baseCatches: 2 }),
-  Object.freeze({ id: "quiet-watch", label: "Quiet Watch", minutes: 10, durationMs: 10 * 60 * 1000, baseCatches: 9 }),
-  Object.freeze({ id: "deep-water", label: "Deep Water", minutes: 30, durationMs: 30 * 60 * 1000, baseCatches: 25 }),
+  Object.freeze({ id: "shore-break", label: "Quick Auto Cast", minutes: 2, durationMs: 2 * 60 * 1000, baseCatches: 2 }),
+  Object.freeze({ id: "quiet-watch", label: "Steady Auto Reel", minutes: 10, durationMs: 10 * 60 * 1000, baseCatches: 9 }),
+  Object.freeze({ id: "deep-water", label: "Deep Auto Haul", minutes: 30, durationMs: 30 * 60 * 1000, baseCatches: 25 }),
 ]);
 
 const OPTION_BY_MINUTES = new Map(AFK_FISHING_OPTIONS.map((option) => [option.minutes, option]));

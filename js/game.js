@@ -323,6 +323,7 @@ export class Game {
       ["field_shrine", 32, 79], ["field_shrine", 68, 38], ["field_shrine", 78, 73],
       ["trail_bench", 42, 61], ["trail_bench", 65, 55], ["trail_bench", 72, 68],
       ["plank_bridge", 62, 50],
+      ["ritual_hall", 72, 44],
       ["lantern", 45, 58], ["lantern", 64, 62], ["lantern", 74, 70], ["lantern", 80, 76],
     ];
     for (const [type, tx, ty] of trailLandmarks) this.buildings.push({ type, x: tx * T, y: ty * T, sortY: ty * T });

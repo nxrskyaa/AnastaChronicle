@@ -924,15 +924,15 @@ function drawPixelGreatblade(ctx, atkPhase) {
   // Oversized cleaver with a jagged spine, blood channel and two-handed grip.
   px(ctx, -3, 0, 6, 8, edge); px(ctx, -2, 0, 4, 7, "#49302b");
   px(ctx, -3, 1, 6, 1, blood); px(ctx, -3, 4, 6, 1, "#c56655");
-  px(ctx, -4, 6, 8, 4, edge); px(ctx, -3, 7, 6, 2, "#68403b"); px(ctx, -1, 7, 2, 2, glow);
+  px(ctx, -4, 5, 8, 3, edge); px(ctx, -3, 6, 6, 2, "#68403b"); px(ctx, -1, 6, 2, 2, glow);
   px(ctx, -7, -3, 14, 5, edge); px(ctx, -6, -2, 12, 3, "#7f3540");
   px(ctx, -7, -2, 3, 2, glow); px(ctx, 4, -2, 3, 2, glow);
-  px(ctx, -5, -21, 10, 19, edge); px(ctx, -4, -24, 8, 5, edge); px(ctx, -2, -27, 4, 5, edge);
-  px(ctx, -4, -20, 8, 17, iron); px(ctx, -3, -23, 6, 5, steel); px(ctx, -1, -26, 2, 22, "#eef5f5");
-  px(ctx, -3, -18, 2, 14, "#4c555f"); px(ctx, 1, -19, 2, 15, blood);
-  px(ctx, 2, -18, 3, 4, edge); px(ctx, 3, -17, 2, 2, steel);
-  px(ctx, -5, -14, 3, 4, edge); px(ctx, -4, -13, 2, 2, iron);
-  px(ctx, 0, -17, 2, 2, glow); px(ctx, 0, -11, 2, 2, glow); px(ctx, 0, -5, 2, 2, glow);
+  px(ctx, -5, -18, 10, 17, edge); px(ctx, -4, -21, 8, 5, edge); px(ctx, -2, -24, 4, 5, edge);
+  px(ctx, -4, -17, 8, 15, iron); px(ctx, -3, -20, 6, 5, steel); px(ctx, -1, -23, 2, 21, "#eef5f5");
+  px(ctx, -3, -15, 2, 13, "#4c555f"); px(ctx, 1, -16, 2, 14, blood);
+  px(ctx, 2, -15, 3, 4, edge); px(ctx, 3, -14, 2, 2, steel);
+  px(ctx, -5, -12, 3, 4, edge); px(ctx, -4, -11, 2, 2, iron);
+  px(ctx, 0, -14, 2, 2, glow); px(ctx, 0, -9, 2, 2, glow); px(ctx, 0, -4, 2, 2, glow);
 }
 
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)
@@ -947,10 +947,26 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
   } else if (isStaff) {
     // An upright staff stays inside the compact 32x40 character frame.
     hx = dir === "up" || dir === "left" ? 10 : 22; hy = 28; baseAng = 0;
-  } else if (dir === "down") { hx = 24; hy = 22; baseAng = Math.PI * 0.5; }
-  else if (dir === "up") { hx = 9; hy = 20; baseAng = -Math.PI * 0.5; }
-  else if (dir === "left") { hx = 9; hy = 22; baseAng = Math.PI; }
-  else { hx = 23; hy = 22; baseAng = 0; }
+  } else if (dir === "down") {
+    // Long blades rotate around the hand. Keeping the pivot near the middle
+    // prevents their tip from being clipped by the compact 32x40 sprite frame.
+    hx = weapon === "greatblade" ? 6 : weapon === "spear" ? 5 : weapon === "dragonblade" ? 9 : weapon === "sword" ? 10 : 12;
+    hy = 22; baseAng = Math.PI * 0.5;
+  }
+  else if (dir === "up") {
+    hx = weapon === "greatblade" ? 22 : weapon === "spear" ? 27 : weapon === "dragonblade" ? 22 : weapon === "sword" ? 20 : 20;
+    hy = 20; baseAng = -Math.PI * 0.5;
+  }
+  else if (dir === "left") {
+    hx = 9;
+    hy = weapon === "spear" ? 30 : weapon === "greatblade" ? 26 : weapon === "dragonblade" ? 24 : 22;
+    baseAng = Math.PI;
+  }
+  else {
+    hx = 23;
+    hy = weapon === "spear" ? 30 : weapon === "greatblade" ? 26 : weapon === "dragonblade" ? 24 : 22;
+    baseAng = 0;
+  }
   const phase = atkPhase == null ? null : Math.max(0, Math.min(1, atkPhase));
   const meleeSweep = phase == null ? -0.55
     : weapon === "dagger" ? -1.05 + Math.min(1, phase / .48) * 2.05

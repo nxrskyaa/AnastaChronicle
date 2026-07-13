@@ -868,7 +868,7 @@ Game.prototype.tradeAtMarket = function (side, itemId, quantity = 1) {
 Game.prototype.startAfkFishing = function (durationMinutes) {
   const current = afkFishingStatus(this.afkFishingJob);
   if (current.state === "running" || current.state === "ready") {
-    this.ui.toast(current.state === "ready" ? "Your catch is ready to claim." : "A fishing watch is already running.");
+    this.ui.toast(current.state === "ready" ? "Your auto catch is ready to claim." : "Auto Fishing is already running.");
     return false;
   }
   const baseRod = activeRod(this.player.inv);
@@ -878,12 +878,12 @@ Game.prototype.startAfkFishing = function (durationMinutes) {
     durationMinutes, rod, zone: "pond", time: night ? "night" : "day",
     weather: this.weather === "rain" ? "rain" : "clear", now: Date.now(),
   });
-  if (!job) { this.ui.toast("That fishing watch is unavailable."); return false; }
+  if (!job) { this.ui.toast("That auto-cast duration is unavailable."); return false; }
   if (this.autoBattle) this.setAutoBattle(false);
   this.afkFishingJob = job;
   this.lastAfkFishingClaim = null;
   this.audio.sfx("pickup");
-  this.ui.toast(`Auto Fishing started · ${durationMinutes} minute watch`);
+  this.ui.toast(`Auto Fishing started · rod is casting for ${durationMinutes} min`);
   this.onProgressChange?.();
   this.ui.renderAfkFishing?.();
   return true;
@@ -894,7 +894,7 @@ Game.prototype.cancelAfkFishing = function () {
   if (status.state !== "running") return false;
   this.afkFishingJob = null;
   this.lastAfkFishingClaim = null;
-  this.ui.toast("Auto Fishing watch cancelled.");
+  this.ui.toast("Auto Fishing cancelled · line reeled in.");
   this.onProgressChange?.();
   this.ui.renderAfkFishing?.();
   return true;
@@ -903,7 +903,7 @@ Game.prototype.cancelAfkFishing = function () {
 Game.prototype.claimAfkFishing = function () {
   const claim = claimAfkFishingJob(this.afkFishingJob, Date.now());
   if (!claim.ok) {
-    this.ui.toast(claim.code === "not_ready" ? "The line is still being watched." : claim.code === "already_claimed" ? "That catch was already claimed." : "No finished fishing watch found.");
+    this.ui.toast(claim.code === "not_ready" ? "The rod is still fishing." : claim.code === "already_claimed" ? "That catch was already claimed." : "No finished auto catch found.");
     return false;
   }
 

@@ -328,6 +328,7 @@ function showArrivalGuide(isReturning) {
 function savePayload(g) {
   const p = g.player;
   return {
+    version: 2,
     name: look.name,
     look: normalizeLook(look),
     stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
@@ -532,7 +533,11 @@ function startGame(savedLook, savedName, saveData) {
       const payload = savePayload(game);
       if (saveMode === "wallet" && walletState.address) putWalletSave(payload, walletState.address);
       else putSave(payload);
+      ui.markSaved?.(payload.ts);
+      return payload.ts;
     };
+    game.requestSave = () => persist();
+    ui.markSaved?.(saveData?.ts || Date.now());
     game.onCompanionChange = persist;
     game.onProgressChange = persist;
     game.onLevelUp = (level) => queueLevelProof(game, ui, level);

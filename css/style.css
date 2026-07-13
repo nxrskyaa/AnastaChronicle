@@ -274,6 +274,21 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
 @media(max-height:520px) and (min-width:650px){#creator{padding:5px}.creator-card{max-height:calc(100vh - 10px)}.creator-head{padding:9px 17px}.creator-head p{display:none}.creator-body{grid-template-columns:240px minmax(0,1fr)}.creator-preview{padding:9px}.preview-stage{min-height:160px}.preview-summary>p,.preview-summary>div{display:none}.creator-panel{padding:10px 15px}.creator-panel.active{gap:8px}.creator-panel .opt-row{padding-bottom:8px}.creator-foot{padding:7px 13px}.arrival-banner{left:8px;bottom:8px;width:340px;transform:none;animation:none;grid-template-columns:38px minmax(0,1fr) 22px}.arrival-banner.leaving{transform:translateY(12px)}}
 @media(prefers-reduced-motion:reduce){.chronicle-scene *,.boot-seal:after,.login-hero-art,.hero-spark,.creator-backdrop i,.pet-chip-orb,#companion-element-orb{animation:none!important}}
 
+/* Ritual identity + explicit save affordance. The save action mirrors the
+   autosave model without turning the menu into a settings spreadsheet. */
+.ritual-boot-lockup{display:inline-flex;align-items:center;justify-content:center;gap:7px;margin:-.12rem 0 .72rem;padding:4px 8px;border:1px solid rgba(116,212,170,.2);background:rgba(4,14,13,.45);color:#9fe2bf;font-family:"Press Start 2P",monospace;font-size:.33rem;letter-spacing:.08em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),0 0 18px rgba(70,170,125,.08)}
+.ritual-boot-lockup img{width:18px;height:18px;object-fit:contain;image-rendering:auto;filter:drop-shadow(0 0 6px rgba(173,255,211,.22))}
+.save-progress-card{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:11px;margin:0 0 14px;padding:11px 13px;background:linear-gradient(100deg,rgba(34,91,69,.28),rgba(12,26,28,.56));border:1px solid rgba(95,186,142,.25);box-shadow:inset 3px 0 0 rgba(99,205,156,.52)}
+.save-progress-mark{width:22px;height:22px;display:grid;place-items:center;border:1px solid #6fc69a;transform:rotate(45deg);background:rgba(104,203,153,.08)}
+.save-progress-mark i{width:7px;height:7px;background:#e0c86f;box-shadow:0 0 9px rgba(224,200,111,.5)}
+.save-progress-card>div:nth-child(2)>span{display:block;font-family:"Press Start 2P",monospace;font-size:.31rem;letter-spacing:.1em;color:#66c99c}
+.save-progress-card strong{display:block;margin:3px 0 2px;font-family:"VT323",monospace;font-size:1.05rem;font-weight:400;color:#e6f2e8;letter-spacing:.06em}
+.save-progress-card p{max-width:540px;margin:0;color:#78928a;font-size:.57rem;line-height:1.35}
+.save-progress-card button{min-width:104px;padding:9px 10px;border:1px solid #4d9d79;background:#173b2d;color:#c5efd8;font-family:"Press Start 2P",monospace;font-size:.36rem;letter-spacing:.03em;cursor:pointer;transition:transform .12s,border-color .12s,background .12s}
+.save-progress-card button:hover,.save-progress-card button:focus-visible{transform:translateY(-1px);border-color:#8dd9b1;background:#21553f;outline:none}
+.save-progress-card button em{font-style:normal;margin-left:5px;color:#e4cc72}
+@media(max-width:720px){.ritual-boot-lockup{font-size:.28rem;letter-spacing:.04em}.ritual-boot-lockup img{width:16px;height:16px}.save-progress-card{grid-template-columns:24px minmax(0,1fr);gap:8px;padding:9px}.save-progress-card button{grid-column:2;justify-self:start;min-width:120px;padding:8px;font-size:.33rem}.save-progress-card p{font-size:.53rem}}
+
 /* Logo-led boot and quieter, non-blocking level feedback */
 .boot-logo-wrap{position:relative;width:min(520px,100%);margin:-.15rem auto .72rem;filter:drop-shadow(0 12px 22px rgba(0,0,0,.62));animation:bootLogoFloat 5.4s ease-in-out infinite;isolation:isolate}
 .boot-logo{display:block;width:100%;height:auto;object-fit:contain;image-rendering:auto;position:relative;z-index:1}

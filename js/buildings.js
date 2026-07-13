@@ -175,6 +175,44 @@ function plankBridge(w = 52, h = 32) {
   return cv;
 }
 
+// Ritual Hall: a compact code-born chain outpost with a readable knot mark.
+// The Indonesian flag is rendered as a live overlay in render.js so the cloth
+// can wave without rebuilding the whole offscreen building every frame.
+function ritualHall(w = 92, h = 88) {
+  const cv = C(w, h); const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "rgba(8,18,17,.35)"; ctx.beginPath(); ctx.ellipse(w / 2, h - 3, 38, 6, 0, 0, 7); ctx.fill();
+  const dark = "#172b2c", stone = "#526b66", stoneHi = "#7fa596", gold = "#d2b55f", mint = "#6ed7ae";
+  // foundation, stepped walls, and a green-bronze roof
+  px(8, 68, w - 16, 12, "#263c3a", ctx); px(12, 64, w - 24, 7, stone, ctx);
+  px(16, 29, w - 32, 37, dark, ctx); px(19, 32, w - 38, 32, "#213a38", ctx);
+  for (let y = 36; y < 62; y += 6) px(20, y, w - 40, 1, "#31504a", ctx);
+  px(16, 28, w - 32, 4, gold, ctx); px(19, 32, 3, 33, stoneHi, ctx); px(w - 22, 32, 3, 33, stone, ctx);
+  for (let i = 0; i < 17; i++) {
+    const rw = w - 16 - i * 4, rx = (w - rw) / 2;
+    px(rx, 28 - i, rw, 1, i % 4 < 2 ? "#356d5b" : "#244d45", ctx);
+  }
+  px(4, 25, w - 8, 3, "#122324", ctx); px(8, 22, w - 16, 3, gold, ctx);
+  px(19, 19, w - 38, 3, "#86bc9e", ctx); px(25, 16, w - 50, 3, "#d3b866", ctx);
+  // entry and luminous windows
+  px(w / 2 - 8, 49, 16, 18, "#101d24", ctx); px(w / 2 - 6, 51, 12, 16, "#0a1118", ctx);
+  px(w / 2 - 4, 56, 2, 2, "#f6d57b", ctx); px(w / 2 + 2, 56, 2, 2, "#f6d57b", ctx);
+  for (const x of [27, w - 36]) {
+    px(x, 40, 9, 12, "#10222a", ctx); px(x + 2, 42, 5, 8, "#8bd2b0", ctx);
+    px(x + 4, 42, 1, 8, "#d7e7cf", ctx); px(x + 2, 45, 5, 1, "#d7e7cf", ctx);
+  }
+  // Ritual knot-inspired mark on the pediment: interlocking angular paths.
+  const lx = w / 2 - 15, ly = 5;
+  ctx.fillStyle = "#0d1b1d"; ctx.fillRect(lx - 4, ly - 2, 38, 15);
+  ctx.fillStyle = mint;
+  const bar = (x, y, ww, hh = 3) => ctx.fillRect(lx + x, ly + y, ww, hh);
+  bar(12, 0, 5); bar(8, 3, 5); bar(4, 6, 5); bar(0, 9, 5);
+  bar(17, 3, 5); bar(21, 6, 5); bar(25, 9, 5); bar(8, 9, 5); bar(12, 6, 5); bar(16, 9, 5);
+  ctx.fillStyle = "#e4c86c"; ctx.fillRect(w / 2 - 19, 17, 38, 2); ctx.fillRect(w / 2 - 12, 20, 24, 1);
+  // flag pole; the cloth itself is animated in the world renderer.
+  px(w - 19, 3, 2, 31, "#d4b866", ctx); px(w - 20, 2, 4, 2, "#f3dd8a", ctx);
+  return cv;
+}
+
 export function buildVillage() {
   return {
     house_red: house(ROOF, ROOF_D, ROOF_L),
@@ -194,6 +232,7 @@ export function buildVillage() {
     field_shrine: fieldShrine(),
     trail_bench: trailBench(),
     plank_bridge: plankBridge(),
+    ritual_hall: ritualHall(),
   };
 }
 

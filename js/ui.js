@@ -69,6 +69,12 @@ export class UI {
     document.getElementById("auto-battle-chip")?.addEventListener("click", () => this.toggleAutoBattle(false));
     document.getElementById("fishing-mode-manual")?.addEventListener("click", () => this.chooseFishingMode("manual"));
     document.getElementById("fishing-mode-auto")?.addEventListener("click", () => this.chooseFishingMode("auto"));
+    document.getElementById("btn-save-progress")?.addEventListener("click", () => {
+      if (!this.game?.requestSave) { this.toast("Save system is still preparing."); return; }
+      this.game.requestSave();
+      this.markSaved();
+      this.toast("Progress saved · level and inventory are safe.");
+    });
     document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
     const chatInput = document.getElementById("chat-input");
@@ -111,6 +117,14 @@ export class UI {
     });
   }
   bind(g) { this.game = g; this.renderSkillbar(); this.sync(); this.syncPet(true); this.syncMount(true); this.syncFoodBuffs(true); this.syncAutoBattle(true); }
+
+  markSaved(when = Date.now()) {
+    const label = document.getElementById("save-progress-state");
+    if (label) {
+      const date = new Date(when);
+      label.textContent = `SAVED ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    }
+  }
 
   renderSkillbar() {
     if (!this.game) return;
@@ -322,11 +336,11 @@ export class UI {
     const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
     set("fishing-mode-rod", rod.name);
     set("fishing-mode-auto-copy", status.state === "ready"
-      ? "Your automatic catch is ready. Open it now to claim every fish."
+      ? "Your auto catch is ready. Open it now to claim every fish."
       : status.state === "running"
-        ? `Your automatic line is active with ${this.formatDuration(status.remainingMs)} remaining.`
-        : "Choose a timed watch. Return to a fishing spot to claim the catch.");
-    set("fishing-mode-auto-state", status.state === "ready" ? "CLAIM" : status.state === "running" ? "VIEW WATCH" : "SET WATCH");
+        ? `The rod is fishing automatically with ${this.formatDuration(status.remainingMs)} remaining.`
+        : "Choose an auto-cast duration. The same rod fishes from this spot while you explore.");
+    set("fishing-mode-auto-state", status.state === "ready" ? "CLAIM CATCH" : status.state === "running" ? "VIEW AUTO LINE" : "AUTO CAST");
     this.panels.fishingMode.classList.remove("hidden");
     setTimeout(() => document.getElementById("fishing-mode-manual")?.focus(), 0);
   }
@@ -466,8 +480,8 @@ export class UI {
     set("afk-rod", rod.name);
     set("afk-efficiency", luck > .25 ? `Rare current +${Math.round(luck * 100)}%` : luck > 0 ? `Luck +${Math.round(luck * 100)}%` : "Safe waters");
     if (state === "running") {
-      set("afk-eyebrow", "WATCH IN PROGRESS"); set("afk-state", "The Angler is tending your line.");
-      set("afk-description", "You may close this tab. The timestamped watch continues and will be waiting in this save when you return.");
+      set("afk-eyebrow", "AUTO CAST IN PROGRESS"); set("afk-state", "The rod is fishing automatically.");
+      set("afk-description", "Keep exploring or close this tab. Your auto line continues from this water spot and is stored in the active save.");
       set("afk-time", this.formatDuration(status.remainingMs));
     } else if (state === "ready") {
       set("afk-eyebrow", "CATCH READY"); set("afk-state", "Your keepnet is full.");
@@ -475,9 +489,9 @@ export class UI {
       set("afk-time", "CLAIM");
       if (this._afkReadyToken !== status.job.id) { this._afkReadyToken = status.job.id; this.audio?.sfx("coin"); this.toast("Auto Fishing catch ready · return to a fishing spot"); }
     } else {
-      set("afk-eyebrow", this.game.lastAfkFishingClaim ? "WATCH COMPLETE" : "AUTO LINE READY");
-      set("afk-state", this.game.lastAfkFishingClaim ? "Catch secured in your pack." : "Choose a fishing watch.");
-      set("afk-description", this.game.lastAfkFishingClaim ? "Your collection, quest progress, fish inventory, and gold were updated together." : "Your automatic line continues by timestamp. Return to a fishing spot and choose Auto Fishing when the watch ends.");
+      set("afk-eyebrow", this.game.lastAfkFishingClaim ? "AUTO CAST COMPLETE" : "AUTO LINE READY");
+      set("afk-state", this.game.lastAfkFishingClaim ? "Catch secured in your pack." : "Choose an auto-cast duration.");
+      set("afk-description", this.game.lastAfkFishingClaim ? "Your collection, quest progress, fish inventory, and gold were updated together." : "Choose a duration and the rod will fish automatically from the selected water spot.");
       set("afk-time", "READY");
     }
 
@@ -488,6 +502,8 @@ export class UI {
         const selected = option.minutes === this._afkSelection;
         const button = document.createElement("button"); button.type = "button";
         button.className = `afk-duration${selected ? " selected" : ""}`; button.disabled = state === "running" || state === "ready";
+        // The option labels describe the rod's automatic cast rhythm.
+        button.setAttribute("data-auto-cast", option.id);
         button.setAttribute("aria-pressed", String(selected));
         button.innerHTML = `<i><span></span></i><div><small>${option.label.toUpperCase()}</small><strong>${option.minutes} MIN</strong><p>About ${option.baseCatches}${rod.luck ? "+" : ""} catches · offline-safe</p></div><em>${selected ? "SELECTED" : "CHOOSE"}</em>`;
         button.addEventListener("click", () => { this._afkSelection = option.minutes; this.audio?.sfx("ui"); this.renderAfkFishing(); });
@@ -519,7 +535,7 @@ export class UI {
     const primary = document.getElementById("afk-primary");
     if (primary) {
       primary.disabled = state === "running" || state === "claimed";
-      primary.textContent = state === "ready" ? "CLAIM KEEP" : state === "running" ? `WATCH RUNNING · ${this.formatDuration(status.remainingMs)}` : `START ${this._afkSelection} MIN WATCH`;
+      primary.textContent = state === "ready" ? "CLAIM CATCH" : state === "running" ? `AUTO CAST RUNNING · ${this.formatDuration(status.remainingMs)}` : `START AUTO CAST · ${this._afkSelection} MIN`;
       primary.onclick = () => state === "ready" ? this.game.claimAfkFishing() : this.game.startAfkFishing(this._afkSelection);
     }
     const cancel = document.getElementById("afk-cancel");
