@@ -246,7 +246,11 @@ Game.prototype.render = function () {
     if (d.k === "building") {
       const cv = this.village[o.type];
       if (cv) {
-        const bx = sx - cv.width / 2, by = sy - cv.height + 8;
+        const bx = sx - cv.width / 2;
+        // Ritual Hall has a wider stone apron than the small village props;
+        // its anchor is deliberately one pixel lower so the flag pole, base,
+        // and ground shadow read as one object instead of floating separately.
+        const by = sy - cv.height + (o.type === "ritual_hall" ? 4 : 8);
         ctx.drawImage(cv, bx, by);
         const phase = objectPhase(o);
         if (o.type === "lantern") {
@@ -289,16 +293,18 @@ Game.prototype.render = function () {
           // Hand-pixel the Indonesian flag so the landmark feels alive rather
           // than like a flat pasted decal. Red sits above white, with a subtle
           // cloth wave driven by the same world clock as grass and lanterns.
-          const flagX = bx + cv.width - 17, flagY = by + 4;
+          const flagX = Math.round(bx + cv.width - 20), flagY = Math.round(by + 5);
           const wave = this.t * 3.2 + phase;
-          ctx.fillStyle = "#ead58a"; ctx.fillRect(flagX, flagY - 1, 1, 31);
-          for (let row = 0; row < 10; row++) {
-            for (let col = 0; col < 14; col++) {
+          ctx.fillStyle = "#ead58a"; ctx.fillRect(flagX, flagY - 2, 2, 33);
+          ctx.fillStyle = "#fff0b1"; ctx.fillRect(flagX - 1, flagY - 3, 4, 2);
+          for (let row = 0; row < 12; row++) {
+            for (let col = 0; col < 16; col++) {
               const flutter = Math.round(Math.sin(wave + col * .55 + row * .18) * (col / 7));
               ctx.fillStyle = row < 5 ? "#e4483f" : "#f3eee0";
-              ctx.fillRect(flagX + 2 + col, flagY + row + flutter, 2, 1);
+              ctx.fillRect(flagX + 3 + col, flagY + row + flutter, 2, 1);
             }
           }
+          ctx.fillStyle = "rgba(5,14,15,.35)"; ctx.fillRect(flagX + 3, flagY + 12, 31, 1);
           ctx.save(); ctx.globalCompositeOperation = "lighter";
           ctx.fillStyle = `rgba(106,225,171,${.12 + Math.sin(this.t * 3 + phase) * .04})`;
           ctx.fillRect(sx - 16, by + 13, 32, 2);

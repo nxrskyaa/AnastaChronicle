@@ -371,7 +371,13 @@
     <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>
   </div>
   <div id="panel-pet" class="panel hidden modal"><h2>A wild friend!</h2><img id="pet-img" width="96" height="96" style="image-rendering:pixelated;margin:0 auto;display:block"/><p id="pet-msg"></p><button id="btn-pet-ok" class="pixel-btn small">Adopt</button></div>
-  <div id="death-screen" class="panel hidden modal"><h2>Fallen</h2><p>The forest claims another traveler.</p><button id="btn-respawn" class="pixel-btn small">Respawn at Camp</button></div>
+  <div id="death-screen" class="panel hidden modal death-panel" role="dialog" aria-modal="true" aria-labelledby="death-title">
+    <span class="death-kicker">TRAVELER DOWN</span>
+    <div class="death-mark" aria-hidden="true"><i></i><b>✦</b></div>
+    <h2 id="death-title">Return to the hearth</h2>
+    <p>The wilds take a breath. Your progress is safe; come back with full strength.</p>
+    <button id="btn-respawn" class="pixel-btn small">RETURN TO HEARTH <b>↗</b></button>
+  </div>
 </div>
 
 <script type="module" src="js/main.js"></script>

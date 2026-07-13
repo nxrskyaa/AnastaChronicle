@@ -313,8 +313,8 @@ function showArrivalGuide(isReturning) {
   if (title) title.textContent = isReturning ? `Chronicle resumed, ${look.name}` : `Welcome to Anasta, ${look.name}`;
   if (kicker) kicker.textContent = isReturning ? "THE FOREST REMEMBERS" : "THE FOREST AGE";
   if (guide) guide.textContent = isReturning && game?.flags?.starterCache
-    ? "Open Sanctuary to switch bonds. Press M or tap the saddle button to ride a mount."
-    : "Claim the golden cache just south of camp to bond Puffalo, your guaranteed starter mount.";
+    ? "Open Sanctuary to switch bonds. Press M to ride your active mount."
+    : "Find the golden cache south of camp. Press F to open it and bond Puffalo.";
   banner.classList.remove("hidden", "leaving");
   const hide = () => {
     if (banner.classList.contains("hidden")) return;

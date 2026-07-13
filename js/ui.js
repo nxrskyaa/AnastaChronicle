@@ -604,8 +604,15 @@ export class UI {
     this._levelHideTimer = null;
     this.panels.level?.classList.add("hidden");
   }
-  showDeath() { this.closeAll(); this.panels.death?.classList.remove("hidden"); if (this.game) { this.game.inputLocked = false; this.game.paused = true; } }
-  hideDeath() { this.panels.death?.classList.add("hidden"); }
+  showDeath() {
+    this.closeAll();
+    const panel = this.panels.death;
+    panel?.classList.remove("hidden");
+    panel?.classList.remove("death-enter"); void panel?.offsetWidth; panel?.classList.add("death-enter");
+    setTimeout(() => document.getElementById("btn-respawn")?.focus(), 0);
+    if (this.game) { this.game.resetInputState?.(); this.game.inputLocked = true; this.game.paused = true; }
+  }
+  hideDeath() { this.panels.death?.classList.add("hidden"); this.panels.death?.classList.remove("death-enter"); }
   showPet(id, cb) {
     this._petCb = cb;
     this.audio?.sfx("pet");

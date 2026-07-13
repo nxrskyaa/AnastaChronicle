@@ -323,10 +323,19 @@ export class Game {
       ["field_shrine", 32, 79], ["field_shrine", 68, 38], ["field_shrine", 78, 73],
       ["trail_bench", 42, 61], ["trail_bench", 65, 55], ["trail_bench", 72, 68],
       ["plank_bridge", 62, 50],
-      ["ritual_hall", 72, 44],
       ["lantern", 45, 58], ["lantern", 64, 62], ["lantern", 74, 70], ["lantern", 80, 76],
     ];
     for (const [type, tx, ty] of trailLandmarks) this.buildings.push({ type, x: tx * T, y: ty * T, sortY: ty * T });
+
+    // The Ritual Hall is a destination, not a loose decoration. Keep it on
+    // the lakeside path, clear its full footprint, and leave a visible apron
+    // so the sprite's foundation and flag share the same ground plane.
+    const ritualSite = [67, 42];
+    this.buildings.push({ type: "ritual_hall", x: ritualSite[0] * T, y: ritualSite[1] * T, sortY: ritualSite[1] * T + 8 });
+    for (let yy = ritualSite[1] - 2; yy <= ritualSite[1] + 2; yy++) for (let xx = ritualSite[0] - 3; xx <= ritualSite[0] + 3; xx++) {
+      const ii = yy * MAP_W + xx;
+      if (ii >= 0 && ii < m.length && m[ii] !== 2) m[ii] = (Math.random() < .58 ? 1 : 0);
+    }
 
     // decorations: trees, bushes, rocks, flowers by biome
     for (let y = 3; y < MAP_H - 3; y++) {
@@ -335,7 +344,8 @@ export class Game {
         if (t === 1 || t === 2) continue;
         const nearCamp = Math.hypot(x - 55, y - 55) < 10;
         const nearBossArena = Math.hypot(x - 87, y - 82) < 6;
-        const nearLandmark = trailLandmarks.some(([, tx, ty]) => Math.hypot(x - tx, y - ty) < 2.3);
+        const nearLandmark = trailLandmarks.some(([, tx, ty]) => Math.hypot(x - tx, y - ty) < 2.3)
+          || Math.hypot(x - ritualSite[0], y - ritualSite[1]) < 3.6;
         if (nearCamp || nearBossArena || nearLandmark) continue;
         const edge = Math.min(x, y, MAP_W - x, MAP_H - y);
         const wx = x * T + T / 2, wy = y * T + T / 2;

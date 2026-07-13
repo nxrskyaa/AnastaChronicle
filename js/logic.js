@@ -1004,9 +1004,12 @@ Game.prototype.eatFood = function (foodId) {
 
 Game.prototype.respawn = function () {
   const p = this.player;
+  this.resetInputState?.();
   p.hp = p.maxHp; p.stamina = p.maxStamina;
   p.x = this.camp.x; p.y = this.camp.y + 46;
-  this._dead = false; this.paused = false; this.ui.hideDeath();
+  this._dead = false; this.paused = false; this.inputLocked = false; this.inputSuspendUntil = performance.now() + 220;
+  this.ui.hideDeath();
+  this.ui.toast("Returned to Hearth Camp · progress safe");
 };
 
 // ---- WORLD BOSS: one server-owned HP pool, local AI presentation ----

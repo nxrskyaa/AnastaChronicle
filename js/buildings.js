@@ -208,6 +208,13 @@ function ritualHall(w = 92, h = 88) {
   bar(12, 0, 5); bar(8, 3, 5); bar(4, 6, 5); bar(0, 9, 5);
   bar(17, 3, 5); bar(21, 6, 5); bar(25, 9, 5); bar(8, 9, 5); bar(12, 6, 5); bar(16, 9, 5);
   ctx.fillStyle = "#e4c86c"; ctx.fillRect(w / 2 - 19, 17, 38, 2); ctx.fillRect(w / 2 - 12, 20, 24, 1);
+  // A second, low-contrast sign keeps the landmark legible at game scale:
+  // logo above, plain name below, both made from the same crisp code pixels.
+  px(w / 2 - 27, 35, 54, 9, "#0d1a1d", ctx);
+  px(w / 2 - 25, 36, 50, 1, "#b9d5a0", ctx);
+  ctx.fillStyle = "#a5e5bc"; ctx.font = "bold 7px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("RITUAL", w / 2, 37);
+  ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   // flag pole; the cloth itself is animated in the world renderer.
   px(w - 19, 3, 2, 31, "#d4b866", ctx); px(w - 20, 2, 4, 2, "#f3dd8a", ctx);
   return cv;
