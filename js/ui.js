@@ -1091,11 +1091,18 @@ export class UI {
           const label = document.createElement("span"); label.className = "inv-name"; label.textContent = item.name;
           cell.append(canvas, label);
         } else if (ITEMS[id]?.weapon) {
-          const canvas = document.createElement("canvas"); canvas.className = "inv-weapon-art"; canvas.width = 40; canvas.height = 48;
+          cell.classList.add("weapon-card");
+          if (item.rare) cell.classList.add("rare-weapon");
+          const art = document.createElement("div"); art.className = "inv-weapon-frame";
+          const canvas = document.createElement("canvas"); canvas.className = "inv-weapon-art"; canvas.width = 64; canvas.height = 64;
           const frame = this.game.weaponFrames?.(id)?.walk?.down;
-          const ctx = canvas.getContext("2d"); if (ctx && frame) { ctx.imageSmoothingEnabled = false; ctx.drawImage(frame, 0, 0, frame.width, frame.height, 0, 0, 40, 48); }
+          const ctx = canvas.getContext("2d"); if (ctx && frame) { ctx.imageSmoothingEnabled = false; ctx.drawImage(frame, 0, 0, frame.width, frame.height, 0, 0, 64, 64); }
+          art.appendChild(canvas);
           const label = document.createElement("span"); label.className = "inv-name"; label.textContent = item.name;
-          cell.append(canvas, label);
+          const stats = document.createElement("small"); stats.className = "inv-weapon-stat";
+          const weapon = this.game.WEAPONS?.[id];
+          stats.textContent = weapon ? `DMG ${weapon.dmg} \u00b7 ${weapon.range}R` : "FIELD RELIC";
+          cell.append(art, label, stats);
         } else {
           cell.innerHTML = `<span class="inv-glyph">${item.glyph || "?"}</span><span class="inv-name">${item.name}</span>`;
         }
