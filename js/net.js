@@ -94,6 +94,7 @@ function setBossState(message) {
 }
 
 function handleMessage(message) {
+  console.log("[MP] recv", message && message.t, JSON.stringify(message).slice(0, 120));
   if (message.t === "welcome") {
     net.selfId = message.id;
     net.protocol = message.protocol || 1;
@@ -179,6 +180,7 @@ export async function connectMultiplayer(look, name, spawn) {
     });
 
     ws.onmessage = (event) => {
+      console.log("[MP] RAW", typeof event.data, (event.data||"").toString().slice(0, 140));
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
       handleMessage(message);
