@@ -277,3 +277,6 @@ if (typeof document !== "undefined") {
     scheduleReconnect(120);
   });
 }
+
+// DEBUG: expose for console inspection
+if (typeof window !== "undefined") window.__net = net;
