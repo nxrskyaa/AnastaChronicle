@@ -1,4 +1,4 @@
 // Multiplayer config. Set MULTIPLAYER_ENABLED=true and point SERVER_URL at your
 // deployed Colyseus server (wss:// for HTTPS tunnel, ws:// for local).
 export const MULTIPLAYER_ENABLED = true;
-export const SERVER_URL = "wss://anasta-server.anasta-nxrskyaa.workers.dev";
+export const SERVER_URL = "wss://decent-cons-agree-relief.trycloudflare.com";
