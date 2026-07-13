@@ -2,6 +2,8 @@
 
 Deploy `AnastaChronicleProfiles.sol` from Remix on Ritual Testnet (chain ID `1979`).
 
+Current deployed address: `0x6eDc6a30D2735E71afDB622026a46343e6dD81fa`
+
 Constructor input:
 
 ```text

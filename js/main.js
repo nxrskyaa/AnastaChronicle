@@ -20,7 +20,9 @@ import { STARTER_MOUNT_ID } from "./monsters.js";
 import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
 import {
   connectRitualWallet, walletShortAddress, walletState,
-  getWalletSave, putWalletSave, clearWalletSave,
+  getWalletSave, putWalletSave, clearWalletSave, contractConfigured,
+  readOnchainProfile, registerOnchainProfile, deleteOnchainProfile,
+  recordOnchainLevel, hashSave,
 } from "./wallet.js";
 
 const boot = document.getElementById("boot");
@@ -30,6 +32,8 @@ const startBtn = document.getElementById("btn-start");
 const creator = document.getElementById("creator");
 let look = { ...DEFAULT_LOOK };
 let game = null;
+let walletContractProfile = null;
+let walletProfileReadError = false;
 let onchainPolicy = (() => { try { return localStorage.getItem("anasta_level_policy") === "every" ? "every" : "milestone"; } catch { return "milestone"; } })();
 
 // ---- Boot screen ambient particles (fireflies + drifting embers) ----
@@ -289,12 +293,12 @@ function wireSettings() {
     const state = document.getElementById("realm-sync-state");
     if (address) address.textContent = walletState.address ? walletShortAddress(walletState.address) : "Not linked";
     if (network) network.textContent = walletState.connected ? "Ritual Testnet" : "Not linked";
-    if (state) state.innerHTML = `<i aria-hidden="true"></i> ${walletState.connected ? "Wallet linked · contract pending" : "Local only"}`;
+    if (state) state.innerHTML = `<i aria-hidden="true"></i> ${walletState.connected ? (walletContractProfile?.active ? "Ritual profile active" : "Profile not registered") : "Local only"}`;
     if (passportButton) { passportButton.disabled = false; passportButton.removeAttribute("aria-disabled"); passportButton.textContent = walletState.connected ? "Ritual wallet linked" : "Connect Ritual wallet"; }
   };
   syncPassport();
   passportButton?.addEventListener("click", async () => {
-    try { await connectRitualWallet(); syncPassport(); game?.ui?.toast("Ritual wallet linked · profile contract ready to configure"); }
+    try { await connectRitualWallet(); await syncWalletContractProfile(); syncPassport(); game?.ui?.toast("Ritual wallet linked · profile contract active"); }
     catch (error) { game?.ui?.toast(error?.message || "Wallet connection cancelled."); }
   });
 }
@@ -531,6 +535,7 @@ function startGame(savedLook, savedName, saveData) {
     };
     game.onCompanionChange = persist;
     game.onProgressChange = persist;
+    game.onLevelUp = (level) => queueLevelProof(game, ui, level);
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
     window.__ANASTA__ = game;
     wireSettings();
@@ -538,6 +543,9 @@ function startGame(savedLook, savedName, saveData) {
     // recompute internal resolution on rotate/resize so it stays fullscreen
     addEventListener("resize", () => computeView(canvas));
     game.start();
+    if (saveMode === "wallet" && walletState.connected && contractConfigured) {
+      setTimeout(() => ensureOnchainProfile(game, ui), 450);
+    }
     showArrivalGuide(!!saveData);
     if (afkFishingStatus(game.afkFishingJob).state === "ready") {
       setTimeout(() => ui.toast("Auto Fishing catch ready · interact with water to claim"), 700);
@@ -601,6 +609,55 @@ function setOnchainPolicy(policy) {
   syncLevelPolicyButtons();
 }
 
+async function syncWalletContractProfile() {
+  if (!contractConfigured || !walletState.connected) { walletContractProfile = null; return null; }
+  walletProfileReadError = false;
+  try { walletContractProfile = await readOnchainProfile(walletState.address); }
+  catch { walletContractProfile = null; walletProfileReadError = true; }
+  return walletContractProfile;
+}
+
+async function ensureOnchainProfile(g, ui) {
+  if (!contractConfigured || !walletState.connected) return false;
+  if (g._onchainProfilePromise) return g._onchainProfilePromise;
+  g._onchainProfilePromise = (async () => {
+    const profile = walletContractProfile || await syncWalletContractProfile();
+    if (walletProfileReadError) { ui.toast("Ritual profile read failed · check RPC and retry wallet sync"); return false; }
+    if (profile?.active) { g._onchainProfileRegistered = true; return true; }
+    ui.toast("Ritual profile transaction requested… confirm it in your wallet.");
+    await registerOnchainProfile(look.name, look);
+    walletContractProfile = await syncWalletContractProfile();
+    g._onchainProfileRegistered = true;
+    ui.toast("Ritual profile registered · level proofs enabled");
+    return true;
+  })().catch((error) => {
+    ui.toast(`Profile transaction cancelled · ${error?.message || "try again later"}`);
+    return false;
+  });
+  return g._onchainProfilePromise;
+}
+
+async function submitLevelProof(g, ui, level) {
+  if (!contractConfigured || !walletState.connected || !Number.isFinite(level)) return;
+  if (onchainPolicy === "milestone" && level % 5 !== 0) return;
+  if (!(await ensureOnchainProfile(g, ui))) return;
+  const current = walletContractProfile?.level || 1;
+  if (current >= level) return;
+  const payload = savePayload(g);
+  ui.toast(`Level ${level} proof ready · confirm ${"0.00067 RITUAL"} tx`);
+  try {
+    await recordOnchainLevel(level, payload);
+    walletContractProfile = { ...(walletContractProfile || {}), level, active: true, lastSaveHash: hashSave(payload) };
+    ui.toast(`Level ${level} recorded on Ritual`);
+  } catch (error) {
+    ui.toast(`Level proof skipped · ${error?.message || "transaction cancelled"}`);
+  }
+}
+
+function queueLevelProof(g, ui, level) {
+  g._levelProofQueue = (g._levelProofQueue || Promise.resolve()).then(() => submitLevelProof(g, ui, level));
+}
+
 function setLoginMode(mode) {
   mainMenuChoices?.classList.toggle("hidden", mode !== "menu");
   guestAccess?.classList.toggle("hidden", mode !== "guest");
@@ -619,10 +676,16 @@ function refreshWalletPanel() {
     return;
   }
   if (walletStatusTitle) walletStatusTitle.textContent = walletShortAddress(walletState.address);
-  if (walletStatusText) walletStatusText.textContent = save ? `Local chronicle found · Level ${save.stats?.level || 1}.` : "Ritual network linked · no local profile yet.";
+  if (walletStatusText) walletStatusText.textContent = walletProfileReadError
+    ? "Ritual profile read failed · check RPC and retry wallet sync."
+    : walletContractProfile?.active
+    ? (save ? `Ritual profile linked · Level ${walletContractProfile.level || save.stats?.level || 1}.` : `Onchain profile found · Level ${walletContractProfile.level || 1}; local snapshot missing.`)
+    : (save ? `Local chronicle found · Level ${save.stats?.level || 1}.` : "Ritual network linked · no profile yet.");
   walletActions?.classList.toggle("hidden", false);
   walletContinue?.classList.toggle("hidden", !save);
-  walletDelete?.classList.toggle("hidden", !save);
+  walletDelete?.classList.toggle("hidden", !save && !walletContractProfile?.active);
+  const walletNew = document.getElementById("btn-wallet-new");
+  walletNew?.classList.toggle("hidden", walletProfileReadError || !!walletContractProfile?.active);
   if (walletConnectNow) walletConnectNow.classList.add("hidden");
 }
 
@@ -631,6 +694,7 @@ async function openWalletPanel() {
   try {
     await connectRitualWallet();
     saveMode = "wallet";
+    await syncWalletContractProfile();
     refreshWalletPanel();
   } catch (error) {
     if (walletStatusTitle) walletStatusTitle.textContent = "WALLET NOT CONNECTED";
@@ -755,10 +819,20 @@ document.getElementById("btn-wallet-new")?.addEventListener("click", () => {
   saveMode = "wallet";
   enterNewGame("Traveler");
 });
-document.getElementById("btn-wallet-delete")?.addEventListener("click", () => {
-  clearWalletSave(walletState.address);
-  refreshWalletPanel();
-  if (walletStatusText) walletStatusText.textContent = "Local profile deleted. Create a new traveler when ready.";
+document.getElementById("btn-wallet-delete")?.addEventListener("click", async () => {
+  if (walletDelete) walletDelete.disabled = true;
+  try {
+    if (walletContractProfile?.active) {
+      walletStatusText && (walletStatusText.textContent = "Confirm profile deletion in your wallet…");
+      await deleteOnchainProfile();
+      walletContractProfile = null;
+    }
+    clearWalletSave(walletState.address);
+    refreshWalletPanel();
+    if (walletStatusText) walletStatusText.textContent = "Profile deleted. Create a new traveler when ready.";
+  } catch (error) {
+    if (walletStatusText) walletStatusText.textContent = `Delete cancelled · ${error?.message || "try again later"}`;
+  } finally { if (walletDelete) walletDelete.disabled = false; }
 });
 
 startBtn.addEventListener("click", () => {

@@ -1,31 +1,110 @@
-import { PROFILE_CONTRACT_ADDRESS, RITUAL_TESTNET } from "./config.js";
+import { PROFILE_CONTRACT_ADDRESS, LEVEL_TX_FEE_RIT, RITUAL_TESTNET } from "./config.js";
 
 export const walletState = { address: "", chainId: null, connected: false, provider: null };
+export const contractConfigured = /^0x[a-fA-F0-9]{40}$/.test(PROFILE_CONTRACT_ADDRESS);
 let listenersBound = false;
 const subscribers = new Set();
+const MASK_64 = (1n << 64n) - 1n;
+const KECCAK_RC = [
+  1n, 0x8082n, 0x800000000000808an, 0x8000000080008000n, 0x808bn,
+  0x80000001n, 0x8000000080008081n, 0x8000000000008009n, 0x8an, 0x88n,
+  0x80008009n, 0x8000000an, 0x8000808bn, 0x800000000000008bn, 0x8000000000008089n,
+  0x8000000000008003n, 0x8000000000008002n, 0x8000000000000080n, 0x800an,
+  0x800000008000000an, 0x8000000080008081n, 0x8000000000008080n, 0x80000001n,
+  0x8000000080008008n,
+];
+const KECCAK_ROT = [
+  [0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61],
+  [28, 55, 25, 21, 56], [27, 20, 39, 8, 14],
+];
+
+function rotl64(value, shift) {
+  const n = BigInt(shift);
+  if (n === 0n) return value & MASK_64;
+  return ((value << n) | (value >> (64n - n))) & MASK_64;
+}
+function keccakF(state) {
+  for (const roundConstant of KECCAK_RC) {
+    const c = new Array(5).fill(0n);
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) c[x] ^= state[x + 5 * y];
+    const d = new Array(5);
+    for (let x = 0; x < 5; x++) d[x] = c[(x + 4) % 5] ^ rotl64(c[(x + 1) % 5], 1);
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) state[x + 5 * y] = (state[x + 5 * y] ^ d[x]) & MASK_64;
+    const b = new Array(25).fill(0n);
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) b[y + 5 * ((2 * x + 3 * y) % 5)] = rotl64(state[x + 5 * y], KECCAK_ROT[x][y]);
+    for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
+      state[x + 5 * y] = (b[x + 5 * y] ^ ((~b[(x + 1) % 5 + 5 * y]) & b[(x + 2) % 5 + 5 * y])) & MASK_64;
+    }
+    state[0] = (state[0] ^ roundConstant) & MASK_64;
+  }
+}
+
+// Small browser-native Keccak-256 implementation; Ethereum selectors use Keccak, not SHA3-256.
+export function keccak256(input) {
+  const bytes = input instanceof Uint8Array ? input : new TextEncoder().encode(String(input));
+  const rate = 136;
+  const padded = new Uint8Array(Math.ceil((bytes.length + 1) / rate) * rate);
+  padded.set(bytes); padded[bytes.length] = 0x01; padded[padded.length - 1] |= 0x80;
+  const state = new Array(25).fill(0n);
+  for (let offset = 0; offset < padded.length; offset += rate) {
+    for (let lane = 0; lane < rate / 8; lane++) {
+      let word = 0n;
+      for (let byte = 0; byte < 8; byte++) word |= BigInt(padded[offset + lane * 8 + byte]) << BigInt(byte * 8);
+      state[lane] ^= word;
+    }
+    keccakF(state);
+  }
+  const out = new Uint8Array(32);
+  for (let byte = 0; byte < out.length; byte++) out[byte] = Number((state[Math.floor(byte / 8)] >> BigInt((byte % 8) * 8)) & 0xffn);
+  return `0x${Array.from(out, (v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function selector(signature) { return keccak256(signature).slice(2, 10); }
+function word(value) { return BigInt(value).toString(16).padStart(64, "0"); }
+function bytes32(value) { return String(value || "0x").replace(/^0x/, "").padEnd(64, "0").slice(0, 64); }
+function addressWord(value) { return String(value).replace(/^0x/, "").toLowerCase().padStart(64, "0"); }
+function bytesToHex(bytes) { return Array.from(bytes, (v) => v.toString(16).padStart(2, "0")).join(""); }
+function hexToBytes(hex) {
+  const value = String(hex || "0x").replace(/^0x/, "");
+  const even = value.length % 2 ? `0${value}` : value;
+  const out = new Uint8Array(even.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(even.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function readWord(bytes, index) { return bytesToHex(bytes.slice(index * 32, index * 32 + 32)).padStart(64, "0"); }
+function readUint(bytes, index) { return BigInt(`0x${readWord(bytes, index)}`); }
+function decimalToWei(value, decimals = 18) {
+  const [whole, fraction = ""] = String(value).split(".");
+  return (BigInt(whole || "0") * (10n ** BigInt(decimals))) + BigInt((fraction + "0".repeat(decimals)).slice(0, decimals) || "0");
+}
+function encodeRegister(name, lookHash) {
+  const encoded = new TextEncoder().encode(String(name || "Traveler").slice(0, 24));
+  const paddedLength = Math.ceil(encoded.length / 32) * 32;
+  const tail = new Uint8Array(32 + paddedLength); tail.set(encoded, 32);
+  return `${selector("registerProfile(string,bytes32)")}${word(64)}${bytes32(lookHash)}${word(encoded.length)}${bytesToHex(tail)}`;
+}
+function encodeRecordLevel(level, saveHash) { return `${selector("recordLevel(uint32,bytes32)")}${word(level)}${bytes32(saveHash)}`; }
+function encodeAddressCall(signature, address) { return `${selector(signature)}${addressWord(address)}`; }
+
+export function hashJson(value) { return keccak256(JSON.stringify(value)); }
+export function hashLook(look) { return hashJson(look || {}); }
+export function hashSave(save) { return hashJson({ name: save?.name, level: save?.stats?.level, xp: save?.stats?.xp, ts: save?.ts }); }
 
 export function walletShortAddress(address) {
   const value = String(address || "");
   return value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
 }
-
 export function onWalletChange(callback) {
   if (typeof callback !== "function") return () => {};
-  subscribers.add(callback);
-  return () => subscribers.delete(callback);
+  subscribers.add(callback); return () => subscribers.delete(callback);
 }
-
 function notify() { for (const callback of subscribers) { try { callback({ ...walletState }); } catch {} } }
 function getProvider() {
   const provider = globalThis.ethereum || globalThis.window?.ethereum;
   if (!provider) throw new Error("No EVM wallet detected. Install MetaMask, Rabby, or another browser wallet.");
-  walletState.provider = provider;
-  return provider;
+  walletState.provider = provider; return provider;
 }
-function parseChainId(value) {
-  try { return Number(BigInt(String(value))); } catch { return Number(value) || 0; }
-}
-
+function parseChainId(value) { try { return Number(BigInt(String(value))); } catch { return Number(value) || 0; } }
 async function ensureRitualNetwork(provider) {
   const current = parseChainId(await provider.request({ method: "eth_chainId" }));
   if (current === RITUAL_TESTNET.chainId) return current;
@@ -34,68 +113,86 @@ async function ensureRitualNetwork(provider) {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
   } catch (error) {
     if (error?.code !== 4902 && error?.code !== -32603) throw error;
-    await provider.request({ method: "wallet_addEthereumChain", params: [{
-      chainId: chainHex,
-      chainName: RITUAL_TESTNET.name,
-      nativeCurrency: { name: "Ritual", symbol: RITUAL_TESTNET.symbol, decimals: 18 },
-      rpcUrls: [RITUAL_TESTNET.rpcUrl],
-      blockExplorerUrls: [RITUAL_TESTNET.explorer],
-    }] });
+    await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: chainHex, chainName: RITUAL_TESTNET.name, nativeCurrency: { name: "Ritual", symbol: RITUAL_TESTNET.symbol, decimals: 18 }, rpcUrls: [RITUAL_TESTNET.rpcUrl], blockExplorerUrls: [RITUAL_TESTNET.explorer] }] });
   }
   const after = parseChainId(await provider.request({ method: "eth_chainId" }));
   if (after !== RITUAL_TESTNET.chainId) throw new Error("Wallet did not switch to Ritual Testnet.");
   return after;
 }
-
 export async function connectRitualWallet() {
   const provider = getProvider();
   const accounts = await provider.request({ method: "eth_requestAccounts" });
   const address = String(accounts?.[0] || "").toLowerCase();
   if (!/^0x[a-f0-9]{40}$/.test(address)) throw new Error("Wallet returned an invalid address.");
   const chainId = await ensureRitualNetwork(provider);
-  walletState.address = address;
-  walletState.chainId = chainId;
-  walletState.connected = true;
+  walletState.address = address; walletState.chainId = chainId; walletState.connected = true;
   if (!listenersBound && typeof provider.on === "function") {
     listenersBound = true;
-    provider.on("accountsChanged", (next) => {
-      walletState.address = String(next?.[0] || "").toLowerCase();
-      walletState.connected = /^0x[a-f0-9]{40}$/.test(walletState.address);
-      notify();
-    });
-    provider.on("chainChanged", (next) => {
-      walletState.chainId = parseChainId(next);
-      walletState.connected = walletState.chainId === RITUAL_TESTNET.chainId && !!walletState.address;
-      notify();
-    });
+    provider.on("accountsChanged", (next) => { walletState.address = String(next?.[0] || "").toLowerCase(); walletState.connected = /^0x[a-f0-9]{40}$/.test(walletState.address); notify(); });
+    provider.on("chainChanged", (next) => { walletState.chainId = parseChainId(next); walletState.connected = walletState.chainId === RITUAL_TESTNET.chainId && !!walletState.address; notify(); });
   }
-  notify();
-  return { ...walletState, contractConfigured: Boolean(PROFILE_CONTRACT_ADDRESS) };
+  notify(); return { ...walletState, contractConfigured };
+}
+export function disconnectWallet() { walletState.address = ""; walletState.chainId = null; walletState.connected = false; notify(); }
+
+async function contractCall(data) {
+  if (!contractConfigured) throw new Error("Profile contract address is not configured.");
+  const provider = walletState.provider || getProvider();
+  return provider.request({ method: "eth_call", params: [{ to: PROFILE_CONTRACT_ADDRESS, data }, "latest"] });
+}
+async function waitForTransaction(hash, timeoutMs = 120000) {
+  const provider = walletState.provider || getProvider();
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [hash] });
+    if (receipt) { if (receipt.status === "0x0") throw new Error("Ritual transaction reverted."); return receipt; }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error("Timed out waiting for the Ritual transaction.");
+}
+async function contractTransaction(data, value = 0n) {
+  if (!walletState.connected) throw new Error("Connect the Ritual wallet first.");
+  if (!contractConfigured) throw new Error("Profile contract address is not configured.");
+  const provider = walletState.provider || getProvider();
+  const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from: walletState.address, to: PROFILE_CONTRACT_ADDRESS, data, value: `0x${value.toString(16)}` }] });
+  return { hash, receipt: await waitForTransaction(hash) };
 }
 
-export function disconnectWallet() {
-  walletState.address = "";
-  walletState.chainId = null;
-  walletState.connected = false;
-  notify();
+export async function readOnchainProfile(address = walletState.address) {
+  if (!contractConfigured || !/^0x[a-f0-9]{40}$/i.test(String(address || ""))) return null;
+  const bytes = hexToBytes(await contractCall(encodeAddressCall("getProfile(address)", address)));
+  if (bytes.length < 32 * 9) return null;
+  const offset = Number(readUint(bytes, 0));
+  const stringLength = Number(readUint(bytes, offset / 32));
+  const nameBytes = bytes.slice(offset + 32, offset + 32 + stringLength);
+  return {
+    displayName: new TextDecoder().decode(nameBytes),
+    lookHash: `0x${readWord(bytes, 1)}`, lastSaveHash: `0x${readWord(bytes, 2)}`,
+    level: Number(readUint(bytes, 3)), totalLevelRecords: Number(readUint(bytes, 4)),
+    createdAt: Number(readUint(bytes, 5)), updatedAt: Number(readUint(bytes, 6)),
+    nonce: Number(readUint(bytes, 7)), active: readUint(bytes, 8) !== 0n,
+  };
+}
+export async function readOnchainLevelFee() {
+  const bytes = hexToBytes(await contractCall(selector("levelFee()")));
+  return bytes.length >= 32 ? readUint(bytes, 0) : decimalToWei(LEVEL_TX_FEE_RIT);
+}
+export async function registerOnchainProfile(displayName, look) { return contractTransaction(encodeRegister(displayName, hashLook(look))); }
+export async function deleteOnchainProfile() { return contractTransaction(selector("deleteProfile()")); }
+export async function recordOnchainLevel(level, save) {
+  const fee = await readOnchainLevelFee();
+  return contractTransaction(encodeRecordLevel(level, hashSave(save)), fee);
 }
 
 export function walletSaveKey(address = walletState.address) {
-  const normalized = String(address || "").toLowerCase();
-  return normalized ? `anasta_wallet_${normalized}` : "";
+  const normalized = String(address || "").toLowerCase(); return normalized ? `anasta_wallet_${normalized}` : "";
 }
 export function getWalletSave(address = walletState.address) {
-  const key = walletSaveKey(address);
-  if (!key) return null;
+  const key = walletSaveKey(address); if (!key) return null;
   try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
 }
 export function putWalletSave(data, address = walletState.address) {
-  const key = walletSaveKey(address);
-  if (!key) return false;
-  localStorage.setItem(key, JSON.stringify({ ...data, wallet: String(address).toLowerCase() }));
-  return true;
+  const key = walletSaveKey(address); if (!key) return false;
+  localStorage.setItem(key, JSON.stringify({ ...data, wallet: String(address).toLowerCase() })); return true;
 }
-export function clearWalletSave(address = walletState.address) {
-  const key = walletSaveKey(address);
-  if (key) localStorage.removeItem(key);
-}
+export function clearWalletSave(address = walletState.address) { const key = walletSaveKey(address); if (key) localStorage.removeItem(key); }

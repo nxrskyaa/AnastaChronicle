@@ -472,7 +472,7 @@ Game.prototype.killEnemy = function (e) {
   this.fx.push({ kind: "pop", x: e.x, y: e.y - e.h / 2, t: 0, dur: 0.35 });
   this.shake = Math.max(this.shake, 4);
   this.audio.sfx("coin");
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.audio.sfx("level"); this.fx.push({ kind: "levelring", x: p.x, y: p.y, t: 0, dur: 0.7 }); }
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.onLevelUp?.(p.level); this.audio.sfx("level"); this.fx.push({ kind: "levelring", x: p.x, y: p.y, t: 0, dur: 0.7 }); }
   setTimeout(() => { this.enemies = this.enemies.filter(x => x !== e); this.spawnEnemy(); }, 400);
 };
 
@@ -1090,7 +1090,7 @@ Game.prototype.applySharedBossReward = function (message) {
   for (const [item, count] of Object.entries(reward.items || {})) p.inv[item] = (p.inv[item] || 0) + (Number(count) || 0);
   this.ui.toast(`CO-OP REWARD · +${reward.gold || 0}g · +${reward.xp || 0}xp · Dragon Scale`);
   this.ui.receiveSystemChat?.(`Shared boss reward received · ${message.participants || 1} contributor${message.participants === 1 ? "" : "s"}.`);
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.onLevelUp?.(p.level); }
   this.ui.sync?.();
 };
 
@@ -1249,7 +1249,7 @@ Game.prototype.killBoss = function () {
   this.fx.push({ kind: "levelring", x: b.x, y: b.y - 20, t: 0, dur: 1.0 });
   this.shake = Math.max(this.shake, 12); this.audio.sfx("level");
   this.ui.toast(`INFERNYX SEALED · +${goldReward}g · +${xpReward}xp · Dragon Scale`);
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.onLevelUp?.(p.level); }
   this.ui.sync && this.ui.sync();
   setTimeout(() => { this.boss = null; }, 600);
 };
@@ -1276,7 +1276,7 @@ Game.prototype.harvestPlant = function (pl) {
   // particle burst
   for (let i = 0; i < 8; i++) this.particles.push({ x: pl.x, y: pl.y - 10, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 40, life: 0.6, color: pl.kind === "crystal_ore" ? "rgba(180,220,255,0.9)" : "rgba(120,200,100,0.9)" });
   pl.respawn = 30; // respawn in 30 sec
-  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); }
+  while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.onLevelUp?.(p.level); }
   this.ui.sync && this.ui.sync();
 };
 
