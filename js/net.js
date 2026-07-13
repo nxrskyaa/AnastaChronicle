@@ -179,7 +179,6 @@ export async function connectMultiplayer(look, name, spawn) {
     });
 
     ws.onmessage = (event) => {
-      console.log("[MP] RAW", (event.data||"").toString().slice(0, 100));
       let message;
       try { message = JSON.parse(event.data); } catch { return; }
       handleMessage(message);
