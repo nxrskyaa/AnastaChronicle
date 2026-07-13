@@ -18,6 +18,7 @@ import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
 import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
+import { SERVER_OPTIONS, getSelectedServerId, setSelectedServerId } from "./config.js";
 import {
   connectRitualWallet, walletShortAddress, walletState,
   getWalletSave, putWalletSave, clearWalletSave, contractConfigured,
@@ -511,6 +512,9 @@ function startGame(savedLook, savedName, saveData) {
       if (saveData.equipped) { p.equipped = saveData.equipped; }
       game.ui.toast(`Welcome back, ${look.name}!`);
     }
+    if (saveData?.recovery) {
+      game.ui.toast("Wallet level recovered · local inventory starts fresh");
+    }
     if (saveData) {
       const roster = Array.isArray(saveData.pets) ? saveData.pets : [];
       for (const id of roster) game.registerPet(id);
@@ -589,6 +593,7 @@ const mainMenuChoices = document.getElementById("main-menu-choices");
 const guestAccess = document.getElementById("guest-access");
 const walletAccess = document.getElementById("wallet-access");
 const aboutPanel = document.getElementById("about-panel");
+const serverPicker = document.querySelector(".server-picker");
 const walletActions = document.getElementById("wallet-profile-actions");
 const walletStatusTitle = document.getElementById("wallet-status-title");
 const walletStatusText = document.getElementById("wallet-status-text");
@@ -665,10 +670,31 @@ function queueLevelProof(g, ui, level) {
 
 function setLoginMode(mode) {
   mainMenuChoices?.classList.toggle("hidden", mode !== "menu");
+  serverPicker?.classList.toggle("hidden", mode !== "menu");
   guestAccess?.classList.toggle("hidden", mode !== "guest");
   walletAccess?.classList.toggle("hidden", mode !== "wallet");
   aboutPanel?.classList.toggle("hidden", mode !== "about");
   if (mode === "guest" && matchMedia("(pointer:fine)").matches) setTimeout(() => loginName?.focus(), 30);
+}
+
+function renderServerPicker() {
+  const wrap = document.getElementById("server-picker-list");
+  if (!wrap) return;
+  const selected = getSelectedServerId();
+  wrap.innerHTML = "";
+  for (const server of SERVER_OPTIONS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `server-option${server.id === selected ? " selected" : ""}`;
+    button.dataset.serverId = server.id;
+    button.setAttribute("aria-pressed", String(server.id === selected));
+    button.innerHTML = `<span class="server-dot"></span><strong>${server.code}</strong><span class="server-option-copy"><b>${server.name}</b><small>RITUAL SHARD · ${server.capacity} CAP</small></span><em>${server.id === selected ? "SELECTED" : "JOIN"}</em>`;
+    button.addEventListener("click", () => {
+      setSelectedServerId(server.id);
+      renderServerPicker();
+    });
+    wrap.appendChild(button);
+  }
 }
 
 function refreshWalletPanel() {
@@ -684,10 +710,11 @@ function refreshWalletPanel() {
   if (walletStatusText) walletStatusText.textContent = walletProfileReadError
     ? "Ritual profile read failed · check RPC and retry wallet sync."
     : walletContractProfile?.active
-    ? (save ? `Ritual profile linked · Level ${walletContractProfile.level || save.stats?.level || 1}.` : `Onchain profile found · Level ${walletContractProfile.level || 1}; local snapshot missing.`)
+    ? (save ? `Ritual profile linked · Level ${walletContractProfile.level || save.stats?.level || 1}.` : `Onchain profile found · Level ${walletContractProfile.level || 1}; recover the level locally to continue.`)
     : (save ? `Local chronicle found · Level ${save.stats?.level || 1}.` : "Ritual network linked · no profile yet.");
   walletActions?.classList.toggle("hidden", false);
-  walletContinue?.classList.toggle("hidden", !save);
+  walletContinue?.classList.toggle("hidden", !save && !walletContractProfile?.active);
+  if (walletContinue) walletContinue.innerHTML = save ? "CONTINUE PROFILE <span>›</span>" : "RECOVER LEVEL <span>›</span>";
   walletDelete?.classList.toggle("hidden", !save && !walletContractProfile?.active);
   const walletNew = document.getElementById("btn-wallet-new");
   walletNew?.classList.toggle("hidden", walletProfileReadError || !!walletContractProfile?.active);
@@ -706,6 +733,31 @@ async function openWalletPanel() {
     if (walletStatusText) walletStatusText.textContent = error?.message || "Wallet connection cancelled.";
     walletConnectNow?.classList.remove("hidden");
   }
+}
+
+function buildWalletRecoverySave() {
+  const profile = walletContractProfile;
+  if (!profile?.active || !walletState.address) return null;
+  const level = Math.max(1, Math.floor(Number(profile.level) || 1));
+  const name = String(profile.displayName || "Traveler").slice(0, 14) || "Traveler";
+  const recoveryLook = normalizeLook({ ...DEFAULT_LOOK, name });
+  return {
+    version: 2,
+    recovery: true,
+    name,
+    look: recoveryLook,
+    stats: { level, xp: 0, gold: 0, hp: 999, cls: recoveryLook.cls },
+    position: { x: 55 * 24, y: 55 * 24 + 46, dir: "down" },
+    onchainPolicy,
+    inv: {},
+    fishing: { total: 0, best: 0, records: {} },
+    quests: null,
+    afkFishing: null,
+    flags: { starterCache: false },
+    equipped: "fist",
+    pets: [], activePetId: null, mountId: null, mounted: false,
+    activeFoodBuffs: [], ts: Date.now(), wallet: walletState.address,
+  };
 }
 
 function startLoginFx() {
@@ -745,6 +797,7 @@ function showLogin() {
   startLoginFx();
   saveMode = "guest";
   setLoginMode("menu");
+  renderServerPicker();
   syncLevelPolicyButtons();
   const save = getSave();
   if (save && save.name) {
@@ -811,14 +864,29 @@ document.querySelectorAll(".quick-btn").forEach(btn => {
 document.getElementById("btn-guest-play")?.addEventListener("click", () => setLoginMode("guest"));
 document.getElementById("btn-connect-wallet")?.addEventListener("click", openWalletPanel);
 document.getElementById("btn-about")?.addEventListener("click", () => setLoginMode("about"));
-document.querySelectorAll("[data-main-menu]").forEach((button) => button.addEventListener("click", () => setLoginMode("menu")));
+loginScreen?.addEventListener("click", (event) => {
+  const back = event.target.closest("[data-main-menu]");
+  if (!back) return;
+  event.preventDefault();
+  setLoginMode("menu");
+  renderServerPicker();
+});
+loginScreen?.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const panelOpen = [guestAccess, walletAccess, aboutPanel].some((panel) => panel && !panel.classList.contains("hidden"));
+  if (!panelOpen) return;
+  event.preventDefault();
+  setLoginMode("menu");
+  renderServerPicker();
+});
 document.querySelectorAll("[data-level-policy]").forEach((button) => button.addEventListener("click", () => setOnchainPolicy(button.dataset.levelPolicy)));
 walletConnectNow?.addEventListener("click", openWalletPanel);
 document.getElementById("btn-wallet-continue")?.addEventListener("click", () => {
   const save = getWalletSave(walletState.address);
-  if (!save) return refreshWalletPanel();
+  const recovered = save || buildWalletRecoverySave();
+  if (!recovered) return refreshWalletPanel();
   saveMode = "wallet";
-  enterGameWithSave(save);
+  enterGameWithSave(recovered);
 });
 document.getElementById("btn-wallet-new")?.addEventListener("click", () => {
   saveMode = "wallet";

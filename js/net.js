@@ -1,7 +1,7 @@
 // Realtime multiplayer transport. Presence stays compatible with the original
 // JSON relay while protocol v2 adds chat, mutual duel events and a shared boss.
 
-import { SERVER_URL, MULTIPLAYER_ENABLED } from "./config.js";
+import { getServerUrl, getSelectedServerId, MULTIPLAYER_ENABLED } from "./config.js";
 
 export const net = {
   connected: false,
@@ -11,6 +11,7 @@ export const net = {
   selfId: null,
   resumeToken: null,
   protocol: 1,
+  serverId: getSelectedServerId(),
   duelActive: false,
   boss: null,
   _lastSend: 0,
@@ -169,7 +170,8 @@ export async function connectMultiplayer(look, name, spawn) {
   let ws = null;
   try {
     if (net._ping) clearInterval(net._ping);
-    ws = new WebSocket(SERVER_URL);
+    net.serverId = getSelectedServerId();
+    ws = new WebSocket(getServerUrl(net.serverId));
     net.ws = ws;
 
     await new Promise((resolve, reject) => {
