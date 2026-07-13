@@ -18,6 +18,10 @@ import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
 import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
+import {
+  connectRitualWallet, walletShortAddress, walletState,
+  getWalletSave, putWalletSave, clearWalletSave,
+} from "./wallet.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -26,6 +30,7 @@ const startBtn = document.getElementById("btn-start");
 const creator = document.getElementById("creator");
 let look = { ...DEFAULT_LOOK };
 let game = null;
+let onchainPolicy = (() => { try { return localStorage.getItem("anasta_level_policy") === "every" ? "every" : "milestone"; } catch { return "milestone"; } })();
 
 // ---- Boot screen ambient particles (fireflies + drifting embers) ----
 const bootCanvas = document.getElementById("boot-fx");
@@ -277,6 +282,21 @@ function wireSettings() {
     b.addEventListener("touchstart", on, { passive: false }); b.addEventListener("touchend", off, { passive: false }); b.addEventListener("touchcancel", off, { passive: false });
     b.addEventListener("mousedown", on); b.addEventListener("mouseup", off); b.addEventListener("mouseleave", off);
   });
+  const passportButton = document.getElementById("realm-connect-button");
+  const syncPassport = () => {
+    const address = document.getElementById("realm-wallet-address");
+    const network = document.getElementById("realm-network-name");
+    const state = document.getElementById("realm-sync-state");
+    if (address) address.textContent = walletState.address ? walletShortAddress(walletState.address) : "Not linked";
+    if (network) network.textContent = walletState.connected ? "Ritual Testnet" : "Not linked";
+    if (state) state.innerHTML = `<i aria-hidden="true"></i> ${walletState.connected ? "Wallet linked · contract pending" : "Local only"}`;
+    if (passportButton) { passportButton.disabled = false; passportButton.removeAttribute("aria-disabled"); passportButton.textContent = walletState.connected ? "Ritual wallet linked" : "Connect Ritual wallet"; }
+  };
+  syncPassport();
+  passportButton?.addEventListener("click", async () => {
+    try { await connectRitualWallet(); syncPassport(); game?.ui?.toast("Ritual wallet linked · profile contract ready to configure"); }
+    catch (error) { game?.ui?.toast(error?.message || "Wallet connection cancelled."); }
+  });
 }
 
 function showArrivalGuide(isReturning) {
@@ -307,6 +327,8 @@ function savePayload(g) {
     name: look.name,
     look: normalizeLook(look),
     stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
+    position: { x: Number(p.x) || 0, y: Number(p.y) || 0, dir: p.dir || "down" },
+    onchainPolicy,
     inv: p.inv,
     fishing: g.fishingStats,
     quests: g.quests?.serialize?.(),
@@ -320,6 +342,25 @@ function savePayload(g) {
     activeFoodBuffs: Array.isArray(g.activeFoodBuffs) ? g.activeFoodBuffs : [],
     ts: Date.now(),
   };
+}
+
+function safeRestorePosition(g, x, y) {
+  const fallback = { x: g.player.x, y: g.player.y };
+  const valid = (px, py) => {
+    if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+    if (g.tileAt?.(px, py) === 2) return false;
+    if (g.bossArena && Math.hypot(px - g.bossArena.x, py - g.bossArena.y) < g.bossArena.radius + 20) return false;
+    return true;
+  };
+  if (valid(x, y)) return { x, y };
+  for (const radius of [24, 48, 72, 96, 128]) {
+    for (let i = 0; i < 16; i++) {
+      const angle = i / 16 * Math.PI * 2;
+      const candidate = { x: x + Math.cos(angle) * radius, y: y + Math.sin(angle) * radius };
+      if (valid(candidate.x, candidate.y)) return candidate;
+    }
+  }
+  return fallback;
 }
 
 function wireMultiplayer(g, ui) {
@@ -441,6 +482,13 @@ function startGame(savedLook, savedName, saveData) {
       p.maxStamina = classStats.maxStamina + (p.level - 1) * 8;
       p.hp = Math.max(1, Math.min(p.maxHp, Number(saveData.stats.hp) || p.maxHp));
       p.stamina = p.maxStamina;
+      if (saveData.onchainPolicy) onchainPolicy = saveData.onchainPolicy === "every" ? "every" : "milestone";
+      const savedPosition = saveData.position;
+      if (savedPosition) {
+        const restored = safeRestorePosition(game, Number(savedPosition.x), Number(savedPosition.y));
+        p.x = restored.x; p.y = restored.y; p.dir = savedPosition.dir || p.dir;
+        p.vx = 0; p.vy = 0; p.moving = false; game.resetInputState();
+      }
       if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
       if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
       if (saveData.quests) game.quests.restore?.(saveData.quests);
@@ -475,7 +523,12 @@ function startGame(savedLook, savedName, saveData) {
       game.ui.syncPet?.();
       game.ui.syncFoodBuffs?.(true);
     }
-    const persist = () => { if (game?.player) putSave(savePayload(game)); };
+    const persist = () => {
+      if (!game?.player) return;
+      const payload = savePayload(game);
+      if (saveMode === "wallet" && walletState.address) putWalletSave(payload, walletState.address);
+      else putSave(payload);
+    };
     game.onCompanionChange = persist;
     game.onProgressChange = persist;
     const nm = document.getElementById("hud-name"); if (nm) nm.textContent = look.name;
@@ -514,9 +567,77 @@ const loginReturnStats = document.getElementById("login-return-stats");
 const btnContinue = document.getElementById("btn-continue");
 const btnNewGame = document.getElementById("btn-newgame");
 const SAVE_KEY = "anasta_save";
+let saveMode = "guest";
 
 function getSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
 function putSave(data) { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
+
+const mainMenuChoices = document.getElementById("main-menu-choices");
+const guestAccess = document.getElementById("guest-access");
+const walletAccess = document.getElementById("wallet-access");
+const aboutPanel = document.getElementById("about-panel");
+const walletActions = document.getElementById("wallet-profile-actions");
+const walletStatusTitle = document.getElementById("wallet-status-title");
+const walletStatusText = document.getElementById("wallet-status-text");
+const walletConnectNow = document.getElementById("btn-wallet-connect-now");
+const walletContinue = document.getElementById("btn-wallet-continue");
+const walletDelete = document.getElementById("btn-wallet-delete");
+
+function syncLevelPolicyButtons() {
+  document.querySelectorAll("[data-level-policy]").forEach((button) => {
+    const active = button.dataset.levelPolicy === onchainPolicy;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  const note = document.getElementById("onchain-policy-note");
+  if (note) note.textContent = onchainPolicy === "every"
+    ? "A proof is prepared for each level-up (paid tx after contract setup)."
+    : "Only selected milestone levels will submit a paid proof (recommended).";
+}
+
+function setOnchainPolicy(policy) {
+  onchainPolicy = policy === "every" ? "every" : "milestone";
+  try { localStorage.setItem("anasta_level_policy", onchainPolicy); } catch {}
+  syncLevelPolicyButtons();
+}
+
+function setLoginMode(mode) {
+  mainMenuChoices?.classList.toggle("hidden", mode !== "menu");
+  guestAccess?.classList.toggle("hidden", mode !== "guest");
+  walletAccess?.classList.toggle("hidden", mode !== "wallet");
+  aboutPanel?.classList.toggle("hidden", mode !== "about");
+  if (mode === "guest" && matchMedia("(pointer:fine)").matches) setTimeout(() => loginName?.focus(), 30);
+}
+
+function refreshWalletPanel() {
+  const save = walletState.address ? getWalletSave(walletState.address) : null;
+  if (!walletState.connected) {
+    if (walletStatusTitle) walletStatusTitle.textContent = "WALLET PASSPORT";
+    if (walletStatusText) walletStatusText.textContent = "Connect an EVM wallet to reserve your Ritual identity.";
+    walletActions?.classList.add("hidden");
+    if (walletConnectNow) { walletConnectNow.classList.remove("hidden"); walletConnectNow.disabled = false; walletConnectNow.innerHTML = "CONNECT RITUAL WALLET <span>›</span>"; }
+    return;
+  }
+  if (walletStatusTitle) walletStatusTitle.textContent = walletShortAddress(walletState.address);
+  if (walletStatusText) walletStatusText.textContent = save ? `Local chronicle found · Level ${save.stats?.level || 1}.` : "Ritual network linked · no local profile yet.";
+  walletActions?.classList.toggle("hidden", false);
+  walletContinue?.classList.toggle("hidden", !save);
+  walletDelete?.classList.toggle("hidden", !save);
+  if (walletConnectNow) walletConnectNow.classList.add("hidden");
+}
+
+async function openWalletPanel() {
+  setLoginMode("wallet");
+  try {
+    await connectRitualWallet();
+    saveMode = "wallet";
+    refreshWalletPanel();
+  } catch (error) {
+    if (walletStatusTitle) walletStatusTitle.textContent = "WALLET NOT CONNECTED";
+    if (walletStatusText) walletStatusText.textContent = error?.message || "Wallet connection cancelled.";
+    walletConnectNow?.classList.remove("hidden");
+  }
+}
 
 function startLoginFx() {
   const c = document.getElementById("login-fx");
@@ -553,6 +674,9 @@ function showLogin() {
   boot.classList.add("hidden");
   loginScreen.classList.remove("hidden");
   startLoginFx();
+  saveMode = "guest";
+  setLoginMode("menu");
+  syncLevelPolicyButtons();
   const save = getSave();
   if (save && save.name) {
     loginExisting.classList.remove("hidden");
@@ -563,7 +687,6 @@ function showLogin() {
   } else {
     loginExisting.classList.add("hidden");
   }
-  if (matchMedia("(pointer:fine)").matches) loginName.focus();
 }
 
 function enterGameWithSave(save) {
@@ -585,11 +708,13 @@ function enterNewGame(name) {
 }
 
 btnContinue.addEventListener("click", () => {
+  saveMode = "guest";
   const save = getSave();
   if (save) enterGameWithSave(save);
 });
 
 btnNewGame.addEventListener("click", () => {
+  saveMode = "guest";
   const name = loginName.value.trim() || "Traveler";
   enterNewGame(name);
 });
@@ -605,12 +730,35 @@ loginName.addEventListener("keydown", (e) => {
 
 document.querySelectorAll(".quick-btn").forEach(btn => {
   btn.addEventListener("click", () => {
+    saveMode = "guest";
     const name = btn.dataset.name;
     loginName.value = name;
     const save = getSave();
     if (save && save.name === name) enterGameWithSave(save);
     else enterNewGame(name);
   });
+});
+
+document.getElementById("btn-guest-play")?.addEventListener("click", () => setLoginMode("guest"));
+document.getElementById("btn-connect-wallet")?.addEventListener("click", openWalletPanel);
+document.getElementById("btn-about")?.addEventListener("click", () => setLoginMode("about"));
+document.querySelectorAll("[data-main-menu]").forEach((button) => button.addEventListener("click", () => setLoginMode("menu")));
+document.querySelectorAll("[data-level-policy]").forEach((button) => button.addEventListener("click", () => setOnchainPolicy(button.dataset.levelPolicy)));
+walletConnectNow?.addEventListener("click", openWalletPanel);
+document.getElementById("btn-wallet-continue")?.addEventListener("click", () => {
+  const save = getWalletSave(walletState.address);
+  if (!save) return refreshWalletPanel();
+  saveMode = "wallet";
+  enterGameWithSave(save);
+});
+document.getElementById("btn-wallet-new")?.addEventListener("click", () => {
+  saveMode = "wallet";
+  enterNewGame("Traveler");
+});
+document.getElementById("btn-wallet-delete")?.addEventListener("click", () => {
+  clearWalletSave(walletState.address);
+  refreshWalletPanel();
+  if (walletStatusText) walletStatusText.textContent = "Local profile deleted. Create a new traveler when ready.";
 });
 
 startBtn.addEventListener("click", () => {

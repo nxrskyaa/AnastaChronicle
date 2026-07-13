@@ -52,8 +52,9 @@ export class UI {
     this._duelSender = null;
     this._shopMode = "buy";
     this._afkSelection = AFK_FISHING_OPTIONS[0]?.minutes || 2;
+    this._levelHideTimer = null;
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
-    document.getElementById("btn-level-ok")?.addEventListener("click", () => { this.panels.level.classList.add("hidden"); if (this.game && !this.hasBlockingOpen()) this.game.paused = false; });
+    document.getElementById("btn-level-ok")?.addEventListener("click", () => this.dismissLevel());
     document.getElementById("btn-respawn")?.addEventListener("click", () => this.game?.respawn());
     document.getElementById("btn-inv-hot")?.addEventListener("click", () => this.toggle("inv"));
     document.getElementById("btn-craft-hot")?.addEventListener("click", () => this.toggle("craft"));
@@ -577,9 +578,15 @@ export class UI {
       this.game.shake = 0;
       this.game.hitStop = 0;
       this.game.resetInputState?.();
-      this.game.paused = true;
     }
     this.panels.level?.classList.remove("hidden");
+    clearTimeout(this._levelHideTimer);
+    this._levelHideTimer = setTimeout(() => this.dismissLevel(), 1900);
+  }
+  dismissLevel() {
+    clearTimeout(this._levelHideTimer);
+    this._levelHideTimer = null;
+    this.panels.level?.classList.add("hidden");
   }
   showDeath() { this.closeAll(); this.panels.death?.classList.remove("hidden"); if (this.game) { this.game.inputLocked = false; this.game.paused = true; } }
   hideDeath() { this.panels.death?.classList.add("hidden"); }

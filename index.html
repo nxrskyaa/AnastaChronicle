@@ -21,9 +21,8 @@
     <div class="boot-layout">
       <aside class="boot-world-note"><span class="world-note-index">REALM 01</span><strong>The Wilds of Anasta</strong><p>A living pixel realm of ancient shrines, wandering spirits, forged relics, and companions waiting to be found.</p><div class="world-note-tags"><span>OPEN WORLD</span><span>MMO</span><span>CODE-BORN ART</span></div></aside>
       <main class="boot-card">
-        <div class="boot-seal"><span>A</span><i></i></div>
+        <div class="boot-logo-wrap" aria-label="Anasta Chronicle logo"><img class="boot-logo" src="assets/anasta-logo.png" alt="Anasta Chronicle" /><i class="boot-logo-spark spark-a"></i><i class="boot-logo-spark spark-b"></i><i class="boot-logo-spark spark-c"></i></div>
         <p class="boot-kicker">CHRONICLE OF THE WILDS</p>
-        <h1 class="pixel-title">ANASTA</h1>
         <p class="boot-sub">Explore <i></i> Tame <i></i> Forge <i></i> Survive</p>
         <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar-fill"></div></div>
         <div class="boot-load-row"><div id="boot-status">Loading...</div><span id="boot-percent">BUILDING REALM</span></div>
@@ -42,17 +41,34 @@
       <span class="realm-eyebrow">THE FOREST REMEMBERS</span>
       <h1>Your legend begins<br/>before the first step.</h1>
       <p>Create a traveler, master a class, bond with wild companions, and leave your mark across a shared living realm.</p>
-      <div class="login-hero-art" aria-hidden="true"><div class="hero-shadow"></div><div class="hero-cape"></div><div class="hero-body"></div><div class="hero-head"></div><div class="hero-hair"></div><div class="hero-blade"></div><i class="hero-spark s1"></i><i class="hero-spark s2"></i><i class="hero-spark s3"></i></div>
+      <div class="login-hero-art" aria-hidden="true"><div class="hero-mist"></div><div class="hero-torii"><i></i><b></b><span></span></div><div class="hero-lantern l1"></div><div class="hero-lantern l2"></div><i class="hero-firefly f1"></i><i class="hero-firefly f2"></i><i class="hero-firefly f3"></i></div>
       <div class="realm-pillars"><div><b>6</b><span>CLASSES</span></div><div><b>25</b><span>COMPANIONS</span></div><div><b>&infin;</b><span>CHRONICLES</span></div></div>
     </section>
     <section class="login-card">
       <div class="login-glow"></div><div class="login-sigil"><span>A</span></div><span class="login-step">REALM ACCESS / 01</span>
-      <h2 class="pixel-h2">WELCOME, TRAVELER</h2><p class="login-sub">Choose the name the realm will remember.</p>
-      <label class="login-input-wrap"><span>TRAVELER NAME</span><input id="login-name" type="text" maxlength="14" placeholder="Your name..." autocomplete="off" /></label>
-      <div id="login-existing" class="login-existing hidden"><span class="save-rune" aria-hidden="true"></span><div><p class="login-return">CHRONICLE FOUND &middot; <b id="login-return-name"></b></p><p class="login-stats" id="login-return-stats"></p></div><button id="btn-continue" class="pixel-btn">CONTINUE <span>&rsaquo;</span></button></div>
-      <button id="btn-newgame" class="pixel-btn login-new">CREATE NEW TRAVELER <span>&rsaquo;</span></button>
-      <div class="login-divider"><span>QUICK NAMES</span></div><div class="login-quick"><button class="quick-btn" data-name="Akira">Akira</button><button class="quick-btn" data-name="Yuki">Yuki</button><button class="quick-btn" data-name="Hana">Hana</button><button class="quick-btn" data-name="Kai">Kai</button></div>
-      <p class="login-note"><i></i> Progress auto-saves on this device. Onchain identity is reserved for a future realm update.</p>
+      <h2 class="pixel-h2">WELCOME, TRAVELER</h2><p class="login-sub">Choose how you want to enter the living realm.</p>
+      <div id="main-menu-choices" class="main-menu-choices">
+        <button id="btn-guest-play" class="menu-choice"><span class="menu-choice-icon">✦</span><span><b>GUEST PLAY</b><small>Save locally on this device</small></span><strong>&rsaquo;</strong></button>
+        <button id="btn-connect-wallet" class="menu-choice wallet-choice"><span class="menu-choice-icon">◈</span><span><b>CONNECT WALLET</b><small>Ritual identity &amp; cloud-ready save</small></span><strong>&rsaquo;</strong></button>
+        <button id="btn-about" class="menu-choice"><span class="menu-choice-icon">?</span><span><b>ABOUT ANASTA</b><small>Meet the people behind the realm</small></span><strong>&rsaquo;</strong></button>
+      </div>
+      <div id="guest-access" class="access-panel hidden">
+        <button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button>
+        <label class="login-input-wrap"><span>TRAVELER NAME</span><input id="login-name" type="text" maxlength="14" placeholder="Your name..." autocomplete="off" /></label>
+        <div id="login-existing" class="login-existing hidden"><span class="save-rune" aria-hidden="true"></span><div><p class="login-return">CHRONICLE FOUND &middot; <b id="login-return-name"></b></p><p class="login-stats" id="login-return-stats"></p></div><button id="btn-continue" class="pixel-btn">CONTINUE <span>&rsaquo;</span></button></div>
+        <button id="btn-newgame" class="pixel-btn login-new">CREATE NEW TRAVELER <span>&rsaquo;</span></button>
+        <div class="login-divider"><span>QUICK NAMES</span></div><div class="login-quick"><button class="quick-btn" data-name="Akira">Akira</button><button class="quick-btn" data-name="Yuki">Yuki</button><button class="quick-btn" data-name="Hana">Hana</button><button class="quick-btn" data-name="Kai">Kai</button></div>
+        <p class="login-note"><i></i> Guest progress auto-saves on this device.</p>
+      </div>
+      <div id="wallet-access" class="access-panel hidden">
+        <button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button>
+        <div class="wallet-status-card"><span class="wallet-status-dot"></span><div><b id="wallet-status-title">WALLET PASSPORT</b><small id="wallet-status-text">Connect an EVM wallet to reserve your Ritual identity.</small></div></div>
+        <div id="wallet-profile-actions" class="wallet-profile-actions hidden"><button id="btn-wallet-continue" class="pixel-btn login-new">CONTINUE PROFILE <span>&rsaquo;</span></button><button id="btn-wallet-new" class="pixel-btn login-new wallet-secondary">CREATE NEW PROFILE <span>&rsaquo;</span></button><button id="btn-wallet-delete" class="access-danger">DELETE LOCAL PROFILE</button></div>
+        <button id="btn-wallet-connect-now" class="pixel-btn login-new">CONNECT RITUAL WALLET <span>&rsaquo;</span></button>
+        <div class="onchain-policy"><span>LEVEL PROOF MODE</span><div><button type="button" data-level-policy="milestone">MILESTONES</button><button type="button" data-level-policy="every">EVERY LEVEL</button></div><small id="onchain-policy-note">Choose when the game should submit a paid level proof.</small></div>
+        <p class="login-note"><i></i> Wallet identity is ready now. Contract sync appears after the profile contract address is configured.</p>
+      </div>
+      <section id="about-panel" class="about-panel hidden"><button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button><span class="about-kicker">ABOUT THE CHRONICLE</span><h3>Built by a small crew<br/>with a big forest.</h3><div class="credit-list"><div><b>Nxrskyaa</b><span>Builder</span></div><div><b>Dikzzy</b><span>Game Tester</span></div><div><b>Baster</b><span>Community Team</span></div></div><p>Every sprite, trail, creature and texture is generated from code so the realm can keep evolving without losing its pixel-art soul.</p></section>
     </section>
   </div>
 </div>
@@ -320,14 +336,14 @@
     <div class="panel-head"><h2>Settings</h2><button class="panel-close" data-close="settings">×</button></div>
     <section id="realm-passport" class="realm-passport" aria-labelledby="realm-passport-title">
       <div class="realm-passport-head">
-        <div><span class="realm-passport-kicker">FUTURE ONCHAIN PROFILE</span><h3 id="realm-passport-title">Realm Passport</h3></div>
-        <span class="realm-roadmap-tag">ROADMAP</span>
+        <div><span class="realm-passport-kicker">RITUAL TESTNET PROFILE</span><h3 id="realm-passport-title">Realm Passport</h3></div>
+        <span class="realm-roadmap-tag">PREPARED</span>
       </div>
-      <p>Your character remains a local save today. This reserved profile will later surface wallet identity, realm proofs, and collectible ownership without changing the core adventure.</p>
+      <p>Guest saves stay local. A connected wallet reserves the same profile slot for future level proofs and leaderboard sync once the deployed contract address is configured.</p>
       <dl class="realm-passport-grid">
         <div><dt>Wallet</dt><dd id="realm-wallet-address">Not linked</dd></div>
-        <div><dt>Network</dt><dd id="realm-network-name">Future realm</dd></div>
-        <div><dt>Save state</dt><dd id="realm-sync-state"><i aria-hidden="true"></i> Local only</dd></div>
+        <div><dt>Network</dt><dd id="realm-network-name">Ritual Testnet</dd></div>
+        <div><dt>Save state</dt><dd id="realm-sync-state"><i aria-hidden="true"></i> Contract pending</dd></div>
       </dl>
       <button id="realm-connect-button" class="realm-connect-button" type="button" disabled aria-disabled="true">Connect wallet · Coming soon</button>
     </section>
@@ -341,7 +357,7 @@
     </div>
     <div class="set-help">Keys: WASD move · LMB/1 attack · Shift guard · Space/4 dash · F interact/fish · B shop · H auto battle · J fish book · K cook · M mount · P pet</div>
   </div>
-  <div id="panel-level" class="panel hidden modal level-ceremony" role="dialog" aria-modal="true" aria-labelledby="level-title">
+  <div id="panel-level" class="panel hidden modal level-ceremony" role="status" aria-live="polite" aria-labelledby="level-title">
     <div class="level-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div><span class="level-kicker">CHRONICLE ASCENSION</span><div class="level-emblem"><i></i><strong id="level-number">2</strong></div><h2 id="level-title">A New Chapter</h2><p id="level-msg"></p><div class="level-gains"><span><i>+</i><b>12</b><small>MAX HP</small></span><span><i>+</i><b>8</b><small>STAMINA</small></span><span><i>+</i><b>2</b><small>POWER</small></span></div><button id="btn-level-ok" class="pixel-btn small">CONTINUE THE TRAIL <b>&rsaquo;</b></button>
   </div>
   <div id="panel-pet" class="panel hidden modal"><h2>A wild friend!</h2><img id="pet-img" width="96" height="96" style="image-rendering:pixelated;margin:0 auto;display:block"/><p id="pet-msg"></p><button id="btn-pet-ok" class="pixel-btn small">Adopt</button></div>
