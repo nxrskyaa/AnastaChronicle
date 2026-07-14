@@ -662,6 +662,7 @@ function queueLevelProof(g, ui, level) {
 }
 
 function setLoginMode(mode) {
+  document.querySelector("#login .login-card")?.setAttribute("data-login-mode", mode);
   mainMenuChoices?.classList.toggle("hidden", mode !== "menu");
   serverPicker?.classList.toggle("hidden", mode !== "menu");
   guestAccess?.classList.toggle("hidden", mode !== "guest");

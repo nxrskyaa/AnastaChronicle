@@ -2397,6 +2397,14 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   #login .realm-showcase>p,#login .realm-pillars{display:none!important}
   #login .login-hero-art{right:4px!important;bottom:-8px!important;width:132px!important;height:120px!important;transform:scale(.78)!important}
   #login .login-card{flex:1;width:100%!important;min-height:calc(100dvh - 118px);padding:12px 14px calc(16px + env(safe-area-inset-bottom))!important;border-width:0 0 0 0!important;border-radius:0!important;clip-path:none!important;box-shadow:none!important}
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"]){padding-top:14px!important}
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.menu-logo,
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.login-sigil,
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.login-step,
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.pixel-h2,
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.login-sub{display:none!important}
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.access-panel,
+  #login .login-card[data-login-mode]:not([data-login-mode="menu"])>.about-panel{margin-top:0!important;padding-top:0!important}
   #login .menu-logo{width:min(210px,68vw)!important;height:55px!important;margin:0 auto 2px!important}
   #login .login-sigil{right:16px!important;top:16px!important;width:34px!important;height:34px!important}
   #login .login-step{font-size:max(.36rem,7px)!important}
@@ -2408,6 +2416,7 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   #login .server-picker{margin-top:10px!important;padding:8px!important}
   #login .server-picker-head span{font-size:max(.34rem,7px)!important}.server-picker-head small{font-size:.72rem!important}
   #login .server-picker-list{gap:5px!important}.server-picker-list button{min-height:42px!important;padding:6px 8px!important}
+  #login .server-option.selected strong,#login .server-option.selected b{color:#173b30!important}#login .server-option.selected small,#login .server-option.selected em{color:#285844!important}
   #login .access-panel{margin-top:6px!important}.login-input-wrap input{min-height:48px}
   #login .credit-list{grid-template-columns:1fr 1fr;gap:8px}.credit-list>div{min-height:62px}
 
