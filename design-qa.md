@@ -14,6 +14,10 @@ Evidence folder: `C:/Users/xywal/.codex/visualizations/2026/07/10/019f4b08-015c-
 6. Death and respawn — passed by code-path review. Death entry bounce and screen shake are disabled; respawn clears shake and hit-stop before restoring control.
 7. About — passed. Only Nxrskyaa and Baster remain.
 
+8. Notification safe areas - passed. Long toast copy wraps above the gameplay controls; the fishing HUD clears both touch clusters; catch cards use one mobile anchor and no longer stretch or clip.
+
+Notification timing now scales from 2.2 to 4.2 seconds based on message length. Fishing and catch states were measured independently at 390 x 844.
+
 ## Remaining low-priority polish
 
 - Extremely narrow screens below 350px may benefit from shorter class labels.

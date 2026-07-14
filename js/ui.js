@@ -266,8 +266,11 @@ export class UI {
   toast(msg) {
     if (this.game?._autoBattleCasting) return;
     const el = document.getElementById("toast"); if (!el) return;
-    el.textContent = msg; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
-    clearTimeout(this._t); this._t = setTimeout(() => el.classList.remove("show"), 1700);
+    const text = String(msg || "").trim();
+    if (!text) return;
+    el.textContent = text; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+    const readingTime = Math.min(4200, Math.max(2200, 1300 + text.length * 34));
+    clearTimeout(this._t); this._t = setTimeout(() => el.classList.remove("show"), readingTime);
   }
   toggle(name) {
     const p = this.panels[name]; if (!p) return;
