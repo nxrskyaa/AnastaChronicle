@@ -2418,7 +2418,8 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   #login .server-picker-list{gap:5px!important}.server-picker-list button{min-height:42px!important;padding:6px 8px!important}
   #login .server-option.selected strong,#login .server-option.selected b{color:#173b30!important}#login .server-option.selected small,#login .server-option.selected em{color:#285844!important}
   #login .access-panel{margin-top:6px!important}.login-input-wrap input{min-height:48px}
-  #login .credit-list{grid-template-columns:1fr 1fr;gap:8px}.credit-list>div{min-height:62px}
+  #login .about-panel .access-back{display:block;margin-bottom:12px!important}
+  #login .credit-list{grid-template-columns:1fr 1fr;gap:8px}.credit-list>div{min-height:62px;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px}.credit-list span{font-size:.88rem!important;line-height:1.05}
 
   /* Creator: preview strip above a full-width editor, never a split desktop. */
   #creator{padding:0!important;background:#69b9cf!important}
