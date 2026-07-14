@@ -2019,3 +2019,137 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   .sk{width:46px;height:46px}
 }
 
+/* ===== TITLE SCREEN + ARRIVAL SIGNOFF =====================================
+   The first frame is intentionally a bright, daytime pixel title card. The
+   old night gate made the logo and loading state feel like a developer modal;
+   this gives it the same sky / meadow / salmon-slab silhouette as the menu
+   reference while keeping the existing boot logic untouched. */
+.realm-ui{font-family:"VT323","Courier New",monospace}
+#boot{
+  overflow:hidden;
+  background:#63b8d1!important;
+  color:#283d36;
+}
+#boot::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:11;
+  pointer-events:none;
+  opacity:.22;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.22) 0 1px,transparent 1px 4px);
+  mix-blend-mode:overlay;
+}
+#boot-fx{opacity:.2;mix-blend-mode:multiply}
+.chronicle-scene{
+  background:
+    linear-gradient(180deg,#58b5d4 0 55%,#8fd0d0 56% 64%,#6dbd82 65% 100%)!important;
+}
+.chronicle-scene:before{
+  z-index:2!important;
+  background:
+    radial-gradient(ellipse 230px 54px at 19% 23%,rgba(255,255,233,.78),transparent 68%),
+    radial-gradient(ellipse 260px 62px at 78% 31%,rgba(255,255,239,.72),transparent 68%),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.08) 0 1px,transparent 1px 5px)!important;
+}
+.chronicle-scene:after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:0;height:36%;
+  z-index:3;
+  background:
+    linear-gradient(180deg,transparent 0 24%,rgba(44,122,78,.18) 25% 27%,transparent 28%),
+    repeating-linear-gradient(105deg,transparent 0 11px,#4b9a67 12px 15px,transparent 16px 24px),
+    linear-gradient(180deg,#79c27e,#4d9965 72%,#326b55);
+  clip-path:polygon(0 14%,7% 6%,15% 13%,24% 2%,33% 15%,42% 7%,52% 16%,61% 4%,71% 13%,82% 5%,92% 14%,100% 7%,100% 100%,0 100%);
+}
+.scene-moon{
+  left:auto!important;right:12%!important;top:11%!important;width:70px!important;height:70px!important;margin:0!important;
+  border-radius:0!important;
+  clip-path:polygon(22% 0,78% 0,78% 8%,92% 8%,92% 23%,100% 23%,100% 78%,92% 78%,92% 92%,78% 92%,78% 100%,22% 100%,22% 92%,8% 92%,8% 78%,0 78%,0 23%,8% 23%,8% 8%,22% 8%);
+  background:#ffe89a!important;
+  box-shadow:0 0 0 6px rgba(255,238,167,.15),0 0 34px rgba(255,234,145,.65)!important;
+  filter:none!important;
+}
+.scene-moon:after{display:none}
+.scene-ridge.ridge-far{bottom:30%!important;height:34%!important;background:#4e9c79!important;opacity:1!important}
+.scene-ridge.ridge-near{bottom:24%!important;height:29%!important;background:#337b61!important}
+.scene-torii{display:none}
+.scene-lantern{display:none}
+.scene-grass{height:25%!important;z-index:5!important;background:repeating-linear-gradient(105deg,transparent 0 8px,#3c8d5e 9px 12px,transparent 13px 19px),linear-gradient(180deg,transparent,#326b53 73%)!important}
+#boot .title-scene{place-items:start center;padding-top:clamp(18px,5vh,54px)}
+#boot .boot-layout{display:block;width:min(650px,94vw)!important}
+#boot .boot-world-note,#boot .boot-build-note{display:none!important}
+#boot .boot-card{
+  width:100%!important;
+  padding:0 22px 22px!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  clip-path:none!important;
+  box-shadow:none!important;
+}
+#boot .boot-card::before,#boot .boot-card::after{display:none!important}
+#boot .boot-logo-wrap{width:min(560px,94vw)!important;margin:0 auto 5px!important;filter:drop-shadow(0 7px 0 rgba(51,58,47,.62)) drop-shadow(0 12px 12px rgba(34,82,73,.25))!important;animation:bootLogoFloat 5.4s steps(5,end) infinite}
+#boot .boot-logo{image-rendering:pixelated!important}
+#boot .boot-logo-wrap:after{background:linear-gradient(180deg,transparent,rgba(255,245,171,.3),transparent);mix-blend-mode:screen}
+#boot .boot-kicker{font-family:"Press Start 2P",monospace!important;font-size:.45rem!important;letter-spacing:.14em!important;color:#fff7cc!important;text-shadow:2px 2px 0 #34725c;margin:.1rem 0 .5rem!important}
+#boot .ritual-boot-lockup{margin:0 auto .5rem;padding:5px 9px;background:#2c775d;border:2px solid #e0c06b;color:#fff2bd;box-shadow:0 3px 0 #365344;font-size:.31rem}
+#boot .ritual-boot-lockup img{width:17px;height:17px}
+#boot .boot-sub{font-family:"Press Start 2P",monospace!important;font-size:.38rem!important;letter-spacing:.08em!important;color:#f9f2c8!important;text-shadow:1px 1px 0 #397155;margin:0 auto .7rem!important}
+#boot .boot-sub i{width:4px;height:4px;background:#ffe08a}
+#boot .boot-card .loading-bar-wrap{width:min(390px,92%);height:12px;margin:0 auto 4px;border:3px solid #52744f;background:#2b5e4c;padding:2px;box-shadow:0 3px 0 #315342}
+#boot .boot-card .loading-bar{background:repeating-linear-gradient(90deg,#f1bd67 0 10px,#f6da8b 10px 17px,#e88961 17px 20px);box-shadow:none}
+#boot .boot-load-row{width:min(390px,92%);margin:0 auto 12px;font-family:"VT323",monospace}
+#boot .boot-load-row #boot-status{font-size:1rem;color:#fff5cf;text-shadow:1px 1px 0 #397155}
+#boot .boot-load-row>span{font-family:"Press Start 2P",monospace;font-size:.28rem;color:#fff1bd}
+#boot .boot-card #btn-start{
+  width:min(390px,92%);margin:0 auto;display:flex;align-items:center;justify-content:space-between;
+  background:linear-gradient(180deg,#e79a6f,#b96356)!important;
+  border:3px solid #713e39!important;border-bottom-width:6px!important;color:#2f2626!important;
+  box-shadow:inset 0 2px 0 #f8c08b,0 5px 0 #4c3835!important;text-shadow:1px 1px 0 #f6c893;
+}
+#boot .boot-card #btn-start:not(:disabled):hover{filter:brightness(1.08);transform:translateY(-2px)!important}
+#boot .boot-card #btn-start kbd{border:2px solid #8e5146;color:#ffe8b4;background:#8b5047;font-family:"VT323",monospace;font-size:.8rem}
+#boot .boot-card .boot-credit{margin-top:.75rem;font-family:"Press Start 2P",monospace;font-size:.25rem;letter-spacing:.08em;color:#fff0bf;text-shadow:1px 1px 0 #397155}
+
+/* Welcome sign: one clear pixel heading, one readable instruction, no mixed
+   serif/tech typography fighting for attention when the player spawns. */
+#arrival-banner{
+  width:min(520px,calc(100vw - 24px));
+  grid-template-columns:54px minmax(0,1fr) 28px;
+  padding:11px 13px;
+  background:linear-gradient(160deg,#f3dda9,#dfbd7d)!important;
+  border:3px solid #734a35!important;
+  color:#2d3e32!important;
+  box-shadow:0 0 0 2px #ba8150,0 14px 30px rgba(0,0,0,.45),inset 0 2px 0 #fff0bb!important;
+  clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px);
+}
+.arrival-sigil{width:43px;height:43px;transform:none!important;background:#4a9b70!important;border:3px solid #315f4a!important;box-shadow:inset 0 0 0 3px #9ad28c,0 3px 0 #5d3e31}
+.arrival-sigil span{transform:none!important;font-family:"Press Start 2P",monospace!important;font-size:.86rem;color:#fff0b4!important;text-shadow:2px 2px 0 #315f4a}
+.arrival-copy>span{font-family:"Press Start 2P",monospace!important;font-size:.31rem;color:#477b55!important;letter-spacing:.08em}
+.arrival-copy>strong{font-family:"Press Start 2P",monospace!important;font-size:.64rem;line-height:1.35;color:#2e3a2e!important;text-shadow:1px 1px 0 #f7e0a6}
+.arrival-copy>p{font-family:"VT323",monospace!important;font-size:1.1rem;color:#5a684e!important;line-height:1.12}
+.arrival-actions{gap:8px;margin-top:7px}
+.arrival-actions span{font-family:"Press Start 2P",monospace!important;font-size:.25rem;color:#4b6955!important}
+.arrival-actions kbd{border:2px solid #876046;background:#f7df9d;color:#3b4c3b;font-family:"VT323",monospace;font-size:.68rem;box-shadow:0 2px 0 #714a37}
+.arrival-banner>button{background:#f1d395!important;border:2px solid #734a35!important;color:#3b4c3b!important}
+
+@media(max-width:720px){
+  #boot .title-scene{padding-top:20px}
+  #boot .boot-card{padding:0 10px 16px!important}
+  #boot .boot-logo-wrap{width:min(470px,94vw)!important}
+  #boot .boot-kicker{font-size:.35rem!important}
+  #boot .ritual-boot-lockup{font-size:.25rem}
+  #boot .boot-sub{font-size:.3rem!important}
+  #boot .boot-load-row>span{display:none}
+  #boot .boot-card #btn-start{font-size:.47rem!important}
+  #arrival-banner{top:calc(206px + env(safe-area-inset-top));bottom:auto;grid-template-columns:36px minmax(0,1fr) 22px;gap:9px;padding:8px 9px}
+  .arrival-sigil{width:32px;height:32px}
+  .arrival-sigil span{font-size:.64rem!important}
+  .arrival-copy>strong{font-size:.53rem}
+  .arrival-copy>p{font-size:.9rem;line-height:1.08}
+  .arrival-actions{gap:5px;flex-wrap:nowrap;overflow:hidden}
+  .arrival-actions span{font-size:.2rem;white-space:nowrap}
+}
+
