@@ -288,6 +288,15 @@ export class Game {
     place("shop", cx + 6, cy + 5);
     place("well", cx, cy - 6);
     place("stall", cx + 3, cy + 2);
+    // Keep the Ritual Hall in the player's first sightline. It is a real
+    // village building (not a distant decorative prop), with a clear apron
+    // around the footprint so its foundation cannot read as floating.
+    const ritualSite = [68, 53];
+    this.buildings.push({ type: "ritual_hall", x: ritualSite[0] * T, y: ritualSite[1] * T, sortY: ritualSite[1] * T + 8 });
+    for (let yy = ritualSite[1] - 2; yy <= ritualSite[1] + 2; yy++) for (let xx = ritualSite[0] - 4; xx <= ritualSite[0] + 4; xx++) {
+      const ii = yy * MAP_W + xx;
+      if (ii >= 0 && ii < m.length && m[ii] !== 2) m[ii] = 1;
+    }
     // fence line along south edge of camp
     for (let i = -5; i <= 5; i++) if (i !== 0) this.buildings.push({ type: "fenceH", x: (cx + i) * T, y: (cy + 7) * T, sortY: (cy + 7) * T });
 
@@ -321,21 +330,11 @@ export class Game {
       ["signpost", 48, 55], ["signpost", 61, 49], ["signpost", 67, 65],
       ["waystone", 38, 59], ["waystone", 73, 69], ["waystone", 82, 78],
       ["field_shrine", 32, 79], ["field_shrine", 68, 38], ["field_shrine", 78, 73],
-      ["trail_bench", 42, 61], ["trail_bench", 65, 55], ["trail_bench", 72, 68],
+      ["trail_bench", 42, 61], ["trail_bench", 72, 68],
       ["plank_bridge", 62, 50],
       ["lantern", 45, 58], ["lantern", 64, 62], ["lantern", 74, 70], ["lantern", 80, 76],
     ];
     for (const [type, tx, ty] of trailLandmarks) this.buildings.push({ type, x: tx * T, y: ty * T, sortY: ty * T });
-
-    // The Ritual Hall is a destination, not a loose decoration. Keep it on
-    // the lakeside path, clear its full footprint, and leave a visible apron
-    // so the sprite's foundation and flag share the same ground plane.
-    const ritualSite = [67, 42];
-    this.buildings.push({ type: "ritual_hall", x: ritualSite[0] * T, y: ritualSite[1] * T, sortY: ritualSite[1] * T + 8 });
-    for (let yy = ritualSite[1] - 2; yy <= ritualSite[1] + 2; yy++) for (let xx = ritualSite[0] - 3; xx <= ritualSite[0] + 3; xx++) {
-      const ii = yy * MAP_W + xx;
-      if (ii >= 0 && ii < m.length && m[ii] !== 2) m[ii] = (Math.random() < .58 ? 1 : 0);
-    }
 
     // decorations: trees, bushes, rocks, flowers by biome
     for (let y = 3; y < MAP_H - 3; y++) {

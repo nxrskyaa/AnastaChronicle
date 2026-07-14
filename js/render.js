@@ -247,10 +247,19 @@ Game.prototype.render = function () {
       const cv = this.village[o.type];
       if (cv) {
         const bx = sx - cv.width / 2;
-        // Ritual Hall has a wider stone apron than the small village props;
-        // its anchor is deliberately one pixel lower so the flag pole, base,
-        // and ground shadow read as one object instead of floating separately.
-        const by = sy - cv.height + (o.type === "ritual_hall" ? 4 : 8);
+        // Every building shares one ground anchor. The Ritual Hall gets an
+        // extra stone apron below the sprite so the tall roof and flag never
+        // appear to hover above the path.
+        const by = sy - cv.height + 8;
+        if (o.type === "ritual_hall") {
+          ctx.save();
+          ctx.fillStyle = "rgba(18,24,22,.38)";
+          ctx.beginPath(); ctx.ellipse(sx, sy + 4, 49, 7, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#594331"; ctx.fillRect(sx - 46, sy - 1, 92, 6);
+          ctx.fillStyle = "#a47a4d"; ctx.fillRect(sx - 42, sy - 2, 84, 3);
+          ctx.fillStyle = "#d0a66a"; ctx.fillRect(sx - 31, sy - 3, 62, 2);
+          ctx.restore();
+        }
         ctx.drawImage(cv, bx, by);
         const phase = objectPhase(o);
         if (o.type === "lantern") {

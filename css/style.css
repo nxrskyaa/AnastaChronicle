@@ -1860,3 +1860,162 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
 }
 @media(max-width:380px){#inv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.inv-cell.weapon-card{min-height:116px}.menu-choice small{font-size:.84rem}}
 
+/* ===== PIXEL RELIC UI SYSTEM ==============================================
+   Final visual pass: the menu keeps the bright title-screen silhouette while
+   game panels use one readable parchment / wood / moss language. The canvas
+   remains visible behind every surface, so this is a frame system rather than
+   a stack of unrelated dark cards. */
+.menu-logo{
+  display:block;
+  width:min(330px,92%);
+  max-height:112px;
+  object-fit:contain;
+  image-rendering:pixelated;
+  margin:-4px auto 10px;
+  filter:drop-shadow(0 5px 0 #141d1b) drop-shadow(0 0 14px rgba(227,186,79,.22));
+}
+#login .login-card{
+  background:
+    repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 4px),
+    linear-gradient(160deg,#214d43 0%,#12332f 53%,#0b211f 100%);
+  border:3px solid #6f4832;
+  box-shadow:0 0 0 2px #b57d4d,0 22px 70px rgba(0,0,0,.62),inset 0 0 0 2px rgba(228,207,142,.13);
+  clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px);
+}
+#login .login-card::after{border-color:rgba(238,201,104,.55)}
+#login .login-sigil{background:#e0bd70;border-color:#70472e;color:#203b31;box-shadow:inset 0 0 0 4px #f3db9c,0 3px 0 #573622}
+#login .login-sigil span{color:#254437;text-shadow:1px 1px 0 #f8e5a9}
+#login .login-step{color:#f2dda0}
+#login .login-card .pixel-h2{color:#f6e9b6!important;text-shadow:2px 2px 0 #17352f}
+#login .login-card .login-sub{color:#b7d2b1}
+.main-menu-choices{margin-top:1rem}
+.menu-choice{
+  min-height:58px;
+  border:3px solid #734a35;
+  border-bottom-width:5px;
+  border-radius:0;
+  clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px);
+  background:linear-gradient(180deg,#d39467,#ad654e)!important;
+  box-shadow:inset 0 2px 0 #efbd83,inset 0 -3px 0 rgba(86,48,39,.3),0 4px 0 #402a28;
+  color:#271e20;
+}
+.menu-choice:hover,.menu-choice:focus-visible{transform:translateY(-2px) translateX(2px);border-color:#f4cf83;background:linear-gradient(180deg,#e7aa73,#c87558)!important;box-shadow:inset 0 2px 0 #ffe3a4,inset 0 -3px 0 rgba(86,48,39,.26),0 6px 0 #402a28;outline:none}
+.menu-choice-icon{width:30px;height:30px;background:#346c59;border:2px solid #d4a45f;color:#f9e4a3;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);box-shadow:inset 0 0 0 2px #21473d,0 2px 0 #60402d}
+.menu-choice b{color:#2f2722;text-shadow:1px 1px 0 rgba(255,214,157,.55);font-size:.43rem}
+.menu-choice small{color:#593e38}
+.menu-choice>strong{color:#fff0bd;text-shadow:2px 2px 0 #6b4030}
+.wallet-choice{border-color:#755032;background:linear-gradient(180deg,#c98d59,#986041)!important}
+.wallet-choice .menu-choice-icon{background:#7a5a35}
+.server-picker{padding:9px 10px;background:rgba(9,31,29,.5);border:2px solid rgba(197,161,89,.5);border-radius:0}
+.server-picker-head span{color:#f3d58b}.server-picker-head small{color:#a4c7a2}
+.server-picker-list button{border-radius:0!important;border-color:#557d62!important;background:#214d3d!important;color:#ecedbf!important}
+.server-picker-list button.selected{background:#5fae79!important;color:#102d23!important;border-color:#e6ca7a!important}
+
+/* Shared parchment frame for every in-game panel. */
+:root{
+  --ui-paper:#f0d9a4;
+  --ui-paper-deep:#d3ad73;
+  --ui-paper-shadow:#b47c4e;
+  --ui-wood:#6f4633;
+  --ui-wood-hi:#a66c43;
+  --ui-moss:#4ea978;
+  --ui-moss-dark:#234f3c;
+  --ui-ink:#26362e;
+}
+.panel:not(.level-ceremony):not(.death-panel){
+  color:var(--ui-ink)!important;
+  border:3px solid var(--ui-wood)!important;
+  border-radius:0!important;
+  background:
+    repeating-linear-gradient(0deg,rgba(100,65,35,.035) 0 1px,transparent 1px 5px),
+    linear-gradient(160deg,var(--ui-paper) 0%,#e9cb91 100%)!important;
+  box-shadow:0 0 0 2px var(--ui-wood-hi),0 24px 60px rgba(0,0,0,.58),inset 0 0 0 2px rgba(255,245,194,.45)!important;
+}
+.panel:not(.level-ceremony):not(.death-panel)>.panel-head,
+.panel:not(.level-ceremony):not(.death-panel) .panel-head{
+  margin:0!important;
+  padding:11px 14px!important;
+  min-height:48px;
+  background:linear-gradient(180deg,#67bc86,#45996b)!important;
+  border-bottom:3px solid var(--ui-wood)!important;
+  box-shadow:inset 0 2px 0 rgba(219,246,174,.48),inset 0 -2px 0 rgba(34,77,54,.22);
+}
+.panel:not(.level-ceremony):not(.death-panel) .panel-head h2,
+.panel:not(.level-ceremony):not(.death-panel) h2{color:var(--ui-ink)!important;text-shadow:1px 1px 0 rgba(239,218,160,.7)!important;font-family:"VT323",monospace;font-size:1.35rem;letter-spacing:.05em;text-transform:uppercase}
+.panel:not(.level-ceremony):not(.death-panel) .panel-kicker{color:#f3f2b9!important;font-family:"Press Start 2P",monospace;font-size:.34rem}
+.panel:not(.level-ceremony):not(.death-panel) .panel-close{width:28px;height:28px;background:#ecd296!important;border:2px solid var(--ui-wood)!important;border-radius:0!important;color:var(--ui-ink)!important;box-shadow:0 2px 0 #523526}
+.panel:not(.level-ceremony):not(.death-panel) .panel-close:hover{background:#fff0bd!important;color:#4c2e2a!important}
+.panel:not(.level-ceremony):not(.death-panel) p,
+.panel:not(.level-ceremony):not(.death-panel) small,
+.panel:not(.level-ceremony):not(.death-panel) label{color:#536653}
+.panel:not(.level-ceremony):not(.death-panel) .panel-foot{margin:0!important;padding:8px 14px!important;border-top:2px solid var(--ui-wood)!important;color:#526251;background:rgba(183,133,79,.2)}
+.panel:not(.level-ceremony):not(.death-panel) .panel-foot b{color:#7c492e}
+
+/* The world-menu cards, forge rows, fish book and inventory all share the
+   same inset wooden tile treatment. */
+.realm-menu-overview,.collection-summary,.companion-hero,.forge-guide,.forge-summary,.save-progress-card{background:rgba(185,135,78,.2)!important;border-color:rgba(111,70,44,.45)!important}
+.realm-menu-grid,.fish-collection-grid,.companion-grid,#inv-grid,.craft-list,#quest-list,.shop-list,.cooking-grid{background:rgba(175,126,74,.24)!important}
+.realm-menu-grid>button,.duel-card,.craft-row,.quest-row,.shop-row,.fish-card,.companion-card,.inv-cell,.save-progress-card,.fishing-mode-grid>button,.afk-stat,.cooking-card{
+  border:2px solid #8a5a3f!important;
+  border-radius:0!important;
+  background:linear-gradient(150deg,#efd8a3,#d9b77c)!important;
+  color:var(--ui-ink)!important;
+  box-shadow:inset 0 2px 0 rgba(255,245,194,.58),inset 0 -3px 0 rgba(117,76,47,.15),0 2px 0 #82563d;
+  clip-path:polygon(5px 0,calc(100% - 5px) 0,100% 5px,100% calc(100% - 5px),calc(100% - 5px) 100%,5px 100%,0 calc(100% - 5px),0 5px);
+}
+.realm-menu-grid>button:hover,.fish-card:hover,.companion-card.owned:hover,.inv-cell:hover,.craft-row:hover{background:linear-gradient(150deg,#f7e3b4,#e2c487)!important;border-color:#4e936b!important;transform:translateY(-1px)}
+.realm-menu-grid>button b,.craft-info h3,.shop-item-copy h3,.fish-card strong,.companion-card strong,.inv-cell .inv-name,.save-progress-card strong{color:var(--ui-ink)!important;text-shadow:1px 1px 0 rgba(255,237,179,.55)}
+.realm-menu-grid>button small,.craft-info p,.shop-item-copy p,.fish-card>small,.companion-card small,.save-progress-card p{color:#5d6d59!important}
+.realm-menu-grid>button em,.craft-badge,.menu-rune,.craft-rune{background:#387c5d!important;border:2px solid #315d46!important;color:#f4e2a1!important;border-radius:0!important}
+.craft-group-title,.craft-step,.collection-summary>div:nth-child(2)>span{color:#6d422d!important}
+.fish-card-art,.companion-hero-art,.inv-weapon-frame{background:rgba(90,152,107,.12)!important;border-color:#8e6b46!important}
+.fish-card dl>div,.collection-summary dl>div{background:rgba(151,105,61,.18)!important;border:1px solid rgba(111,70,44,.34)!important}
+.fish-card dt,.collection-summary dt{color:#6c6d52!important}.fish-card dd,.collection-summary dd{color:#354b3b!important}
+.inv-cell.weapon-card{background:linear-gradient(150deg,#e3c88d,#caa66b)!important;border-color:#79503a!important}
+.inv-cell.weapon-card .inv-weapon-stat{color:#466b51!important}
+.inv-cell.weapon-card.equipped,.inv-cell.weapon-card.rare-weapon{border-color:#b17a35!important;box-shadow:inset 0 0 0 2px rgba(241,205,106,.42),0 3px 0 #6d4937!important}
+.inv-cell.weapon-card .inv-weapon-frame{background:rgba(49,101,73,.15)!important}
+
+/* Buttons read as green carved tabs, including small action controls. */
+.panel:not(.level-ceremony):not(.death-panel) .pixel-btn,
+.panel:not(.level-ceremony):not(.death-panel) .craft-btn,
+.panel:not(.level-ceremony):not(.death-panel) .craft-equip,
+.panel:not(.level-ceremony):not(.death-panel) .q-btn,
+.panel:not(.level-ceremony):not(.death-panel) .trade-one,
+.panel:not(.level-ceremony):not(.death-panel) .trade-five,
+.panel:not(.level-ceremony):not(.death-panel) .shop-tab,
+.panel:not(.level-ceremony):not(.death-panel) .eat-button,
+.panel:not(.level-ceremony):not(.death-panel) .chat-compose button,
+.panel:not(.level-ceremony):not(.death-panel) .fishing-mode-grid>button{
+  border:2px solid #2d674a!important;
+  border-bottom:4px solid #214a37!important;
+  border-radius:0!important;
+  background:linear-gradient(180deg,#69c487,#489f6e)!important;
+  color:#102d22!important;
+  text-shadow:1px 1px 0 rgba(195,241,165,.45);
+  box-shadow:inset 0 2px 0 rgba(226,255,194,.42),0 3px 0 #65432f!important;
+}
+.panel:not(.level-ceremony):not(.death-panel) button:active{transform:translateY(2px)}
+
+/* HUD stays compact and dark enough to preserve contrast over the forest,
+   but uses the same wood edge and square pixel corners as the panels. */
+#status-card,#minimap-wrap,#chat-dock,#arrival-banner,#fishing-hud,#catch-card,#auto-battle-chip{
+  border-radius:0!important;
+  border-color:#8d5b3e!important;
+  box-shadow:0 4px 0 #4c332c,0 14px 28px rgba(0,0,0,.34)!important;
+}
+#status-card,#chat-dock,#arrival-banner,#auto-battle-chip{background:linear-gradient(150deg,#204d3e,#14362f)!important}
+#minimap-wrap{background:#6e4934!important;border:3px solid #be8d54!important;padding:4px}
+#skillbar{border-radius:0!important;border:3px solid #704833!important;background:linear-gradient(180deg,#754b36,#4d332d)!important;box-shadow:0 5px 0 #2f2525,0 15px 30px rgba(0,0,0,.4)!important}
+.sk{border-radius:0!important;border:2px solid #bc8954!important;background:linear-gradient(150deg,#ecd39b,#c89f66)!important;color:var(--ui-ink)!important;box-shadow:inset 0 2px 0 #fff0bb,0 2px 0 #3e2a29!important}
+.sk-name,.sk-key{color:#2b4335!important;text-shadow:1px 1px 0 #f7df9f}.sk-key{border-color:#6c4934!important}
+#chat-dock{border-width:3px!important}.chat-dock-copy strong{color:#f1d891!important}.chat-dock-copy small{color:#a8d5a4!important}
+
+@media(max-width:760px){
+  .menu-logo{width:min(270px,90%);max-height:78px;margin:-2px auto 7px}
+  .panel:not(.level-ceremony):not(.death-panel)>.panel-head{padding:9px 11px!important;min-height:44px}
+  .panel:not(.level-ceremony):not(.death-panel) .panel-head h2{font-size:1.12rem}
+  #skillbar{border-width:2px!important}
+  .sk{width:46px;height:46px}
+}
+
