@@ -312,7 +312,7 @@ function openWardrobe() {
   creator.classList.remove("hidden");
   initCreator();
   const progress = document.getElementById("menu-style-progress");
-  if (progress) progress.textContent = `${game.cosmeticsOwned.length} Style Echoes unlocked`;
+  if (progress) progress.textContent = `${game.cosmeticsOwned.length} Style Echo${game.cosmeticsOwned.length === 1 ? "" : "es"} unlocked`;
 }
 
 document.getElementById("btn-open-wardrobe")?.addEventListener("click", openWardrobe);
