@@ -253,7 +253,7 @@
     <nav class="realm-menu-grid" aria-label="Realm features">
       <button type="button" data-open-panel="inv"><i class="menu-rune bag"></i><span><b>Inventory</b><small>Gear &amp; materials</small></span><em>I</em></button>
       <button type="button" data-open-panel="shop"><i class="menu-rune shop"></i><span><b>Trail Market</b><small>Buy supplies &amp; sell loot</small></span><em>B</em></button>
-      <button type="button" data-open-panel="gacha"><i class="menu-rune gacha"></i><span><b>Relic Constellation</b><small>5 free pulls · onchain arsenal</small></span><em>G</em></button>
+      <button type="button" data-open-panel="gacha"><i class="menu-rune gacha"></i><span><b>Relic Constellation</b><small>5 free pulls · guest or onchain</small></span><em>G</em></button>
       <button type="button" data-open-panel="craft"><i class="menu-rune forge"></i><span><b>Forge</b><small>Craft your arsenal</small></span><em>C</em></button>
       <button type="button" data-open-panel="cooking"><i class="menu-rune cooking"></i><span><b>Hearth Kitchen</b><small id="menu-cooking-state">12 camp recipes</small></span><em>K</em></button>
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
@@ -281,18 +281,18 @@
     <div id="fish-collection-grid" class="fish-collection-grid"></div>
   </div>
   <div id="panel-gacha" class="panel panel-wide gacha-panel hidden" role="dialog" aria-modal="true" aria-labelledby="gacha-title">
-    <div class="panel-head"><div><span class="panel-kicker">ONCHAIN RELIC SUMMON</span><h2 id="gacha-title">Relic Constellation</h2></div><button class="panel-close" data-close="gacha" aria-label="Close gacha">&times;</button></div>
-    <section class="gacha-hero"><div class="gacha-orbit" aria-hidden="true"><i></i><i></i><b>✦</b></div><div><span>ANASTA ARMORY</span><strong>Call a weapon from beyond the veil.</strong><p>Every pull is recorded by your Ritual wallet. New profiles receive five free calls.</p><button id="gacha-connect" type="button">CONNECT RITUAL WALLET</button></div><dl><div><dt>Wallet</dt><dd id="gacha-wallet-state">NOT LINKED</dd></div><div><dt>Free calls</dt><dd id="gacha-free-count">—</dd></div><div><dt>Gold</dt><dd id="gacha-gold-count">0 G</dd></div></dl></section>
+    <div class="panel-head"><div><span class="panel-kicker">RELIC SUMMONING ALTAR</span><h2 id="gacha-title">Relic Constellation</h2></div><button class="panel-close" data-close="gacha" aria-label="Close gacha">&times;</button></div>
+    <section class="gacha-hero"><div class="gacha-orbit" aria-hidden="true"><i></i><i></i><b>✦</b></div><div><span>ANASTA ARMORY</span><strong>Call a weapon from beyond the veil.</strong><p>Guests summon locally with free calls or gold. Connect Ritual only when you want wallet-owned relics.</p><button id="gacha-connect" type="button">CONNECT FOR ONCHAIN RELICS</button></div><dl><div><dt>Mode</dt><dd id="gacha-wallet-state">GUEST LOCAL</dd></div><div><dt>Free calls</dt><dd id="gacha-free-count">5 / 5</dd></div><div><dt>Gold</dt><dd id="gacha-gold-count">0 G</dd></div></dl></section>
     <div id="gacha-reveal" class="gacha-reveal empty"><span>THE CONSTELLATION IS QUIET</span><p>Your summoned relics will materialize here.</p></div>
     <div class="gacha-actions">
       <button type="button" data-gacha-kind="free" data-gacha-count="1"><small>STARTER CALL</small><b>FREE 1×</b><span>Uses one free pull</span></button>
-      <button type="button" data-gacha-kind="gold" data-gacha-count="1"><small>FIELD OFFERING</small><b>500 GOLD · 1×</b><span>+ 0.00067 RIT tx</span></button>
-      <button type="button" data-gacha-kind="gold" data-gacha-count="10"><small>TENFOLD OFFERING</small><b>5,000 GOLD · 10×</b><span>+ 0.00067 RIT tx</span></button>
+      <button type="button" data-gacha-kind="gold" data-gacha-count="1"><small>FIELD OFFERING</small><b>500 GOLD · 1×</b><span class="gacha-gold-rule">No wallet needed for guests</span></button>
+      <button type="button" data-gacha-kind="gold" data-gacha-count="10"><small>TENFOLD OFFERING</small><b>5,000 GOLD · 10×</b><span class="gacha-gold-rule">No wallet needed for guests</span></button>
       <button type="button" data-gacha-kind="ritual" data-gacha-count="1"><small>RITUAL OFFERING</small><b>0.005 RIT · 1×</b><span>Sent to the Chronicle treasury</span></button>
       <button type="button" data-gacha-kind="ritual" data-gacha-count="10"><small>TENFOLD RITUAL</small><b>0.05 RIT · 10×</b><span>Ten relics, one confirmation</span></button>
     </div>
     <div class="gacha-rarity-strip"><span class="common">COMMON</span><span class="uncommon">UNCOMMON</span><span class="rare">RARE</span><span class="epic">EPIC</span><span class="ultra_rare">ULTRA RARE</span><span class="legendary">LEGENDARY</span><span class="mythical">MYTHICAL</span><span class="mythical_radiant">MYTHICAL RADIANT</span></div>
-    <p class="gacha-chain-note">Ritual Testnet · Contract V3 required · wallet confirmation prevents invisible pulls.</p>
+    <p id="gacha-mode-note" class="gacha-chain-note">Guest relics save locally. Connect Ritual for persistent onchain ownership.</p>
   </div>
   <div id="panel-inv" class="panel hidden"><div class="panel-head"><h2>Inventory</h2><button class="panel-close" data-close="inv">×</button></div><div id="inv-grid"></div><div class="panel-foot"><span>Gold <b id="gold-text">0</b></span><span>Weapon <b id="eq-text">—</b></span></div></div>
   <div id="panel-shop" class="panel panel-wide market-panel hidden" role="dialog" aria-modal="true" aria-labelledby="market-title">

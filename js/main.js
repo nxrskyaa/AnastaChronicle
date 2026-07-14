@@ -26,7 +26,7 @@ import {
   readV3Save, saveProgressOnchain, v3Configured,
   readOwnedWeapons, readLastPull, pullGachaFree, pullGachaGold, pullGachaRitual,
 } from "./wallet.js";
-import { GACHA_BY_ITEM_ID } from "./gacha.js";
+import { drawGuestGacha, GACHA_BY_ITEM_ID } from "./gacha.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -553,10 +553,26 @@ function startGame(savedLook, savedName, saveData) {
       return { local: true, onchain: true, savedAt, hash: transaction.hash };
     };
     game.requestGacha = async (kind, count) => {
-      if (!walletState.connected) throw new Error("Connect your Ritual wallet before summoning relics.");
-      if (!v3Configured) throw new Error("Deploy Anasta V3, then set GAME_V3_CONTRACT_ADDRESS in js/config.js.");
-      if (!(await ensureOnchainProfile(game, ui))) throw new Error("Ritual profile is not ready.");
       const pulls = count === 10 ? 10 : 1;
+      if (!walletState.connected) {
+        if (kind === "ritual") throw new Error("Connect a Ritual wallet to use RITUAL offerings.");
+        if (kind === "free") {
+          const remaining = Math.max(0, Number(game.flags.guestGachaFreePulls) || 0);
+          if (remaining < pulls) throw new Error(`Only ${remaining} guest free pull${remaining === 1 ? " remains" : "s remain"}.`);
+          game.flags.guestGachaFreePulls = remaining - pulls;
+        } else {
+          const price = pulls * 500;
+          if (game.player.gold < price) throw new Error(`Need ${price.toLocaleString()} gold for this summon.`);
+          game.player.gold -= price;
+        }
+        const weapons = drawGuestGacha(pulls).filter(Boolean);
+        for (const weapon of weapons) game.player.inv[weapon.id] = (game.player.inv[weapon.id] || 0) + 1;
+        persist();
+        game.ui.sync?.();
+        return weapons;
+      }
+      if (!v3Configured) throw new Error("Anasta V3 contract is not configured.");
+      if (!(await ensureOnchainProfile(game, ui))) throw new Error("Ritual profile is not ready.");
       if (kind === "gold") {
         const price = pulls * 500;
         if (game.player.gold < price) throw new Error(`Need ${price.toLocaleString()} gold for this summon.`);
@@ -806,7 +822,7 @@ function buildWalletRecoverySave() {
     fishing: { total: 0, best: 0, records: {} },
     quests: null,
     afkFishing: null,
-    flags: { starterCache: false },
+    flags: { starterCache: false, guestGachaFreePulls: 5 },
     equipped: "fist",
     pets: [], activePetId: null, mountId: null, mounted: false,
     activeFoodBuffs: [], ts: Date.now(), wallet: walletState.address,

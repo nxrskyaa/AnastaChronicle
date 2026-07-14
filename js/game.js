@@ -49,7 +49,7 @@ export class Game {
     this.mounted = false;
     this.activeFoodBuffs = [];
     this.foodBuffTotals = { speed: 0, damage: 0, defense: 0, fishingLuck: 0 };
-    this.flags = { starterCache: false };
+    this.flags = { starterCache: false, guestGachaFreePulls: 5 };
     this.fishingStats = { total: 0, best: 0, records: {} };
     this.afkFishingJob = null;
     this.lastAfkFishingClaim = null;

@@ -11,7 +11,7 @@ import {
   COOKING_RECIPES, FOOD_ITEMS, canCook, knownRecipeIds,
   displayIngredientName, activeBuffTotals, normalizeActiveBuffs,
 } from "./cooking.js";
-import { GACHA_BY_ITEM_ID, RARITIES } from "./gacha.js";
+import { RARITIES } from "./gacha.js";
 import { readFreePulls, v3Configured, walletState } from "./wallet.js";
 
 const PET_COLORS = {
@@ -1077,15 +1077,26 @@ export class UI {
     const free = document.getElementById("gacha-free-count");
     const gold = document.getElementById("gacha-gold-count");
     const connect = document.getElementById("gacha-connect");
-    if (wallet) wallet.textContent = walletState.connected ? (v3Configured ? "RITUAL LINKED" : "V3 NOT DEPLOYED") : "NOT LINKED";
+    if (wallet) wallet.textContent = walletState.connected ? (v3Configured ? "RITUAL ONCHAIN" : "V3 NOT DEPLOYED") : "GUEST LOCAL";
     if (gold) gold.textContent = `${Math.max(0, this.game.player.gold || 0).toLocaleString()} G`;
     connect?.classList.toggle("linked", walletState.connected);
-    if (free) free.textContent = walletState.connected && v3Configured ? "READING…" : "—";
+    let availableFree = Math.max(0, Number(this.game.flags?.guestGachaFreePulls) || 0);
+    if (free) free.textContent = walletState.connected && v3Configured ? "READING…" : `${availableFree} / 5`;
     if (walletState.connected && v3Configured) {
-      try { if (free) free.textContent = `${await readFreePulls()} / 5`; }
-      catch { if (free) free.textContent = "SYNC FAILED"; }
+      try { availableFree = await readFreePulls(); if (free) free.textContent = `${availableFree} / 5`; }
+      catch { availableFree = 0; if (free) free.textContent = "SYNC FAILED"; }
     }
-    for (const button of document.querySelectorAll("[data-gacha-kind]")) button.disabled = this._gachaBusy || !walletState.connected || !v3Configured;
+    const modeNote = document.getElementById("gacha-mode-note");
+    if (modeNote) modeNote.textContent = walletState.connected
+      ? "Onchain mode · free and gold pulls require confirmation; RITUAL offerings go directly to the Chronicle treasury."
+      : "Guest mode · five free pulls and gold summons save locally on this device.";
+    document.querySelectorAll(".gacha-gold-rule").forEach((label) => { label.textContent = walletState.connected ? "+ 0.00067 RIT tx" : "Local pull · no wallet needed"; });
+    for (const button of document.querySelectorAll("[data-gacha-kind]")) {
+      const kind = button.dataset.gachaKind;
+      const count = Number(button.dataset.gachaCount) || 1;
+      const needsWallet = kind === "ritual";
+      button.disabled = !!this._gachaBusy || (needsWallet && (!walletState.connected || !v3Configured)) || (kind === "free" && availableFree < count);
+    }
   }
 
   async summonGacha(button) {
@@ -1093,14 +1104,20 @@ export class UI {
     const kind = button.dataset.gachaKind;
     const count = Number(button.dataset.gachaCount) || 1;
     this._gachaBusy = true;
-    document.getElementById("panel-gacha")?.classList.add("summoning");
+    const panel = document.getElementById("panel-gacha");
+    panel?.classList.add("summoning");
+    this.prepareGachaRitual(kind, count);
     await this.renderGacha();
     try {
-      this.toast("Constellation opening · confirm the Ritual action…");
+      this.toast(walletState.connected ? "Constellation charged · confirm the Ritual action…" : "Constellation charged · opening local guest summon…");
       const weapons = await this.game.requestGacha(kind, count);
-      this.revealGacha(weapons);
+      await this.revealGacha(weapons);
       this.toast(`${weapons.length} relic${weapons.length === 1 ? "" : "s"} entered your inventory.`);
-    } catch (error) { this.toast(error?.message || "The constellation rejected this summon."); }
+    } catch (error) {
+      const reveal = document.getElementById("gacha-reveal");
+      if (reveal) { reveal.className = "gacha-reveal empty failed"; reveal.innerHTML = "<span>THE OFFERING RETURNED</span><p>No currency or free pull was consumed if the transaction failed.</p>"; }
+      this.toast(error?.message || "The constellation rejected this summon.");
+    }
     finally {
       this._gachaBusy = false;
       document.getElementById("panel-gacha")?.classList.remove("summoning");
@@ -1108,21 +1125,42 @@ export class UI {
     }
   }
 
-  revealGacha(weapons) {
+  prepareGachaRitual(kind, count) {
     const reveal = document.getElementById("gacha-reveal"); if (!reveal) return;
-    reveal.className = "gacha-reveal";
+    reveal.className = "gacha-reveal ritual-stage charging";
+    reveal.innerHTML = `<div class="gacha-cinematic"><div class="gacha-portal"><i></i><i></i><i></i><b>✦</b></div><div class="gacha-runes"><i>火</i><i>水</i><i>風</i><i>光</i><i>影</i><i>星</i></div><div class="gacha-charge-copy"><small>${kind === "ritual" ? "RITUAL OFFERING" : kind === "gold" ? "GOLD OFFERING" : "STARTER BLESSING"}</small><strong>CONSTELLATION ALIGNING</strong><span>${count} RELIC${count === 1 ? "" : "S"} CALLED</span></div><div class="gacha-shards">${"<i></i>".repeat(10)}</div></div>`;
+    this.audio?.sfx("gachaCharge");
+  }
+
+  async revealGacha(weapons) {
+    const reveal = document.getElementById("gacha-reveal"); if (!reveal) return;
+    const reduced = matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const highest = Math.max(0, ...weapons.map((weapon) => weapon.rarityIndex || 0));
+    const rarity = RARITIES[highest] || RARITIES[0];
+    reveal.style.setProperty("--reveal", rarity.color);
+    reveal.style.setProperty("--reveal-glow", rarity.glow);
+    reveal.classList.remove("charging");
+    reveal.classList.add("opening", rarity.id);
+    this.audio?.sfx("gachaBurst");
+    await new Promise((resolve) => setTimeout(resolve, reduced ? 70 : 720));
+    reveal.className = `gacha-reveal results ${rarity.id}`;
     reveal.innerHTML = "";
-    for (const weapon of weapons) {
+    for (let index = 0; index < weapons.length; index++) {
+      const weapon = weapons[index];
       const card = document.createElement("article");
       card.className = `gacha-card ${weapon.rarity}`;
       card.style.setProperty("--relic", weapon.color); card.style.setProperty("--relic-glow", weapon.glow);
+      card.style.setProperty("--reveal-delay", `${reduced ? 0 : index * (weapons.length > 1 ? 85 : 140)}ms`);
       const canvas = document.createElement("canvas"); canvas.width = 80; canvas.height = 80;
       const ctx = canvas.getContext("2d"), frame = this.game.weaponFrames?.(weapon.id)?.walk?.down;
       if (ctx && frame) { ctx.imageSmoothingEnabled = false; ctx.drawImage(frame, 0, 0, frame.width, frame.height, 0, 0, 80, 80); }
       const rarity = RARITIES[weapon.rarityIndex]?.name || "Relic";
       const copy = document.createElement("div"); copy.innerHTML = `<small>${rarity}</small><strong>${weapon.name}</strong><span>DMG ${weapon.dmg} · RNG ${weapon.range}</span>`;
       card.append(canvas, copy); reveal.appendChild(card);
+      if (!reduced) setTimeout(() => this.audio?.sfx("gachaTick"), index * (weapons.length > 1 ? 85 : 140));
     }
+    await new Promise((resolve) => setTimeout(resolve, reduced ? 30 : 220 + weapons.length * (weapons.length > 1 ? 85 : 140)));
+    this.audio?.sfx(highest >= 5 ? "gachaRare" : "chest");
   }
 
   renderInv() {

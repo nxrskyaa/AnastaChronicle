@@ -65,6 +65,19 @@ class Audio {
       case "dash": this.noise(0.12, 0.22, 900); break;
       case "step": this.noise(0.03, 0.06, 1500); break;
       case "coin": this.blip(988, 0.06, "square", 0.2, 1319); break;
+      case "gachaCharge":
+        [196, 247, 330, 494, 659].forEach((f, i) => setTimeout(() => this.blip(f, .18 + i * .025, i < 2 ? "sine" : "triangle", .16 + i * .025, f * 1.18), i * 105));
+        setTimeout(() => this.noise(.42, .08, 1800), 170);
+        break;
+      case "gachaBurst":
+        this.noise(.34, .28, 620);
+        [262, 523, 784, 1047].forEach((f, i) => setTimeout(() => this.blip(f, .34, i % 2 ? "triangle" : "square", .2 + i * .025, f * 1.08), i * 38));
+        break;
+      case "gachaTick": this.blip(880, .07, "triangle", .16, 1175); break;
+      case "gachaRare":
+        [392, 523, 659, 988, 1319].forEach((f, i) => setTimeout(() => this.blip(f, .3, "triangle", .2 + i * .018, f * 1.04), i * 72));
+        setTimeout(() => this.noise(.24, .16, 1500), 90);
+        break;
     }
   }
 

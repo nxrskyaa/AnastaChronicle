@@ -42,3 +42,29 @@ export const GACHA_WEAPONS = Object.freeze(Object.fromEntries(rows.map(([id, nam
 export const GACHA_BY_ITEM_ID = Object.freeze(Object.fromEntries(Object.values(GACHA_WEAPONS).map((weapon) => [weapon.itemId, weapon])));
 export const gachaWeapon = (id) => GACHA_WEAPONS[id] || null;
 
+const RARITY_CUTOFFS = Object.freeze([15, 80, 250, 600, 1300, 2500, 5000]);
+function secureRoll(max) {
+  const values = new Uint32Array(1);
+  globalThis.crypto?.getRandomValues?.(values);
+  const value = values[0] || Math.floor(Math.random() * 0xffffffff);
+  return value % max;
+}
+
+// Guest draws mirror the V3 contract's testnet rarity table. They remain local
+// inventory items and never pretend to be onchain ownership.
+export function drawGuestGacha(count = 1) {
+  const pulls = count === 10 ? 10 : 1;
+  return Array.from({ length: pulls }, () => {
+    const roll = secureRoll(10_000);
+    let rarityIndex = 0;
+    if (roll < RARITY_CUTOFFS[0]) rarityIndex = 7;
+    else if (roll < RARITY_CUTOFFS[1]) rarityIndex = 6;
+    else if (roll < RARITY_CUTOFFS[2]) rarityIndex = 5;
+    else if (roll < RARITY_CUTOFFS[3]) rarityIndex = 4;
+    else if (roll < RARITY_CUTOFFS[4]) rarityIndex = 3;
+    else if (roll < RARITY_CUTOFFS[5]) rarityIndex = 2;
+    else if (roll < RARITY_CUTOFFS[6]) rarityIndex = 1;
+    const itemId = rarityIndex * 3 + secureRoll(3) + 1;
+    return GACHA_BY_ITEM_ID[itemId];
+  });
+}
