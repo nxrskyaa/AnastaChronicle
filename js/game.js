@@ -60,6 +60,8 @@ export class Game {
     this.autoBattleScanT = 0;
     this.autoBattleSkillT = 0;
     this.inputSuspendUntil = 0;
+    this.running = false;
+    this.raf = null;
     this.catchReveal = null;
     this.time = 6 * 60;
     this.weather = "clear";     // clear | rain | snow
@@ -679,12 +681,15 @@ export class Game {
   }
 
   start() {
+    if (this.running) return;
+    this.running = true;
     let last = performance.now();
     const loop = (now) => {
+      if (!this.running) return;
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
       if (document.hidden) {
         this.suspendInput(250);
-        requestAnimationFrame(loop);
+        this.raf = requestAnimationFrame(loop);
         return;
       }
       if (now < (this.inputSuspendUntil || 0)) this.resetInputState();
@@ -697,8 +702,15 @@ export class Game {
       }
       if (net.connected) sendMove(this.player, now, { mounted: this.mounted, mountId: this.mountId });
       this.render();
-      requestAnimationFrame(loop);
+      this.raf = requestAnimationFrame(loop);
     };
-    requestAnimationFrame(loop);
+    this.raf = requestAnimationFrame(loop);
+  }
+
+  stop() {
+    this.running = false;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = null;
+    this.resetInputState();
   }
 }

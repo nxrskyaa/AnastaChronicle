@@ -39,7 +39,7 @@
   <canvas id="login-fx"></canvas>
   <div class="login-shell">
     <section class="realm-showcase">
-      <span class="realm-eyebrow">THE FOREST REMEMBERS</span>
+      <span class="realm-eyebrow">ANASTA CHRONICLE / REALM GATE</span>
       <h1>Enter the<br/>Verdant Wilds.</h1>
       <p>A shared pixel realm of forged weapons, wild companions, and trails that keep moving.</p>
       <div class="login-hero-art" aria-hidden="true"><div class="hero-mist"></div><div class="hero-torii"><i></i><b></b><span></span></div><div class="hero-lantern l1"></div><div class="hero-lantern l2"></div><i class="hero-firefly f1"></i><i class="hero-firefly f2"></i><i class="hero-firefly f3"></i></div>
@@ -61,21 +61,24 @@
       </section>
       <div id="guest-access" class="access-panel hidden">
         <button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button>
+        <div class="access-heading"><span class="access-kicker">LOCAL PASSPORT</span><h3>Continue your trail</h3><p>This device keeps one safe checkpoint for your guest traveler.</p></div>
         <label class="login-input-wrap"><span>TRAVELER NAME</span><input id="login-name" type="text" maxlength="14" placeholder="Your name..." autocomplete="off" /></label>
         <div id="login-existing" class="login-existing hidden"><span class="save-rune" aria-hidden="true"></span><div><p class="login-return">CHRONICLE FOUND &middot; <b id="login-return-name"></b></p><p class="login-stats" id="login-return-stats"></p></div><button id="btn-continue" class="pixel-btn">CONTINUE <span>&rsaquo;</span></button></div>
+        <p id="login-recovery-error" class="login-recovery-error hidden" role="alert"></p>
         <button id="btn-newgame" class="pixel-btn login-new">CREATE NEW TRAVELER <span>&rsaquo;</span></button>
         <div class="login-divider"><span>QUICK NAMES</span></div><div class="login-quick"><button class="quick-btn" data-name="Akira">Akira</button><button class="quick-btn" data-name="Yuki">Yuki</button><button class="quick-btn" data-name="Hana">Hana</button><button class="quick-btn" data-name="Kai">Kai</button></div>
         <p class="login-note"><i></i> Guest progress auto-saves on this device.</p>
       </div>
       <div id="wallet-access" class="access-panel hidden">
         <button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button>
+        <div class="access-heading"><span class="access-kicker">RITUAL PASSPORT</span><h3>Bring your chronicle</h3><p>Your wallet address is the identity. Checkpoints stay recoverable across devices.</p></div>
         <div class="wallet-status-card"><span class="wallet-status-dot"></span><div><b id="wallet-status-title">WALLET PASSPORT</b><small id="wallet-status-text">Connect an EVM wallet to reserve your Ritual identity.</small></div></div><button id="btn-wallet-sync" type="button" class="access-sync hidden">SYNC RITUAL PROFILE</button>
         <div id="wallet-profile-actions" class="wallet-profile-actions hidden"><button id="btn-wallet-continue" class="pixel-btn login-new">CONTINUE PROFILE <span>&rsaquo;</span></button><button id="btn-wallet-new" class="pixel-btn login-new wallet-secondary">CREATE NEW PROFILE <span>&rsaquo;</span></button><button id="btn-wallet-delete" class="access-danger">DELETE PROFILE</button><small id="wallet-action-note" class="wallet-action-note">On-chain deletion asks for one Ritual wallet confirmation.</small></div>
         <button id="btn-wallet-connect-now" class="pixel-btn login-new">CONNECT RITUAL WALLET <span>&rsaquo;</span></button>
         <div class="onchain-policy"><span>LEVEL PROOF MODE</span><div><button type="button" data-level-policy="milestone">MILESTONES</button><button type="button" data-level-policy="every">EVERY LEVEL</button></div><small id="onchain-policy-note">Choose when the game should submit a paid level proof.</small></div>
         <p class="login-note"><i></i> Wallet identity and Ritual profile sync are active. Level proofs use the policy above.</p>
       </div>
-      <section id="about-panel" class="about-panel hidden"><button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button><span class="about-kicker">ABOUT THE CHRONICLE</span><h3>Built by a small crew<br/>with a big forest.</h3><div class="credit-list"><div><b>Nxrskyaa</b><span>Builder</span></div><div><b>Baster</b><span>Community Team</span></div></div><p>Every sprite, trail, creature and texture is generated from code so the realm can keep evolving without losing its pixel-art soul.</p></section>
+      <section id="about-panel" class="about-panel hidden"><button type="button" class="access-back" data-main-menu>&lsaquo; MAIN MENU</button><div class="access-heading"><span class="access-kicker">ABOUT THE CHRONICLE</span><h3>Built by a small crew<br/>with a big forest.</h3></div><div class="credit-list"><div><b>Nxrskyaa</b><span>Builder</span></div><div><b>Baster</b><span>Community Team</span></div></div><p>Every sprite, trail, creature and texture is generated from code so the realm can keep evolving without losing its pixel-art soul.</p></section>
     </section>
   </div>
 </div>

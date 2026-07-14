@@ -164,7 +164,9 @@ export function disconnectWallet() { walletState.address = ""; walletState.chain
 async function contractCall(data, target = PROFILE_CONTRACT_ADDRESS) {
   if (!/^0x[a-fA-F0-9]{40}$/.test(target)) throw new Error("Contract address is not configured.");
   const provider = walletState.provider || getProvider();
-  return provider.request({ method: "eth_call", params: [{ to: target, data: hexData(data) }, "latest"] });
+  const request = provider.request({ method: "eth_call", params: [{ to: target, data: hexData(data) }, "latest"] });
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Ritual profile read timed out.")), 12000));
+  return Promise.race([request, timeout]);
 }
 async function waitForTransaction(hash, timeoutMs = 120000) {
   const provider = walletState.provider || getProvider();

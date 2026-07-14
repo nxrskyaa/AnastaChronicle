@@ -698,7 +698,16 @@ function startGame(savedLook, savedName, saveData) {
     return true;
   } catch (e) {
     console.error("Chronicle start failed", e);
+    // A partially-created Game used to keep its RAF alive after a failed
+    // resume. That left the menu hidden while an orphan loop kept touching
+    // the old canvas. Stop it and clear the global reference before showing
+    // the recovery state.
+    game?.stop?.();
+    game = null;
+    window.__ANASTA__ = null;
+    creator.classList.add("hidden");
     document.getElementById("game-wrap")?.classList.add("hidden");
+    if (!saveData) showLogin();
     return false;
   }
 }
@@ -712,6 +721,7 @@ const loginReturnStats = document.getElementById("login-return-stats");
 const btnContinue = document.getElementById("btn-continue");
 const btnNewGame = document.getElementById("btn-newgame");
 const SAVE_KEY = "anasta_save";
+const SAVE_BACKUP_KEY = "anasta_save_backup";
 let saveMode = "guest";
 
 function normalizeSaveData(raw) {
@@ -742,8 +752,37 @@ function normalizeSaveData(raw) {
   return safe;
 }
 
-function getSave() { try { return normalizeSaveData(JSON.parse(localStorage.getItem(SAVE_KEY))); } catch { return null; } }
-function putSave(data) { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
+function parseStoredSave(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? normalizeSaveData(JSON.parse(raw)) : null;
+  } catch { return null; }
+}
+
+function getSave() {
+  // Prefer the newest checkpoint, then recover from the last known-good copy.
+  // This keeps a malformed write (or an interrupted mobile storage write)
+  // from turning Continue into a dead button.
+  return parseStoredSave(SAVE_KEY) || parseStoredSave(SAVE_BACKUP_KEY);
+}
+
+function putSave(data) {
+  const safe = normalizeSaveData(data);
+  if (!safe) return false;
+  try {
+    const next = JSON.stringify(safe);
+    const previous = parseStoredSave(SAVE_KEY);
+    if (previous) {
+      const previousJson = JSON.stringify(previous);
+      if (previousJson !== next) localStorage.setItem(SAVE_BACKUP_KEY, previousJson);
+    }
+    localStorage.setItem(SAVE_KEY, next);
+    return true;
+  } catch (error) {
+    console.warn("Guest checkpoint could not be written", error);
+    return false;
+  }
+}
 
 const mainMenuChoices = document.getElementById("main-menu-choices");
 const guestAccess = document.getElementById("guest-access");
@@ -940,6 +979,10 @@ function buildWalletRecoverySave() {
 function startLoginFx() {
   const c = document.getElementById("login-fx");
   if (!c) return;
+  // showLogin() can be reached repeatedly from the access panels. Never let
+  // an old particle RAF survive into the next visit.
+  if (loginScreen._raf) cancelAnimationFrame(loginScreen._raf);
+  loginScreen._raf = null;
   const ctx = c.getContext("2d");
   const resize = () => { c.width = window.innerWidth; c.height = window.innerHeight; };
   resize();
@@ -951,6 +994,10 @@ function startLoginFx() {
   for (let i = 0; i < 40; i++) ps.push({ x: Math.random() * c.width, y: Math.random() * c.height, vy: -0.3 - Math.random() * 0.5, r: 1 + Math.random() * 2, ph: Math.random() * 7, hue: Math.random() < .6 ? 42 + Math.random() * 28 : 112 + Math.random() * 38 });
   let raf;
   (function loop() {
+    if (loginScreen.classList.contains("hidden")) {
+      loginScreen._raf = null;
+      return;
+    }
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.globalCompositeOperation = "lighter";
     for (const p of ps) {
@@ -986,6 +1033,7 @@ function showLogin() {
   } else {
     loginExisting.classList.add("hidden");
   }
+  document.getElementById("login-recovery-error")?.classList.add("hidden");
 }
 
 let resumeInFlight = false;
@@ -994,13 +1042,25 @@ async function enterGameWithSave(rawSave) {
   const save = normalizeSaveData(rawSave);
   if (!save) return;
   resumeInFlight = true;
+  // Rewrite migrated saves before booting the world. This also repairs saves
+  // loaded from the backup slot so the next Continue is deterministic.
+  putSave(save);
   if (loginScreen._raf) cancelAnimationFrame(loginScreen._raf);
+  loginScreen._raf = null;
   loginScreen.classList.add("hidden");
   const resume = document.getElementById("resume-loading");
   const resumeText = document.getElementById("resume-loading-text");
   resume?.classList.remove("hidden");
   if (resumeText) resumeText.textContent = `Preparing ${save.name} · Level ${save.stats.level}`;
-  await new Promise((resolve) => setTimeout(resolve, 48));
+  // Give the browser one paint so the user sees a real loading state instead
+  // of a frozen menu while procedural tiles/entities are constructed.
+  await new Promise((resolve) => {
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; resolve(); };
+    requestAnimationFrame(() => requestAnimationFrame(finish));
+    // Background tabs may pause RAF entirely. Keep the loader finite there.
+    setTimeout(finish, 180);
+  });
   const started = startGame(save.look, save.name, save);
   resume?.classList.add("hidden");
   resumeInFlight = false;
@@ -1008,12 +1068,19 @@ async function enterGameWithSave(rawSave) {
     game = null;
     loginScreen.classList.remove("hidden");
     setLoginMode("guest");
-    if (resumeText) resumeText.textContent = "Save recovery failed · returned safely to menu";
+    const message = "Save recovery failed · your checkpoint is safe; try again or create a new traveler";
+    if (resumeText) resumeText.textContent = message;
+    const recoveryError = document.getElementById("login-recovery-error");
+    if (recoveryError) {
+      recoveryError.textContent = message;
+      recoveryError.classList.remove("hidden");
+    }
   }
 }
 
 function enterNewGame(name) {
   if (loginScreen._raf) cancelAnimationFrame(loginScreen._raf);
+  loginScreen._raf = null;
   loginScreen.classList.add("hidden");
   creator.classList.remove("hidden");
   initCreator();
@@ -1024,9 +1091,17 @@ function enterNewGame(name) {
 }
 
 btnContinue.addEventListener("click", () => {
+  if (resumeInFlight) return;
   saveMode = "guest";
   const save = getSave();
   if (save) enterGameWithSave(save);
+  else {
+    const recoveryError = document.getElementById("login-recovery-error");
+    if (recoveryError) {
+      recoveryError.textContent = "No readable checkpoint found on this device. Create a new traveler or reconnect the wallet.";
+      recoveryError.classList.remove("hidden");
+    }
+  }
 });
 
 btnNewGame.addEventListener("click", () => {
