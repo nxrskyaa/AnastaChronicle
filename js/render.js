@@ -649,6 +649,15 @@ Game.prototype.render = function () {
         ctx.translate(sx, sy + mountBob + 2); ctx.scale(scaleX, scaleY);
         ctx.drawImage(mountSprite, -mountSprite.width / 2, -mountSprite.height);
         ctx.restore();
+        // A small animated tack sigil makes the active mount feel equipped,
+        // not like a second sprite accidentally placed under the traveler.
+        ctx.save();
+        ctx.globalAlpha = .78;
+        ctx.fillStyle = palette[1] || "#d9c56b";
+        const tackPulse = Math.sin(this.t * 5.5) * .7;
+        ctx.fillRect(sx - 2, sy - 25 + mountBob + tackPulse, 4, 2);
+        ctx.fillRect(sx - 4, sy - 24 + mountBob + tackPulse, 8, 1);
+        ctx.restore();
         // Code-drawn saddle and harness make the relationship read as riding,
         // rather than a companion sprite accidentally overlapping the hero.
         ctx.fillStyle = "#2a2424"; ctx.fillRect(sx - 9, sy - 22 + mountBob, 18, 4);

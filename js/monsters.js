@@ -298,22 +298,26 @@ const SPECIES = {
     P(ctx, 28, 30 + b, 4, 5 + step, shadeBody); P(ctx, 34, 29 + b, 3, 5 - step, shadeBody);
     P(ctx, 31, 19 + b, 5, 2, shadeBody); E(ctx, 36, 18 + b + step, 2.5, 2, "#72ad65");
   },
-  // Puffalo — cloud-wool meadow grazer and gentle caravan mount
+  // Puffalo — cloud-wool meadow grazer and gentle caravan mount.  The saddle
+  // blanket and teal face mask give the starter a strong silhouette at the
+  // player's scale instead of reading as a pile of pale circles.
   puffalo: (ctx, f) => {
-    const b = [0, -1, 0, 1][f], puff = [0, 1, 0, -1][f];
+    const b = [0, -1, 0, 1][f], puff = [0, 1, 0, -1][f], step = [-1, 0, 1, 0][f];
     shadow(ctx, 20, 35, 17);
-    const wool = "#f2e8ca", warm = "#d7bb82", face = "#b87858", dark = "#66463d";
-    E(ctx, 20, 25 + b, 15, 8, warm);
-    for (const [x, y, r] of [[8,23,6],[14,20,6],[21,20,7],[28,21,6],[33,25,5],[15,27,7],[25,27,7]]) E(ctx, x, y + b, r, r * 0.7, wool);
-    E(ctx, 20, 17 + b + puff * 0.25, 8, 7, face);
-    ctx.strokeStyle = dark; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(11, 16 + b, 5, 2.7, 5.1); ctx.stroke(); ctx.beginPath(); ctx.arc(29, 16 + b, 5, 4.3, 6.6); ctx.stroke();
-    expressiveEyes(ctx, 17, 23, 17 + b, f, 0, dark);
-    E(ctx, 20, 21 + b, 2, 1.4, "#6d4a45");
-    E(ctx, 13, 20 + b, 1.6, 1.3, "#e9968d"); E(ctx, 27, 20 + b, 1.6, 1.3, "#e9968d");
-    P(ctx, 9, 30 + b, 5, 5 + puff, dark); P(ctx, 17, 31 + b, 5, 4 - puff, dark);
-    P(ctx, 27, 30 + b, 5, 5 + puff, dark);
-    // Meadow flower tucked into its wool.
-    E(ctx, 30, 17 + b, 2.2, 1.3, "#ef8ea6"); E(ctx, 33, 18 + b, 2.2, 1.3, "#ef8ea6"); E(ctx, 31.5, 19 + b, 1.6, 1.6, "#f5cb55");
+    const wool = "#f2e8ca", woolHi = "#fff6d9", warm = "#c89b66", face = "#a96b58", dark = "#503b3a", teal = "#398c80", gold = "#e4bf66";
+    E(ctx, 21, 25 + b, 15, 8.5, warm);
+    for (const [x, y, r] of [[8,23,6],[14,20,6],[21,19,7],[28,21,6],[34,25,5],[15,27,7],[25,28,7]]) E(ctx, x, y + b, r, r * .7, wool);
+    E(ctx, 22, 18 + b + puff * .25, 8, 7, face);
+    // floppy ears and a two-tone forelock
+    E(ctx, 14, 15 + b, 4, 2.3, dark); E(ctx, 29, 15 + b, 4, 2.3, dark);
+    P(ctx, 18, 11 + b - puff, 3, 6, woolHi); P(ctx, 21, 9 + b - puff, 3, 7, teal); P(ctx, 24, 11 + b - puff, 3, 5, woolHi);
+    expressiveEyes(ctx, 19, 25, 18 + b, f, 0, dark); E(ctx, 22, 22 + b, 2, 1.4, "#6b3f45");
+    E(ctx, 15, 21 + b, 1.6, 1.3, "#e9968d"); E(ctx, 29, 21 + b, 1.6, 1.3, "#e9968d");
+    // A real-looking travel blanket with gold tack and a bouncing bell.
+    P(ctx, 12, 24 + b, 18, 7, teal); P(ctx, 12, 24 + b, 18, 2, "#63c3a0");
+    P(ctx, 14, 29 + b, 14, 2, dark); P(ctx, 20, 24 + b, 2, 7, gold); P(ctx, 11, 25 + b, 2, 4, gold); P(ctx, 29, 25 + b, 2, 4, gold);
+    P(ctx, 10, 30 + b, 5, 5 + puff + step, dark); P(ctx, 18, 31 + b, 5, 4 - puff, dark); P(ctx, 28, 30 + b, 5, 5 + puff - step, dark);
+    P(ctx, 34, 25 + b, 4, 2, dark); E(ctx, 37, 23 + b + step, 2, 2, teal); E(ctx, 15, 18 + b, 1.2, 1.2, gold);
   },
   // Reedstrider — long-legged wind bird that opens paths through tall grass
   reedstrider: (ctx, f) => {

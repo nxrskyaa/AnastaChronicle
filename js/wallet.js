@@ -94,6 +94,16 @@ export function walletShortAddress(address) {
   const value = String(address || "");
   return value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
 }
+export function walletErrorMessage(error, fallback = "Wallet action could not be completed.") {
+  const code = Number(error?.code);
+  const message = String(error?.message || error || "");
+  if (/no evm wallet detected|install metamask|wallet returned an invalid address/i.test(message)) return "No compatible wallet is connected. Install or unlock MetaMask/Rabby first.";
+  if (code === 4001 || /user rejected|rejected|denied|cancelled|canceled/i.test(message)) return "Transaction cancelled in wallet.";
+  if (/insufficient funds|insufficient balance|gas required exceeds/i.test(message)) return "Not enough RIT for gas. Add testnet RIT and try again.";
+  if (/execution reverted|revert|inactive profile|profile is not active/i.test(message)) return "Ritual rejected this profile action. Sync the wallet and try again.";
+  if (/chain|network|rpc|disconnected|not found/i.test(message)) return "Ritual network is unavailable. Check the selected chain and retry.";
+  return fallback;
+}
 export function onWalletChange(callback) {
   if (typeof callback !== "function") return () => {};
   subscribers.add(callback); return () => subscribers.delete(callback);

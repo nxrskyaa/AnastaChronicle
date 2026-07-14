@@ -291,7 +291,10 @@ export class Game {
     // Keep the Ritual Hall in the player's first sightline. It is a real
     // village building (not a distant decorative prop), with a clear apron
     // around the footprint so its foundation cannot read as floating.
-    const ritualSite = [68, 53];
+    // Put the hall on a dry, level approach east of the pond.  The old
+    // anchor sat on the pond's beach radius, which made the foundation read
+    // as floating and hid the Ritual mark behind water FX on small screens.
+    const ritualSite = [72, 56];
     this.buildings.push({ type: "ritual_hall", x: ritualSite[0] * T, y: ritualSite[1] * T, sortY: ritualSite[1] * T + 8 });
     for (let yy = ritualSite[1] - 2; yy <= ritualSite[1] + 2; yy++) for (let xx = ritualSite[0] - 4; xx <= ritualSite[0] + 4; xx++) {
       const ii = yy * MAP_W + xx;

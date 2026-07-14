@@ -23,7 +23,7 @@ import {
   connectRitualWallet, walletShortAddress, walletState,
   getWalletSave, putWalletSave, clearWalletSave, contractConfigured,
   readOnchainProfile, registerOnchainProfile, deleteOnchainProfile,
-  recordOnchainLevel, hashSave,
+  recordOnchainLevel, hashSave, walletErrorMessage,
 } from "./wallet.js";
 
 const boot = document.getElementById("boot");
@@ -600,6 +600,7 @@ const walletStatusText = document.getElementById("wallet-status-text");
 const walletConnectNow = document.getElementById("btn-wallet-connect-now");
 const walletContinue = document.getElementById("btn-wallet-continue");
 const walletDelete = document.getElementById("btn-wallet-delete");
+const walletSync = document.getElementById("btn-wallet-sync");
 
 function syncLevelPolicyButtons() {
   document.querySelectorAll("[data-level-policy]").forEach((button) => {
@@ -641,7 +642,7 @@ async function ensureOnchainProfile(g, ui) {
     ui.toast("Ritual profile registered · level proofs enabled");
     return true;
   })().catch((error) => {
-    ui.toast(`Profile transaction cancelled · ${error?.message || "try again later"}`);
+    ui.toast(walletErrorMessage(error, "Profile transaction could not be completed."));
     return false;
   });
   return g._onchainProfilePromise;
@@ -660,7 +661,7 @@ async function submitLevelProof(g, ui, level) {
     walletContractProfile = { ...(walletContractProfile || {}), level, active: true, lastSaveHash: hashSave(payload) };
     ui.toast(`Level ${level} recorded on Ritual`);
   } catch (error) {
-    ui.toast(`Level proof skipped · ${error?.message || "transaction cancelled"}`);
+    ui.toast(`Level proof skipped · ${walletErrorMessage(error, "transaction cancelled")}`);
   }
 }
 
@@ -699,10 +700,12 @@ function renderServerPicker() {
 
 function refreshWalletPanel() {
   const save = walletState.address ? getWalletSave(walletState.address) : null;
+  const actionNote = document.getElementById("wallet-action-note");
   if (!walletState.connected) {
     if (walletStatusTitle) walletStatusTitle.textContent = "WALLET PASSPORT";
     if (walletStatusText) walletStatusText.textContent = "Connect an EVM wallet to reserve your Ritual identity.";
     walletActions?.classList.add("hidden");
+    walletSync?.classList.add("hidden");
     if (walletConnectNow) { walletConnectNow.classList.remove("hidden"); walletConnectNow.disabled = false; walletConnectNow.innerHTML = "CONNECT RITUAL WALLET <span>›</span>"; }
     return;
   }
@@ -713,9 +716,13 @@ function refreshWalletPanel() {
     ? (save ? `Ritual profile linked · Level ${walletContractProfile.level || save.stats?.level || 1}.` : `Onchain profile found · Level ${walletContractProfile.level || 1}; recover the level locally to continue.`)
     : (save ? `Local chronicle found · Level ${save.stats?.level || 1}.` : "Ritual network linked · no profile yet.");
   walletActions?.classList.toggle("hidden", false);
+  walletSync?.classList.remove("hidden");
   walletContinue?.classList.toggle("hidden", !save && !walletContractProfile?.active);
   if (walletContinue) walletContinue.innerHTML = save ? "CONTINUE PROFILE <span>›</span>" : "RECOVER LEVEL <span>›</span>";
   walletDelete?.classList.toggle("hidden", !save && !walletContractProfile?.active);
+  if (actionNote) actionNote.textContent = walletContractProfile?.active
+    ? "Deleting this Ritual profile needs one wallet confirmation."
+    : save ? "This clears the local save for the connected wallet." : "No profile is ready to delete.";
   const walletNew = document.getElementById("btn-wallet-new");
   walletNew?.classList.toggle("hidden", walletProfileReadError || !!walletContractProfile?.active);
   if (walletConnectNow) walletConnectNow.classList.add("hidden");
@@ -730,7 +737,7 @@ async function openWalletPanel() {
     refreshWalletPanel();
   } catch (error) {
     if (walletStatusTitle) walletStatusTitle.textContent = "WALLET NOT CONNECTED";
-    if (walletStatusText) walletStatusText.textContent = error?.message || "Wallet connection cancelled.";
+    if (walletStatusText) walletStatusText.textContent = walletErrorMessage(error, "Wallet connection cancelled.");
     walletConnectNow?.classList.remove("hidden");
   }
 }
@@ -771,7 +778,7 @@ function startLoginFx() {
     addEventListener("resize", () => { if (!loginScreen.classList.contains("hidden")) resize(); });
   }
   const ps = [];
-  for (let i = 0; i < 40; i++) ps.push({ x: Math.random() * c.width, y: Math.random() * c.height, vy: -0.3 - Math.random() * 0.5, r: 1 + Math.random() * 2, ph: Math.random() * 7, hue: 250 + Math.random() * 60 });
+  for (let i = 0; i < 40; i++) ps.push({ x: Math.random() * c.width, y: Math.random() * c.height, vy: -0.3 - Math.random() * 0.5, r: 1 + Math.random() * 2, ph: Math.random() * 7, hue: Math.random() < .6 ? 42 + Math.random() * 28 : 112 + Math.random() * 38 });
   let raf;
   (function loop() {
     ctx.clearRect(0, 0, c.width, c.height);
@@ -881,6 +888,14 @@ loginScreen?.addEventListener("keydown", (event) => {
 });
 document.querySelectorAll("[data-level-policy]").forEach((button) => button.addEventListener("click", () => setOnchainPolicy(button.dataset.levelPolicy)));
 walletConnectNow?.addEventListener("click", openWalletPanel);
+walletSync?.addEventListener("click", async () => {
+  if (!walletState.connected) return;
+  walletSync.disabled = true;
+  if (walletStatusText) walletStatusText.textContent = "Reading your Ritual profile…";
+  await syncWalletContractProfile();
+  refreshWalletPanel();
+  walletSync.disabled = false;
+});
 document.getElementById("btn-wallet-continue")?.addEventListener("click", () => {
   const save = getWalletSave(walletState.address);
   const recovered = save || buildWalletRecoverySave();
@@ -895,16 +910,25 @@ document.getElementById("btn-wallet-new")?.addEventListener("click", () => {
 document.getElementById("btn-wallet-delete")?.addEventListener("click", async () => {
   if (walletDelete) walletDelete.disabled = true;
   try {
+    if (!walletState.connected || !walletState.address) throw new Error("Connect the Ritual wallet first.");
+    // The panel can be open for minutes. Re-read immediately before sending so
+    // an already-deleted profile never produces a confusing reverted tx.
+    await syncWalletContractProfile();
+    if (walletProfileReadError) {
+      if (walletStatusText) walletStatusText.textContent = "Could not verify this profile on Ritual. Retry wallet sync first.";
+      return;
+    }
     if (walletContractProfile?.active) {
       walletStatusText && (walletStatusText.textContent = "Confirm profile deletion in your wallet…");
       await deleteOnchainProfile();
       walletContractProfile = null;
     }
     clearWalletSave(walletState.address);
+    walletProfileReadError = false;
     refreshWalletPanel();
-    if (walletStatusText) walletStatusText.textContent = "Profile deleted. Create a new traveler when ready.";
+    if (walletStatusText) walletStatusText.textContent = "Profile cleared. Create a new traveler when ready.";
   } catch (error) {
-    if (walletStatusText) walletStatusText.textContent = `Delete cancelled · ${error?.message || "try again later"}`;
+    if (walletStatusText) walletStatusText.textContent = walletErrorMessage(error, "Profile deletion failed. Retry after syncing the wallet.");
   } finally { if (walletDelete) walletDelete.disabled = false; }
 });
 

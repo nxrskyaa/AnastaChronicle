@@ -200,22 +200,22 @@ function ritualHall(w = 92, h = 88) {
     px(x, 40, 9, 12, "#10222a", ctx); px(x + 2, 42, 5, 8, "#8bd2b0", ctx);
     px(x + 4, 42, 1, 8, "#d7e7cf", ctx); px(x + 2, 45, 5, 1, "#d7e7cf", ctx);
   }
-  // Ritual knot-inspired mark on the pediment: interlocking angular paths.
+  // Ritual knot-inspired mark on the pediment: a bright, readable badge.
   // It is deliberately oversized and high-contrast so the chain identity is
   // still readable when the player is zoomed out on a phone.
-  const lx = w / 2 - 21, ly = 4;
-  ctx.fillStyle = "#0d1b1d"; ctx.fillRect(lx - 4, ly - 2, 50, 18);
+  const lx = w / 2 - 24, ly = 3;
+  px(lx - 4, ly - 2, 56, 20, "#0d1b1d", ctx); px(lx - 2, ly - 1, 52, 1, "#e6ca70", ctx);
   ctx.fillStyle = mint;
   const bar = (x, y, ww, hh = 3) => ctx.fillRect(lx + x, ly + y, ww, hh);
-  bar(17, 0, 6); bar(12, 3, 6); bar(7, 6, 6); bar(2, 9, 6);
-  bar(23, 3, 6); bar(28, 6, 6); bar(33, 9, 6); bar(12, 10, 6); bar(17, 7, 6); bar(22, 10, 6);
-  ctx.fillStyle = "#e4c86c"; ctx.fillRect(w / 2 - 25, 18, 50, 2); ctx.fillRect(w / 2 - 15, 21, 30, 1);
-  // A second sign on the front wall repeats the mark beside the wordmark.
-  px(w / 2 - 31, 34, 62, 12, "#0d1a1d", ctx);
-  px(w / 2 - 29, 35, 58, 1, "#b9d5a0", ctx);
-  ctx.fillStyle = mint; ctx.fillRect(w / 2 - 25, 39, 6, 3); ctx.fillRect(w / 2 - 21, 36, 3, 9); ctx.fillRect(w / 2 - 17, 39, 6, 3);
-  ctx.fillStyle = "#a5e5bc"; ctx.font = "bold 7px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "top";
-  ctx.fillText("RITUAL", w / 2 + 10, 37);
+  bar(20, 0, 6); bar(15, 3, 6); bar(10, 6, 6); bar(5, 9, 6); bar(0, 12, 6);
+  bar(26, 3, 6); bar(31, 6, 6); bar(36, 9, 6); bar(15, 12, 6); bar(20, 9, 6); bar(25, 12, 6);
+  ctx.fillStyle = "#e4c86c"; ctx.fillRect(w / 2 - 29, 21, 58, 2); ctx.fillRect(w / 2 - 19, 24, 38, 1);
+  // Front sign repeats the mark beside a larger wordmark.  This is the
+  // camera-facing identity plate that should survive mobile zoom-out.
+  px(w / 2 - 34, 34, 68, 15, "#0d1a1d", ctx); px(w / 2 - 32, 35, 64, 1, "#e4c86c", ctx);
+  ctx.fillStyle = mint; ctx.fillRect(w / 2 - 28, 41, 7, 3); ctx.fillRect(w / 2 - 24, 37, 3, 11); ctx.fillRect(w / 2 - 20, 41, 7, 3);
+  ctx.fillStyle = "#b7f2c4"; ctx.font = "bold 9px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("RITUAL", w / 2 + 10, 38);
   ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   // flag pole; the cloth itself is animated in the world renderer.
   px(w - 19, 3, 2, 31, "#d4b866", ctx); px(w - 20, 2, 4, 2, "#f3dd8a", ctx);

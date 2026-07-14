@@ -369,7 +369,27 @@ Game.prototype.updateWeather = function (dt) {
 };
 
 Game.prototype.moveEntity = function (e, dx, dy, r) {
-  const solid = (x, y) => this.tileAt(x, y) === 2;
+  // Buildings are rendered from transparent canvases, so they cannot be
+  // represented by a tile id without making roofs block the whole map. Keep
+  // a small, ground-level footprint instead: the player can walk behind a
+  // roof, but never through its wall, door or foundation.
+  const footprints = {
+    house_red: [27, 22, 6], house_blue: [27, 22, 6], house_thatch: [27, 22, 6],
+    shop: [29, 21, 7], stall: [23, 13, 6], well: [16, 14, 5],
+    ritual_hall: [40, 25, 8], pagoda: [22, 23, 7], torii: [21, 13, 6],
+    fenceH: [13, 8, 5], bamboo: [15, 15, 6], sakura: [17, 13, 5],
+  };
+  const hitsBuilding = (x, y) => this.buildings?.some((building) => {
+    const footprint = footprints[building.type];
+    if (!footprint) return false;
+    const [halfW, halfH, yTop] = footprint;
+    const left = building.x - halfW, right = building.x + halfW;
+    const top = building.y - yTop - halfH, bottom = building.y + yTop;
+    const nearX = clamp(x, left, right), nearY = clamp(y, top, bottom);
+    const ox = x - nearX, oy = y - nearY;
+    return ox * ox + oy * oy < r * r;
+  }) || false;
+  const solid = (x, y) => this.tileAt(x, y) === 2 || hitsBuilding(x, y);
   let nx = e.x + dx;
   if (!solid(nx + Math.sign(dx) * r, e.y)) e.x = clamp(nx, r, MAP_W * T - r); else e.vx = 0;
   let ny = e.y + dy;

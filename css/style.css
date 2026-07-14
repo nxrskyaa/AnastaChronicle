@@ -2153,3 +2153,90 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   .arrival-actions span{font-size:.2rem;white-space:nowrap}
 }
 
+/* ===== DAYLIGHT TITLE MENU / PASSPORT CLEANUP ============================
+   The loading card is the visual promise of the game.  Keep the first menu
+   in that same sky, paper and wood palette instead of switching to a second
+   green-on-black product language after START. */
+#login{
+  overflow:hidden;
+  background:
+    linear-gradient(180deg,#61b9d4 0 47%,#a6d5cf 48% 61%,#6dbd80 62% 100%)!important;
+  color:#2a3b35;
+}
+#login::before{
+  opacity:.2!important;
+  background:
+    radial-gradient(ellipse 260px 90px at 16% 24%,rgba(255,250,220,.75),transparent 70%),
+    radial-gradient(ellipse 330px 110px at 78% 30%,rgba(255,250,230,.58),transparent 70%),
+    repeating-linear-gradient(0deg,rgba(255,255,255,.18) 0 1px,transparent 1px 5px)!important;
+}
+#login .login-shell{position:relative;z-index:2}
+#login .realm-showcase{padding:clamp(26px,5vh,56px) 0 40px!important}
+#login .realm-eyebrow{color:#fff2b9!important;text-shadow:2px 2px 0 #39755c!important}
+#login .realm-showcase h1{color:#fff2bd!important;text-shadow:3px 3px 0 #39755c,5px 5px 0 rgba(58,79,54,.26)!important}
+#login .realm-showcase>p{color:#294b41!important;text-shadow:1px 1px 0 rgba(240,246,194,.65)!important}
+#login .realm-showcase::after{color:#2f7852!important}
+#login .realm-pillars>div{background:rgba(246,218,154,.7)!important;border-color:#755038!important;box-shadow:0 3px 0 #4a3a32!important}
+#login .realm-pillars b,#login .realm-pillars span{color:#3d553f!important}
+#login .login-card{
+  background:
+    repeating-linear-gradient(0deg,rgba(111,70,44,.035) 0 1px,transparent 1px 5px),
+    linear-gradient(160deg,#f3dda7 0%,#e1bd7d 100%)!important;
+  border:3px solid #704735!important;
+  box-shadow:0 0 0 2px #bd8550,0 24px 70px rgba(37,67,55,.42),inset 0 0 0 2px rgba(255,246,194,.65)!important;
+}
+#login .login-card::after{border-color:rgba(102,65,43,.55)!important}
+#login .login-glow{opacity:.14!important;background:#fff0a8!important}
+#login .menu-logo{filter:drop-shadow(0 4px 0 #5d3a31) drop-shadow(0 0 12px rgba(255,243,171,.4))!important}
+#login .login-sigil{background:#4e9d70!important;border-color:#315f49!important;box-shadow:inset 0 0 0 3px #a9d58f,0 3px 0 #5a3e31!important}
+#login .login-sigil span{color:#fff1b0!important;text-shadow:2px 2px 0 #315f49!important}
+#login .login-step{color:#5a7d54!important}
+#login .login-card .pixel-h2{color:#2b3d31!important;text-shadow:1px 1px 0 #fff0b8!important}
+#login .login-card .login-sub{color:#5a6349!important}
+#login .menu-choice{border-color:#734a35!important;background:linear-gradient(180deg,#e4a36e,#bb6d56)!important;box-shadow:inset 0 2px 0 #f7ca8e,inset 0 -3px 0 rgba(86,48,39,.25),0 4px 0 #52362e!important}
+#login .menu-choice:hover,#login .menu-choice:focus-visible{background:linear-gradient(180deg,#f0b77c,#d27b5d)!important;border-color:#f7d88b!important}
+#login .menu-choice-icon{background:#478d67!important;border-color:#6a452f!important}
+#login .menu-choice b{color:#302724!important}.menu-choice small{color:#61443a!important}.menu-choice>strong{color:#fff1bc!important}
+#login .wallet-choice{background:linear-gradient(180deg,#d18f57,#a76247)!important}
+#login .server-picker{background:rgba(255,239,180,.48)!important;border-color:#8f6242!important}
+#login .server-picker-head span{color:#4a704d!important}.server-picker-head small{color:#6a654b!important}
+#login .server-picker-list button{background:#f0d399!important;border-color:#86593d!important;color:#334c3b!important;box-shadow:inset 0 2px 0 #fff0b8,0 2px 0 #684536!important}
+#login .server-picker-list button.selected{background:#68b47c!important;color:#173b2a!important;border-color:#f1d37e!important}
+#login .access-back{color:#4a704d!important}
+#login .login-input-wrap>span{color:#5c704f!important}
+#login .login-card #login-name{background:#fff0bf!important;border-color:#85583d!important;color:#2c3d31!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.7)!important}
+#login .login-existing,.wallet-status-card,.wallet-profile-actions,.onchain-policy{background:rgba(255,238,181,.58)!important;border-color:#a07049!important;color:#3b503c!important}
+#login .login-return{color:#55764e!important}.login-stats{color:#6a654d!important}
+#login .quick-btn{background:#f1d69a!important;border-color:#936344!important;color:#4b503d!important}
+#login .login-divider{color:#79634b!important}.login-divider:before,.login-divider:after{background:#b28a5c!important}
+#login .login-note{color:#617052!important}.login-note i{background:#4e9d70!important}
+#login .wallet-status-card b{color:#38533e!important}.wallet-status-card small{color:#636a51!important}
+#login .access-sync{display:block;width:100%;margin:-3px 0 10px;padding:7px 9px;border:2px solid #8d6242;background:#f1d69a;color:#476043;font: .58rem "Press Start 2P",monospace;box-shadow:inset 0 2px 0 #fff1b6,0 2px 0 #674536;cursor:pointer}
+#login .access-sync:hover{background:#ffe6ad;border-color:#4d8f65}#login .access-sync:disabled{opacity:.55;cursor:wait}
+#login .wallet-action-note{display:block;margin-top:7px;color:#6d634a;font: .72rem "VT323",monospace;line-height:1.1}
+#login .access-danger{color:#754137!important;border-color:#a76a4f!important;background:rgba(224,137,99,.18)!important}
+#login .onchain-policy>span{color:#55714d!important}.onchain-policy small{color:#6c684e!important}
+#login .about-kicker{color:#557b51!important}
+#login .about-panel h3{color:#2f4033!important;text-shadow:1px 1px 0 #fff0b8!important}
+#login .credit-list>div{border-left:3px solid #4d9b6d!important;background:rgba(255,238,181,.58)!important;border-top:1px solid rgba(119,77,48,.24);border-bottom:1px solid rgba(119,77,48,.24)}
+#login .credit-list b{color:#3c4d37!important}.credit-list span{color:#6d674d!important}.about-panel>p{color:#60684e!important}
+#login .wallet-profile-actions .login-new{background:linear-gradient(180deg,#65bd83,#438f65)!important;border-color:#2e6749!important;color:#173b2a!important}
+#login-fx{opacity:.5!important;mix-blend-mode:multiply!important}
+
+/* Ritual branding is a landmark, not a tiny green pixel lost in the roof. */
+.ritual-boot-lockup{font-size:clamp(.42rem,1vw,.62rem)!important;gap:11px!important;padding:8px 13px!important;border-width:2px!important;letter-spacing:.1em!important}
+.ritual-boot-lockup img{width:26px!important;height:26px!important}
+#boot .ritual-boot-lockup{font-size:clamp(.42rem,1vw,.62rem)!important;padding:8px 13px!important;gap:11px!important}
+#boot .ritual-boot-lockup img{width:26px!important;height:26px!important}
+
+@media(max-width:720px){
+  #login .login-shell{width:min(470px,100%)!important}
+  #login .realm-showcase{min-height:205px;padding:18px 13px 10px!important}
+  #login .realm-showcase h1{font-size:clamp(2rem,9vw,3rem)!important}
+  #login .login-card{padding:1.15rem .9rem 1rem!important}
+  #login .menu-logo{width:min(290px,94%)!important;max-height:86px!important}
+  #login .server-picker{margin-top:.65rem}
+  #boot .ritual-boot-lockup{font-size:.38rem!important;padding:7px 9px!important}
+  #boot .ritual-boot-lockup img{width:22px!important;height:22px!important}
+}
+
