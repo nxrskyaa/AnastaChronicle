@@ -60,6 +60,7 @@ export function keccak256(input) {
 }
 
 function selector(signature) { return keccak256(signature).slice(2, 10); }
+function hexData(value) { const hex = String(value || "").replace(/^0x/, ""); return `0x${hex}`; }
 function word(value) { return BigInt(value).toString(16).padStart(64, "0"); }
 function bytes32(value) { return String(value || "0x").replace(/^0x/, "").padEnd(64, "0").slice(0, 64); }
 function addressWord(value) { return String(value).replace(/^0x/, "").toLowerCase().padStart(64, "0"); }
@@ -80,11 +81,11 @@ function decimalToWei(value, decimals = 18) {
 function encodeRegister(name, lookHash) {
   const encoded = new TextEncoder().encode(String(name || "Traveler").slice(0, 24));
   const paddedLength = Math.ceil(encoded.length / 32) * 32;
-  const tail = new Uint8Array(32 + paddedLength); tail.set(encoded, 32);
-  return `${selector("registerProfile(string,bytes32)")}${word(64)}${bytes32(lookHash)}${word(encoded.length)}${bytesToHex(tail)}`;
+  const padded = new Uint8Array(paddedLength); padded.set(encoded);
+  return hexData(`${selector("registerProfile(string,bytes32)")}${word(64)}${bytes32(lookHash)}${word(encoded.length)}${bytesToHex(padded)}`);
 }
-function encodeRecordLevel(level, saveHash) { return `${selector("recordLevel(uint32,bytes32)")}${word(level)}${bytes32(saveHash)}`; }
-function encodeAddressCall(signature, address) { return `${selector(signature)}${addressWord(address)}`; }
+function encodeRecordLevel(level, saveHash) { return hexData(`${selector("recordLevel(uint32,bytes32)")}${word(level)}${bytes32(saveHash)}`); }
+function encodeAddressCall(signature, address) { return hexData(`${selector(signature)}${addressWord(address)}`); }
 
 export function hashJson(value) { return keccak256(JSON.stringify(value)); }
 export function hashLook(look) { return hashJson(look || {}); }
@@ -148,7 +149,7 @@ export function disconnectWallet() { walletState.address = ""; walletState.chain
 async function contractCall(data) {
   if (!contractConfigured) throw new Error("Profile contract address is not configured.");
   const provider = walletState.provider || getProvider();
-  return provider.request({ method: "eth_call", params: [{ to: PROFILE_CONTRACT_ADDRESS, data }, "latest"] });
+  return provider.request({ method: "eth_call", params: [{ to: PROFILE_CONTRACT_ADDRESS, data: hexData(data) }, "latest"] });
 }
 async function waitForTransaction(hash, timeoutMs = 120000) {
   const provider = walletState.provider || getProvider();
@@ -164,23 +165,30 @@ async function contractTransaction(data, value = 0n) {
   if (!walletState.connected) throw new Error("Connect the Ritual wallet first.");
   if (!contractConfigured) throw new Error("Profile contract address is not configured.");
   const provider = walletState.provider || getProvider();
-  const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from: walletState.address, to: PROFILE_CONTRACT_ADDRESS, data, value: `0x${value.toString(16)}` }] });
+  const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from: walletState.address, to: PROFILE_CONTRACT_ADDRESS, data: hexData(data), value: `0x${value.toString(16)}` }] });
   return { hash, receipt: await waitForTransaction(hash) };
 }
 
 export async function readOnchainProfile(address = walletState.address) {
   if (!contractConfigured || !/^0x[a-f0-9]{40}$/i.test(String(address || ""))) return null;
   const bytes = hexToBytes(await contractCall(encodeAddressCall("getProfile(address)", address)));
-  if (bytes.length < 32 * 9) return null;
-  const offset = Number(readUint(bytes, 0));
-  const stringLength = Number(readUint(bytes, offset / 32));
-  const nameBytes = bytes.slice(offset + 32, offset + 32 + stringLength);
+  if (bytes.length < 32 * 10) return null;
+  const tupleOffset = Number(readUint(bytes, 0));
+  if (!Number.isSafeInteger(tupleOffset) || tupleOffset < 0 || tupleOffset % 32 !== 0) return null;
+  const base = tupleOffset / 32;
+  const nameOffset = Number(readUint(bytes, base));
+  if (!Number.isSafeInteger(nameOffset) || nameOffset < 32 * 9 || nameOffset % 32 !== 0) return null;
+  const nameWord = (tupleOffset + nameOffset) / 32;
+  const stringLength = Number(readUint(bytes, nameWord));
+  const stringStart = (nameWord + 1) * 32;
+  if (!Number.isSafeInteger(stringLength) || stringLength < 0 || stringStart + stringLength > bytes.length) return null;
+  const nameBytes = bytes.slice(stringStart, stringStart + stringLength);
   return {
     displayName: new TextDecoder().decode(nameBytes),
-    lookHash: `0x${readWord(bytes, 1)}`, lastSaveHash: `0x${readWord(bytes, 2)}`,
-    level: Number(readUint(bytes, 3)), totalLevelRecords: Number(readUint(bytes, 4)),
-    createdAt: Number(readUint(bytes, 5)), updatedAt: Number(readUint(bytes, 6)),
-    nonce: Number(readUint(bytes, 7)), active: readUint(bytes, 8) !== 0n,
+    lookHash: `0x${readWord(bytes, base + 1)}`, lastSaveHash: `0x${readWord(bytes, base + 2)}`,
+    level: Number(readUint(bytes, base + 3)), totalLevelRecords: Number(readUint(bytes, base + 4)),
+    createdAt: Number(readUint(bytes, base + 5)), updatedAt: Number(readUint(bytes, base + 6)),
+    nonce: Number(readUint(bytes, base + 7)), active: readUint(bytes, base + 8) !== 0n,
   };
 }
 export async function readOnchainLevelFee() {
@@ -188,7 +196,7 @@ export async function readOnchainLevelFee() {
   return bytes.length >= 32 ? readUint(bytes, 0) : decimalToWei(LEVEL_TX_FEE_RIT);
 }
 export async function registerOnchainProfile(displayName, look) { return contractTransaction(encodeRegister(displayName, hashLook(look))); }
-export async function deleteOnchainProfile() { return contractTransaction(selector("deleteProfile()")); }
+export async function deleteOnchainProfile() { return contractTransaction(hexData(selector("deleteProfile()"))); }
 export async function recordOnchainLevel(level, save) {
   const fee = await readOnchainLevelFee();
   return contractTransaction(encodeRecordLevel(level, hashSave(save)), fee);
