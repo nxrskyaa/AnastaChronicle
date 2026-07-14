@@ -1025,6 +1025,8 @@ Game.prototype.eatFood = function (foodId) {
 Game.prototype.respawn = function () {
   const p = this.player;
   this.resetInputState?.();
+  this.shake = 0;
+  this.hitStop = 0;
   p.hp = p.maxHp; p.stamina = p.maxStamina;
   p.x = this.camp.x; p.y = this.camp.y + 46;
   this._dead = false; this.paused = false; this.inputLocked = false; this.inputSuspendUntil = performance.now() + 220;

@@ -332,15 +332,10 @@ export class UI {
     this.game.resetInputState?.();
     this.game.paused = true;
     const rod = activeRod(this.game.player.inv);
-    const status = afkFishingStatus(this.game.afkFishingJob);
     const set = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
     set("fishing-mode-rod", rod.name);
-    set("fishing-mode-auto-copy", status.state === "ready"
-      ? "Your auto catch is ready. Open it now to claim every fish."
-      : status.state === "running"
-        ? `The rod is fishing automatically with ${this.formatDuration(status.remainingMs)} remaining.`
-        : "Choose an auto-cast duration. The same rod fishes from this spot while you explore.");
-    set("fishing-mode-auto-state", status.state === "ready" ? "CLAIM CATCH" : status.state === "running" ? "VIEW AUTO LINE" : "AUTO CAST");
+    set("fishing-mode-auto-copy", "Stay at this spot while the rod automatically casts, hooks, reels, and repeats the normal catch flow.");
+    set("fishing-mode-auto-state", "START AUTO");
     this.panels.fishingMode.classList.remove("hidden");
     setTimeout(() => document.getElementById("fishing-mode-manual")?.focus(), 0);
   }
@@ -352,11 +347,12 @@ export class UI {
     this.panels.fishingMode?.classList.add("hidden");
     if (mode === "manual") {
       if (!this.hasBlockingOpen()) this.game.paused = false;
-      this.game.startFishing(spot);
+      this.game.startFishing(spot, { auto: false });
       return;
     }
     if (this.game.autoBattle) this.game.setAutoBattle(false);
-    this.toggle("afk");
+    if (!this.hasBlockingOpen()) this.game.paused = false;
+    this.game.startFishing(spot, { auto: true });
   }
 
   currentRegion() {
@@ -608,9 +604,8 @@ export class UI {
     this.closeAll();
     const panel = this.panels.death;
     panel?.classList.remove("hidden");
-    panel?.classList.remove("death-enter"); void panel?.offsetWidth; panel?.classList.add("death-enter");
     setTimeout(() => document.getElementById("btn-respawn")?.focus(), 0);
-    if (this.game) { this.game.resetInputState?.(); this.game.inputLocked = true; this.game.paused = true; }
+    if (this.game) { this.game.shake = 0; this.game.hitStop = 0; this.game.resetInputState?.(); this.game.inputLocked = true; this.game.paused = true; }
   }
   hideDeath() { this.panels.death?.classList.add("hidden"); this.panels.death?.classList.remove("death-enter"); }
   showPet(id, cb) {
@@ -900,14 +895,14 @@ export class UI {
     const action = document.getElementById("btn-interact");
     if (action) {
       action.classList.toggle("fishing-action", !!fishing);
-      action.textContent = !fishing ? "F" : fishing.state === "bite" ? "HOOK" : fishing.state === "hooked" ? "REEL" : "CANCEL";
-      action.setAttribute("aria-label", !fishing ? "Interact" : fishing.state === "hooked" ? "Hold to reel, release during a surge" : fishing.state === "bite" ? "Set fishing hook" : "Cancel fishing cast");
+      action.textContent = !fishing ? "F" : fishing.auto ? "STOP" : fishing.state === "bite" ? "HOOK" : fishing.state === "hooked" ? "REEL" : "CANCEL";
+      action.setAttribute("aria-label", !fishing ? "Interact" : fishing.auto ? "Stop Auto Fishing" : fishing.state === "hooked" ? "Hold to reel, release during a surge" : fishing.state === "bite" ? "Set fishing hook" : "Cancel fishing cast");
     }
     if (!fishing) return;
     const progress = Math.max(0, Math.min(1, fishing.progress || 0));
     const tension = Math.max(0, Math.min(1, fishing.tension || 0));
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-    const state = fishing.state === "bite" ? "BITE — HOOK IT!" : fishing.state === "hooked" ? "FISH ON THE LINE" : "LINE CAST";
+    const state = fishing.auto ? (fishing.state === "hooked" ? "AUTO REELING" : fishing.state === "bite" ? "AUTO HOOK" : "AUTO CAST") : fishing.state === "bite" ? "BITE — HOOK IT!" : fishing.state === "hooked" ? "FISH ON THE LINE" : "LINE CAST";
     set("fishing-state", state);
     set("fishing-condition", fishing.context?.condition || "Reading the water");
     set("fishing-progress-text", `${Math.round(progress * 100)}%`);

@@ -17,7 +17,6 @@ import {
 import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
-import { afkFishingStatus, normalizeAfkFishingJob } from "./afkfishing.js";
 import { SERVER_OPTIONS, getSelectedServerId, setSelectedServerId } from "./config.js";
 import {
   connectRitualWallet, walletShortAddress, walletState,
@@ -498,10 +497,6 @@ function startGame(savedLook, savedName, saveData) {
       if (saveData.inv) { p.inv = { ...p.inv, ...saveData.inv }; }
       if (saveData.fishing) { game.fishingStats = { ...game.fishingStats, ...saveData.fishing }; }
       if (saveData.quests) game.quests.restore?.(saveData.quests);
-      if (saveData.afkFishing) {
-        const restoredAfk = normalizeAfkFishingJob(saveData.afkFishing);
-        game.afkFishingJob = restoredAfk?.claimedAt ? null : restoredAfk;
-      }
       if (Array.isArray(saveData.activeFoodBuffs)) {
         game.activeFoodBuffs = normalizeActiveBuffs(saveData.activeFoodBuffs, Date.now());
       }
@@ -556,9 +551,6 @@ function startGame(savedLook, savedName, saveData) {
       setTimeout(() => ensureOnchainProfile(game, ui), 450);
     }
     showArrivalGuide(!!saveData);
-    if (afkFishingStatus(game.afkFishingJob).state === "ready") {
-      setTimeout(() => ui.toast("Auto Fishing catch ready · interact with water to claim"), 700);
-    }
     // Auto-save every 15s
     setInterval(persist, 15000);
     // Save on page hide / unload

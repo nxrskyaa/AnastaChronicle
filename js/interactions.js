@@ -86,8 +86,11 @@ Game.prototype.updateInteract = function () {
   this.ui.setInteract(!!resolved.target, resolved.label);
 };
 
-Game.prototype.startFishing = function (spot) {
+Game.prototype.startFishing = function (spot, options = {}) {
   const player = this.player;
+  const auto = options.auto === true;
+  clearTimeout(this._autoFishingTimer);
+  this._autoFishingTimer = null;
   if (this.autoBattle) this.setAutoBattle?.(false);
   if (this.mounted) this.toggleMount?.();
   this.moveTarget = null;
@@ -108,14 +111,17 @@ Game.prototype.startFishing = function (spot) {
     progress: 0,
     tension: .18,
     phase: Math.random() * Math.PI * 2,
-    tip: `Waiting with ${context.rod.name}…`,
+    auto,
+    tip: auto ? `${context.rod.name} is auto-casting…` : `Waiting with ${context.rod.name}…`,
   };
   this.audio.sfx("ui");
-  this.ui.toast(`Line cast · ${context.condition}`);
+  if (!options.quiet) this.ui.toast(auto ? `AUTO FISHING · ${context.condition}` : `Line cast · ${context.condition}`);
 };
 
 Game.prototype.failFishing = function (message) {
   if (!this.fishing) return;
+  clearTimeout(this._autoFishingTimer);
+  this._autoFishingTimer = null;
   this.fishing = null;
   this.audio.sfx("hurt");
   this.ui.toast(message);
@@ -132,15 +138,27 @@ Game.prototype.updateFishing = function (dt) {
       fishing.state = "bite";
       fishing.t = 0;
       fishing.window = fishing.fish.biteWindow;
-      fishing.tip = "Tap F now to set the hook!";
+      fishing.tip = fishing.auto ? "Auto hook reading the bite…" : "Tap F now to set the hook!";
       this.audio.sfx("quest");
-      this.ui.toast("Bite! Set the hook with F!");
-      this.shake = Math.max(this.shake, 3);
+      if (!fishing.auto) {
+        this.ui.toast("Bite! Set the hook with F!");
+        this.shake = Math.max(this.shake, 3);
+      }
     }
     return;
   }
 
   if (fishing.state === "bite") {
+    if (fishing.auto && fishing.t >= Math.min(.22, fishing.window * .35)) {
+      fishing.state = "hooked";
+      fishing.t = 0;
+      fishing.totalT = 0;
+      fishing.progress = .09;
+      fishing.tension = .34;
+      fishing.tip = "Auto reel active · managing line tension.";
+      this.audio.sfx("attack");
+      return;
+    }
     if (fishing.t >= fishing.window) this.failFishing("Too slow — the fish stole the bait.");
     return;
   }
@@ -149,8 +167,8 @@ Game.prototype.updateFishing = function (dt) {
   fishing.totalT += dt;
   const difficulty = fishing.fish.difficulty;
   const control = fishing.context.rod.control;
-  const pulling = !!this.keys.KeyF;
   const surge = Math.sin(fishing.totalT * (2.6 + difficulty * 1.8) + fishing.phase) > .52;
+  const pulling = fishing.auto ? (!surge && fishing.tension < .76) : !!this.keys.KeyF;
   fishing.surge = surge;
 
   if (pulling) {
@@ -165,7 +183,7 @@ Game.prototype.updateFishing = function (dt) {
   fishing.progress = clamp(fishing.progress, 0, 1);
   fishing.tension = clamp(fishing.tension, 0, 1.08);
 
-  fishing.tip = fishing.tension > .82
+  fishing.tip = fishing.auto ? (surge ? "Auto reel easing through a surge…" : "Auto reel keeping steady tension…") : fishing.tension > .82
     ? "Release F — the line is about to snap!"
     : surge && pulling
       ? "Fish surging! Release F for a moment."
@@ -191,6 +209,10 @@ Game.prototype.updateFishing = function (dt) {
 Game.prototype.reelFish = function () {
   const fishing = this.fishing;
   if (!fishing) return;
+  if (fishing.auto) {
+    this.failFishing("Auto Fishing stopped · line reeled in.");
+    return;
+  }
   if (fishing.state === "cast") {
     this.fishing = null;
     this.ui.toast("Line reeled in.");
@@ -245,6 +267,14 @@ Game.prototype.landFish = function (fishing) {
   const prefix = fish.rarity === "legendary" ? "LEGENDARY · " : fish.rarity === "rare" ? "RARE · " : "";
   this.ui.toast(`${prefix}${fish.name} ${fish.size.toFixed(1)}cm · +${reward}g${bonus ? " precision bonus" : ""}`);
   this.ui.sync();
+  if (fishing.auto) {
+    this._autoFishingTimer = setTimeout(() => {
+      this._autoFishingTimer = null;
+      if (this.fishing || this.paused || this.player.hp <= 0) return;
+      if (Math.hypot(this.player.x - fishing.spot.x, this.player.y - fishing.spot.y) > 72) return;
+      this.startFishing(fishing.spot, { auto: true, quiet: true });
+    }, 1300);
+  }
 };
 
 Game.prototype.interact = function (resolved = null) {

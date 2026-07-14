@@ -2366,3 +2366,117 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   #boot .ritual-boot-lockup img{width:22px!important;height:22px!important}
 }
 
+/* ===== MOBILE GAME-FIRST COMPOSITION ====================================
+   A phone is not a squeezed desktop. Keep one clear focal layer per state:
+   gate, menu, creator, then world controls. */
+.death-panel.death-enter{animation:none!important}
+
+@media(max-width:760px){
+  html,body{width:100%;height:100%;overflow:hidden}
+
+  /* Loading gate: one centered pixel poster with no dead lower half. */
+  #boot .title-scene{display:grid!important;place-items:center!important;padding:0!important;min-height:100dvh}
+  #boot .boot-layout{width:100%!important;padding:14px 14px calc(20px + env(safe-area-inset-bottom))!important}
+  #boot .boot-card{width:min(386px,100%)!important;margin:auto!important;padding:8px 10px 14px!important;transform:translateY(-2dvh)}
+  #boot .boot-logo-wrap{width:min(340px,92vw)!important;margin:0 auto 8px!important}
+  #boot .boot-kicker{font-size:max(.38rem,7px)!important;margin-bottom:9px!important}
+  #boot .ritual-boot-lockup{font-size:max(.4rem,8px)!important;padding:7px 10px!important;margin-bottom:9px!important}
+  #boot .boot-sub{font-size:max(.31rem,6px)!important;margin-bottom:10px!important}
+  #boot .boot-card .loading-bar-wrap{width:100%;height:13px;margin-bottom:5px}
+  #boot .boot-load-row{width:100%;margin-bottom:12px}
+  #boot .boot-load-row #boot-status{font-size:1rem}
+  #boot .boot-card #btn-start{width:100%;min-height:50px;font-size:max(.5rem,9px)!important}
+  #boot .boot-credit{font-size:max(.25rem,5px);line-height:1.5}
+
+  /* Entry menu: a short world masthead followed by one readable passport. */
+  #login{display:block;padding:0!important;overflow-y:auto!important;overscroll-behavior:none}
+  #login .login-shell{display:flex!important;flex-direction:column;width:100%!important;min-height:100dvh!important;margin:0!important;gap:0!important}
+  #login .realm-showcase{flex:0 0 118px;min-height:118px!important;max-height:118px;padding:18px 16px 8px!important;overflow:hidden;border-bottom:3px solid #704735}
+  #login .realm-eyebrow{font-size:max(.36rem,7px)!important}
+  #login .realm-showcase h1{width:190px;margin:8px 0 0!important;font-size:1.42rem!important;line-height:1.08!important}
+  #login .realm-showcase>p,#login .realm-pillars{display:none!important}
+  #login .login-hero-art{right:4px!important;bottom:-8px!important;width:132px!important;height:120px!important;transform:scale(.78)!important}
+  #login .login-card{flex:1;width:100%!important;min-height:calc(100dvh - 118px);padding:12px 14px calc(16px + env(safe-area-inset-bottom))!important;border-width:0 0 0 0!important;border-radius:0!important;clip-path:none!important;box-shadow:none!important}
+  #login .menu-logo{width:min(210px,68vw)!important;height:55px!important;margin:0 auto 2px!important}
+  #login .login-sigil{right:16px!important;top:16px!important;width:34px!important;height:34px!important}
+  #login .login-step{font-size:max(.36rem,7px)!important}
+  #login .login-card .pixel-h2{font-size:max(.72rem,12px)!important;margin-top:6px!important}
+  #login .login-sub{font-size:1rem!important;margin:.3rem 0 .7rem!important}
+  #login .main-menu-choices{gap:8px!important;margin-top:6px!important}
+  #login .menu-choice{min-height:58px;padding:8px 10px!important}
+  #login .menu-choice b{font-size:max(.4rem,8px)!important}.menu-choice small{font-size:.92rem!important}
+  #login .server-picker{margin-top:10px!important;padding:8px!important}
+  #login .server-picker-head span{font-size:max(.34rem,7px)!important}.server-picker-head small{font-size:.72rem!important}
+  #login .server-picker-list{gap:5px!important}.server-picker-list button{min-height:42px!important;padding:6px 8px!important}
+  #login .access-panel{margin-top:6px!important}.login-input-wrap input{min-height:48px}
+  #login .credit-list{grid-template-columns:1fr 1fr;gap:8px}.credit-list>div{min-height:62px}
+
+  /* Creator: preview strip above a full-width editor, never a split desktop. */
+  #creator{padding:0!important;background:#69b9cf!important}
+  #creator .creator-card{width:100%!important;height:100dvh!important;max-height:100dvh!important;border:0!important;clip-path:none!important;box-shadow:none!important}
+  #creator .creator-head{flex:0 0 66px;grid-template-columns:72px minmax(0,1fr)!important;gap:8px!important;padding:7px 10px!important;border-bottom:3px solid #704735!important}
+  #creator .creator-logo{width:68px!important;height:45px!important}
+  #creator .creator-step{font-size:7px!important;margin-bottom:4px!important}
+  #creator .creator-card .creator-head h2{font-size:max(.58rem,10px)!important;line-height:1.35!important}
+  #creator .creator-body{display:flex!important;flex-direction:column;min-height:0!important;overflow:hidden!important}
+  #creator .creator-preview{flex:0 0 126px;display:grid!important;grid-template-columns:96px minmax(0,1fr)!important;grid-template-rows:1fr!important;gap:8px!important;padding:8px!important;border:0!important;border-bottom:3px solid #704735!important;overflow:hidden!important}
+  #creator .preview-stage{grid-column:1;grid-row:1;width:96px!important;height:108px!important;min-height:108px!important;flex:none!important}
+  #creator .preview-zone{font-size:.62rem!important;padding:2px 3px!important}
+  #creator .preview-summary{grid-column:2;grid-row:1;align-self:stretch;margin:0!important;padding:8px 9px!important;overflow:hidden}
+  #creator .preview-summary>span{font-size:.68rem!important}#creator .preview-summary>strong{font-size:1.25rem!important;margin:4px 0!important}
+  #creator .preview-summary>p{display:-webkit-box!important;font-size:.78rem!important;line-height:1.15!important;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+  #creator .preview-summary>div{display:flex!important;gap:3px!important;overflow:hidden}#creator .preview-summary>div span{font-size:.58rem!important;padding:2px 3px!important;white-space:nowrap}
+  #creator .preview-motion,#creator .preview-rot{display:none!important}
+  #creator .creator-opts{flex:1;display:flex!important;min-height:0!important;overflow:hidden!important}
+  #creator .creator-tabs{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;flex:0 0 43px;overflow:hidden!important;border-bottom:3px solid #704735!important}
+  #creator .creator-tab{min-width:0!important;min-height:43px!important;padding:4px 1px!important;font-size:.72rem!important;white-space:normal!important;line-height:1!important}
+  #creator .creator-panel{flex:1;height:auto!important;min-height:0!important;padding:11px 11px 76px!important;overflow-y:auto!important;overscroll-behavior:contain}
+  #creator .creator-panel.active{gap:10px!important}
+  #creator .opt-name input{min-height:46px;font-size:1.15rem!important}
+  #creator .creator-panel .opt-row{gap:6px!important;padding-bottom:8px!important}
+  #creator .creator-panel .opt-row>span,#creator .opt-name>span{font-size:.76rem!important}
+  #creator .class-choice-row .class-pick{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  #creator .class-choice-row .cls-btn{min-height:52px!important;padding:6px!important;grid-template-columns:28px minmax(0,1fr)!important;gap:1px 6px!important}
+  #creator .class-choice-row .cls-btn i{width:27px!important;height:27px!important}#creator .class-choice-row .cls-btn b{font-size:1rem!important}#creator .class-choice-row .cls-btn small{font-size:.7rem!important}
+  #creator .creator-class-kit{display:none!important}
+  #creator .creator-foot{left:0!important;right:0!important;bottom:0!important;padding:7px 9px calc(7px + env(safe-area-inset-bottom))!important;border-top:3px solid #704735!important}
+  #creator .creator-foot .btn-ghost{min-height:43px!important;font-size:.7rem!important;padding:6px 9px!important}
+  #creator .creator-foot .pixel-btn{min-height:45px!important;font-size:max(.42rem,8px)!important;padding:7px 10px!important}
+
+  /* World HUD: game space first. Secondary information lives in Realm Menu. */
+  #hud::before{display:none!important}
+  #status-card{left:6px!important;top:max(6px,env(safe-area-inset-top))!important;width:154px!important;padding:6px 7px 5px!important;border-width:2px!important;border-left-width:3px!important;animation:none!important;backdrop-filter:none!important}
+  .status-identity{grid-template-columns:25px minmax(0,1fr)!important;gap:6px!important;margin-bottom:3px!important}.status-class-crest{width:24px!important;height:24px!important}.status-name{font-size:.84rem!important}.status-lvl{font-size:.34rem!important}.status-class-name{font-size:.38rem!important}
+  .bar-row{grid-template-columns:16px 1fr 22px!important;gap:3px!important}.bar-label,.bar-val{font-size:.58rem!important}.bar{height:7px!important}.xp-row{margin-top:2px!important}.clock-row{margin-top:3px!important;padding-top:3px!important}.clock-row>#clock{font-size:.38rem!important}
+  #pet-chip,#mount-chip{display:none!important}
+  #minimap-wrap{display:none!important}
+  #top-right{right:6px!important;top:max(6px,env(safe-area-inset-top))!important}.realm-menu-trigger{width:42px!important;min-width:42px!important;height:42px!important}
+  #chat-dock{right:54px!important;top:max(6px,env(safe-area-inset-top))!important;width:42px!important;min-height:42px!important}
+  #boss-hud{left:8px!important;right:8px!important;top:62px!important;width:auto!important;padding:7px 9px!important}
+  .arrival-banner{left:8px!important;right:8px!important;top:102px!important;width:auto!important;grid-template-columns:28px minmax(0,1fr) 20px!important;padding:7px 8px!important;animation:none!important;transform:none!important}.arrival-copy>p{font-size:.72rem!important;line-height:1!important;-webkit-line-clamp:2}.arrival-copy>strong{font-size:.46rem!important}.arrival-actions{display:none!important}
+  #skillbar{left:50%!important;bottom:max(6px,env(safe-area-inset-bottom))!important;width:214px!important;max-width:214px!important;gap:3px!important;padding:4px!important}.skillbar-caption{display:none!important}.sk{width:49px!important;height:52px!important}.sk-name{font-size:.65rem!important}.sk-key{font-size:.46rem!important}
+  #stick{left:10px!important;bottom:calc(68px + env(safe-area-inset-bottom))!important;width:78px!important;height:78px!important}#stick-knob{width:36px!important;height:36px!important}
+  #touch-btns{right:9px!important;bottom:calc(70px + env(safe-area-inset-bottom))!important;display:grid!important;grid-template-columns:58px 46px!important;grid-template-rows:46px 46px!important;gap:5px!important;align-items:end}
+  #btn-shield{display:none!important}#btn-attack{grid-row:1/3;width:58px!important;height:58px!important;align-self:center;font-size:.72rem!important}#btn-evade,#btn-interact{width:46px!important;height:46px!important;font-size:.62rem!important}
+  #interact-prompt{bottom:138px!important;max-width:210px!important;font-size:.7rem!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #toast{top:auto!important;bottom:158px!important;max-width:min(250px,calc(100vw - 120px))!important;padding:6px 9px!important;border:2px solid #704735!important;border-radius:0!important;background:#efd497!important;color:#304334!important;font-size:.78rem!important;backdrop-filter:none!important;box-shadow:0 4px 0 #634333,0 10px 24px rgba(31,45,36,.35)!important}
+  #fishing-hud{left:8px!important;right:8px!important;bottom:132px!important;width:auto!important;padding:9px 10px!important}.fishing-head,.fishing-row,#fishing-tip{font-size:.72rem!important}
+  #catch-card{top:70px!important;width:min(290px,calc(100vw - 20px))!important}
+  .food-buff-hud{display:none!important}
+
+  /* Mobile panels use the viewport instead of piling cards over controls. */
+  .panel:not(.level-ceremony):not(.death-panel){width:calc(100vw - 12px)!important;max-width:none!important;max-height:calc(100dvh - 12px)!important;border-width:3px!important}
+  .fishing-mode-panel{width:calc(100vw - 20px)!important}.fishing-mode-grid{grid-template-columns:1fr!important;gap:8px!important;padding:10px!important}.fishing-mode-grid>button{min-height:94px!important}.fishing-mode-hero{grid-template-columns:76px minmax(0,1fr)!important;padding:10px!important}.fishing-mode-water{width:72px!important;height:62px!important}
+
+  /* Death/respawn is a calm decision state—no shake, bounce, or zoom. */
+  .death-panel{width:calc(100vw - 28px)!important;padding:22px 18px 18px!important;border:3px solid #704735!important;border-left-width:5px!important;background:linear-gradient(160deg,#f0d79c,#c8935d)!important;box-shadow:0 18px 50px rgba(23,35,28,.55),inset 0 2px 0 #fff0bb!important;color:#2f4233!important}
+  .death-panel.death-enter{animation:none!important}.death-kicker{color:#7e4437!important;font-size:max(.38rem,8px)!important}.death-mark{width:52px;height:52px;margin:12px auto 10px;border:3px solid #7b4936;background:#d79065;box-shadow:inset 0 0 0 6px #efc786}.death-panel h2{color:#2f4233!important;text-shadow:1px 1px 0 #f8e5aa;font-size:.9rem!important}.death-panel p{color:#5d5f47!important;font-size:.86rem!important;line-height:1.2!important}.death-panel .pixel-btn{width:100%!important;min-width:0!important;min-height:48px!important}
+}
+
+@media(max-width:370px){
+  #creator .creator-preview{grid-template-columns:88px minmax(0,1fr)!important}#creator .preview-stage{width:88px!important}
+  #creator .creator-tab{font-size:.66rem!important}
+  #skillbar{width:198px!important;max-width:198px!important}.sk{width:45px!important}
+  #touch-btns{grid-template-columns:54px 43px!important}#btn-attack{width:54px!important}#btn-evade,#btn-interact{width:43px!important;height:43px!important}
+}
+
