@@ -369,7 +369,7 @@ Game.prototype.updateWeather = function (dt) {
   }
 };
 
-Game.prototype.moveEntity = function (e, dx, dy, r) {
+Game.prototype.isSolidAt = function (x, y, r = 6) {
   // Buildings are rendered from transparent canvases, so they cannot be
   // represented by a tile id without making roofs block the whole map. Keep
   // a small, ground-level footprint instead: the player can walk behind a
@@ -390,7 +390,11 @@ Game.prototype.moveEntity = function (e, dx, dy, r) {
     const ox = x - nearX, oy = y - nearY;
     return ox * ox + oy * oy < r * r;
   }) || false;
-  const solid = (x, y) => this.tileAt(x, y) === 2 || hitsBuilding(x, y);
+  return this.tileAt(x, y) === 2 || hitsBuilding(x, y);
+};
+
+Game.prototype.moveEntity = function (e, dx, dy, r) {
+  const solid = (x, y) => this.isSolidAt(x, y, r);
   let nx = e.x + dx;
   if (!solid(nx + Math.sign(dx) * r, e.y)) e.x = clamp(nx, r, MAP_W * T - r); else e.vx = 0;
   let ny = e.y + dy;

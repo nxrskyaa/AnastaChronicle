@@ -83,7 +83,7 @@
 <div id="creator" class="hidden">
   <div class="creator-backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
   <div class="creator-card">
-    <header class="creator-head"><img class="creator-logo" src="assets/anasta-logo.png" alt="Anasta Chronicle" /><div><span class="creator-step">CHRONICLE GENESIS / 02</span><h2 class="pixel-h2">CREATE YOUR TRAVELER</h2><p>Choose a path, shape your look, then begin the chronicle.</p></div><div class="creator-progress"><i class="done"></i><i class="active"></i><i></i><span>IDENTITY</span></div></header>
+    <header class="creator-head"><img class="creator-logo" src="assets/anasta-logo.png" alt="Anasta Chronicle" /><div><span id="creator-step-label" class="creator-step">CHRONICLE GENESIS / 02</span><h2 id="creator-title" class="pixel-h2">CREATE YOUR TRAVELER</h2><p id="creator-subtitle">Choose a path, shape your look, then begin the chronicle.</p></div><div class="creator-progress"><i class="done"></i><i class="active"></i><i></i><span>IDENTITY</span></div><button id="btn-creator-close" class="creator-close hidden" type="button" aria-label="Close wardrobe">&times;</button></header>
     <div class="creator-body">
       <div class="creator-preview">
         <div class="preview-stage"><span class="preview-zone">CAMP / NIGHTFALL</span><div class="preview-moon"></div><div class="preview-shrine"></div><canvas id="char-preview" width="192" height="220"></canvas><div class="preview-ground"></div></div>
@@ -114,6 +114,8 @@
     </div>
   </div>
 </div>
+
+<div id="resume-loading" class="resume-loading hidden" role="status" aria-live="polite"><div class="resume-sigil"><i></i><i></i><b>✦</b></div><span>RESTORING CHRONICLE</span><strong id="resume-loading-text">Reading traveler data…</strong><small>Your last safe trail is being prepared.</small></div>
 
 <div id="game-wrap" class="hidden">
   <canvas id="game" width="420" height="236"></canvas>
@@ -260,6 +262,7 @@
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
       <button id="auto-battle-toggle" type="button" role="switch" aria-checked="false"><i class="menu-rune battle"></i><span><b>AFK Auto Battle</b><small id="menu-battle-state">OFF · hunts nearby monsters</small></span><em>H</em></button>
       <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 25 bonded</small></span><em>P NEXT</em></button>
+      <button id="btn-open-wardrobe" type="button"><i class="menu-rune wardrobe"></i><span><b>Traveler Wardrobe</b><small id="menu-style-progress">Base collection ready</small></span><em>STYLE</em></button>
       <button type="button" data-open-panel="chat"><i class="menu-rune chat"></i><span><b>Realm Chat</b><small id="menu-chat-state">Offline</small></span><em>ENTER</em></button>
       <button type="button" data-open-panel="settings"><i class="menu-rune settings"></i><span><b>Settings</b><small>Controls &amp; audio</small></span><em>OPEN</em></button>
     </nav>
@@ -282,8 +285,8 @@
   </div>
   <div id="panel-gacha" class="panel panel-wide gacha-panel hidden" role="dialog" aria-modal="true" aria-labelledby="gacha-title">
     <div class="panel-head"><div><span class="panel-kicker">RELIC SUMMONING ALTAR</span><h2 id="gacha-title">Relic Constellation</h2></div><button class="panel-close" data-close="gacha" aria-label="Close gacha">&times;</button></div>
-    <section class="gacha-hero"><div class="gacha-orbit" aria-hidden="true"><i></i><i></i><b>✦</b></div><div><span>ANASTA ARMORY</span><strong>Call a weapon from beyond the veil.</strong><p>Guests summon locally with free calls or gold. Connect Ritual only when you want wallet-owned relics.</p><button id="gacha-connect" type="button">CONNECT FOR ONCHAIN RELICS</button></div><dl><div><dt>Mode</dt><dd id="gacha-wallet-state">GUEST LOCAL</dd></div><div><dt>Free calls</dt><dd id="gacha-free-count">5 / 5</dd></div><div><dt>Gold</dt><dd id="gacha-gold-count">0 G</dd></div></dl></section>
-    <div id="gacha-reveal" class="gacha-reveal empty"><span>THE CONSTELLATION IS QUIET</span><p>Your summoned relics will materialize here.</p></div>
+    <section class="gacha-hero"><div class="gacha-orbit" aria-hidden="true"><i></i><i></i><b>✦</b></div><div><span>ANASTA ARMORY + ATELIER</span><strong>Summon a relic and its matching Style Echo.</strong><p>Every call reveals a weapon plus code-generated hair, outfit, or accessory from the same rarity.</p><button id="gacha-connect" type="button">CONNECT FOR ONCHAIN RELICS</button></div><dl><div><dt>Mode</dt><dd id="gacha-wallet-state">GUEST LOCAL</dd></div><div><dt>Free calls</dt><dd id="gacha-free-count">5 / 5</dd></div><div><dt>Gold</dt><dd id="gacha-gold-count">0 G</dd></div></dl></section>
+    <div id="gacha-reveal" class="gacha-reveal empty"><span>THE CONSTELLATION IS QUIET</span><p>Weapons and Style Echoes will materialize here.</p></div>
     <div class="gacha-actions">
       <button type="button" data-gacha-kind="free" data-gacha-count="1"><small>STARTER CALL</small><b>FREE 1×</b><span>Uses one free pull</span></button>
       <button type="button" data-gacha-kind="gold" data-gacha-count="1"><small>FIELD OFFERING</small><b>500 GOLD · 1×</b><span class="gacha-gold-rule">No wallet needed for guests</span></button>

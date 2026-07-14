@@ -22,6 +22,24 @@ const PET_COLORS = {
 };
 const petName = (id) => MON_META[id]?.name || String(id || "companion").replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
+function drawCosmeticReward(ctx, item) {
+  const px = (x, y, w, h, color) => { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); };
+  const color = item.color, glow = item.glow, dark = "#171522";
+  ctx.imageSmoothingEnabled = false;
+  px(14, 14, 52, 52, "#0a0d15"); px(17, 17, 46, 46, dark);
+  if (item.slot === "style") {
+    px(27, 25, 26, 27, "#d9a47d"); px(24, 20, 32, 13, color); px(22, 27, 7, 25, color); px(51, 27, 7, 25, color);
+    px(28, 20, 20, 4, glow); px(25, 15, 6, 9, color); px(46, 13, 8, 12, glow);
+  } else if (item.slot === "outfit") {
+    px(29, 18, 22, 9, glow); px(22, 25, 36, 28, color); px(18, 27, 8, 20, dark); px(54, 27, 8, 20, dark);
+    px(26, 31, 28, 4, glow); px(36, 35, 8, 20, dark); px(38, 38, 4, 12, glow);
+  } else {
+    px(38, 16, 4, 45, color); px(18, 36, 44, 4, color); px(27, 25, 26, 26, dark);
+    px(32, 30, 16, 16, glow); px(36, 34, 8, 8, color); px(39, 9, 2, 9, glow);
+  }
+  px(18, 18, 3, 3, glow); px(59, 22, 3, 3, color); px(20, 57, 2, 2, color); px(57, 56, 3, 3, glow);
+}
+
 export class UI {
   constructor(audio) {
     this.game = null;
@@ -1110,9 +1128,10 @@ export class UI {
     await this.renderGacha();
     try {
       this.toast(walletState.connected ? "Constellation charged · confirm the Ritual action…" : "Constellation charged · opening local guest summon…");
-      const weapons = await this.game.requestGacha(kind, count);
-      await this.revealGacha(weapons);
-      this.toast(`${weapons.length} relic${weapons.length === 1 ? "" : "s"} entered your inventory.`);
+      const rewards = await this.game.requestGacha(kind, count);
+      await this.revealGacha(rewards);
+      const styles = rewards.filter((reward) => reward.cosmetic && !reward.duplicate).length;
+      this.toast(`${count} relic call${count === 1 ? "" : "s"} complete${styles ? ` · ${styles} new Style Echo${styles === 1 ? "" : "es"}` : ""}.`);
     } catch (error) {
       const reveal = document.getElementById("gacha-reveal");
       if (reveal) { reveal.className = "gacha-reveal empty failed"; reveal.innerHTML = "<span>THE OFFERING RETURNED</span><p>No currency or free pull was consumed if the transaction failed.</p>"; }
@@ -1127,40 +1146,45 @@ export class UI {
 
   prepareGachaRitual(kind, count) {
     const reveal = document.getElementById("gacha-reveal"); if (!reveal) return;
+    delete reveal.dataset.fx;
     reveal.className = "gacha-reveal ritual-stage charging";
     reveal.innerHTML = `<div class="gacha-cinematic"><div class="gacha-portal"><i></i><i></i><i></i><b>✦</b></div><div class="gacha-runes"><i>火</i><i>水</i><i>風</i><i>光</i><i>影</i><i>星</i></div><div class="gacha-charge-copy"><small>${kind === "ritual" ? "RITUAL OFFERING" : kind === "gold" ? "GOLD OFFERING" : "STARTER BLESSING"}</small><strong>CONSTELLATION ALIGNING</strong><span>${count} RELIC${count === 1 ? "" : "S"} CALLED</span></div><div class="gacha-shards">${"<i></i>".repeat(10)}</div></div>`;
     this.audio?.sfx("gachaCharge");
   }
 
-  async revealGacha(weapons) {
+  async revealGacha(rewards) {
     const reveal = document.getElementById("gacha-reveal"); if (!reveal) return;
     const reduced = matchMedia("(prefers-reduced-motion:reduce)").matches;
-    const highest = Math.max(0, ...weapons.map((weapon) => weapon.rarityIndex || 0));
+    const highest = Math.max(0, ...rewards.map((reward) => reward.rarityIndex || 0));
     const rarity = RARITIES[highest] || RARITIES[0];
     reveal.style.setProperty("--reveal", rarity.color);
     reveal.style.setProperty("--reveal-glow", rarity.glow);
+    reveal.dataset.fx = rarity.fx;
+    const seal = reveal.querySelector(".gacha-portal b"); if (seal) seal.textContent = rarity.sigil;
     reveal.classList.remove("charging");
     reveal.classList.add("opening", rarity.id);
     this.audio?.sfx("gachaBurst");
-    await new Promise((resolve) => setTimeout(resolve, reduced ? 70 : 720));
+    await new Promise((resolve) => setTimeout(resolve, reduced ? 70 : 620 + highest * 55));
     reveal.className = `gacha-reveal results ${rarity.id}`;
     reveal.innerHTML = "";
-    for (let index = 0; index < weapons.length; index++) {
-      const weapon = weapons[index];
+    for (let index = 0; index < rewards.length; index++) {
+      const weapon = rewards[index];
       const card = document.createElement("article");
-      card.className = `gacha-card ${weapon.rarity}`;
+      card.className = `gacha-card ${weapon.rarity}${weapon.cosmetic ? " cosmetic-reward" : " weapon-reward"}${weapon.duplicate ? " duplicate" : ""}`;
       card.style.setProperty("--relic", weapon.color); card.style.setProperty("--relic-glow", weapon.glow);
-      card.style.setProperty("--reveal-delay", `${reduced ? 0 : index * (weapons.length > 1 ? 85 : 140)}ms`);
+      card.style.setProperty("--reveal-delay", `${reduced ? 0 : index * (rewards.length > 1 ? 72 : 140)}ms`);
       const canvas = document.createElement("canvas"); canvas.width = 80; canvas.height = 80;
-      const ctx = canvas.getContext("2d"), frame = this.game.weaponFrames?.(weapon.id)?.walk?.down;
+      const ctx = canvas.getContext("2d"), frame = weapon.weapon ? this.game.weaponFrames?.(weapon.id)?.walk?.down : null;
       if (ctx && frame) { ctx.imageSmoothingEnabled = false; ctx.drawImage(frame, 0, 0, frame.width, frame.height, 0, 0, 80, 80); }
+      else if (ctx && weapon.cosmetic) drawCosmeticReward(ctx, weapon);
       const rarity = RARITIES[weapon.rarityIndex]?.name || "Relic";
-      const copy = document.createElement("div"); copy.innerHTML = `<small>${rarity}</small><strong>${weapon.name}</strong><span>DMG ${weapon.dmg} · RNG ${weapon.range}</span>`;
+      const detail = weapon.cosmetic ? `${weapon.duplicate ? "DUPLICATE ECHO" : "NEW STYLE ECHO"} · ${weapon.category}` : `DMG ${weapon.dmg} · RNG ${weapon.range}`;
+      const copy = document.createElement("div"); copy.innerHTML = `<small>${rarity}</small><strong>${weapon.name}</strong><span>${detail}</span>`;
       card.append(canvas, copy); reveal.appendChild(card);
-      if (!reduced) setTimeout(() => this.audio?.sfx("gachaTick"), index * (weapons.length > 1 ? 85 : 140));
+      if (!reduced) setTimeout(() => this.audio?.sfx("gachaTick"), index * (rewards.length > 1 ? 72 : 140));
     }
-    await new Promise((resolve) => setTimeout(resolve, reduced ? 30 : 220 + weapons.length * (weapons.length > 1 ? 85 : 140)));
-    this.audio?.sfx(highest >= 5 ? "gachaRare" : "chest");
+    await new Promise((resolve) => setTimeout(resolve, reduced ? 30 : 220 + rewards.length * (rewards.length > 1 ? 72 : 140)));
+    this.audio?.sfx(highest >= 7 ? "gachaRadiant" : highest >= 6 ? "gachaMythic" : highest >= 4 ? "gachaRare" : "chest");
   }
 
   renderInv() {

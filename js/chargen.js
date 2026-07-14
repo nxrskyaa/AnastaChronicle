@@ -1,4 +1,4 @@
-import { gachaWeapon } from "./gacha.js";
+import { COSMETIC_BY_ID, GACHA_COSMETICS, gachaWeapon } from "./gacha.js";
 
 // Runtime character generator: draws player from parametric parts into cached canvases.
 // Enables customization (skin/hair/shirt/pants/boots/hairstyle) + smooth weapon swing.
@@ -15,10 +15,13 @@ export const PRESETS = {
   boots: ["#5c3c2c", "#3a3a42", "#7a5230", "#2a2a30", "#8a6a3a"],
   accent: ["#e8c96a", "#6ee0b0", "#65b8e8", "#a87ae0", "#e06055", "#e887bd", "#f09b4e", "#d7e2ea"],
 };
-export const HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail", "bob", "braids", "undercut", "samurai", "waves", "twintails", "messy", "topknot", "shaved"];
+export const BASE_HAIRSTYLES = ["short", "spiky", "long", "mohawk", "bald", "ponytail", "bob", "braids", "undercut", "samurai", "waves", "twintails", "messy", "topknot", "shaved"];
+export const HAIRSTYLES = [...BASE_HAIRSTYLES, ...GACHA_COSMETICS.filter((item) => item.slot === "style").map((item) => item.id)];
 export const FACE_MARKS = ["none", "scar", "freckles", "warpaint", "rune", "blossom", "sunseal", "fang"];
-export const ACCESSORIES = ["none", "headband", "leafpin", "earring", "foxmask", "horns", "crown", "ribbon", "halo", "eyepatch", "feather"];
-export const OUTFITS = ["wanderer", "vanguard", "mythic"];
+export const BASE_ACCESSORIES = ["none", "headband", "leafpin", "earring", "foxmask", "horns", "crown", "ribbon", "halo", "eyepatch", "feather"];
+export const ACCESSORIES = [...BASE_ACCESSORIES, ...GACHA_COSMETICS.filter((item) => item.slot === "accessory").map((item) => item.id)];
+export const BASE_OUTFITS = ["wanderer", "vanguard", "mythic"];
+export const OUTFITS = [...BASE_OUTFITS, ...GACHA_COSMETICS.filter((item) => item.slot === "outfit").map((item) => item.id)];
 export const AURAS = ["none", "ember", "arcane", "verdant", "frost", "void", "holy", "blood", "storm"];
 
 export const DEFAULT_LOOK = {
@@ -62,6 +65,20 @@ function shade(hex, f) {
 
 function px(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
 
+const RELIC_HAIR_BASE = Object.freeze({
+  relic_trailcut: "short", relic_grove_braid: "braids", relic_tidewave: "waves", relic_astral_tail: "ponytail",
+  relic_witchflare: "spiky", relic_suncrest: "samurai", relic_oni_mane: "messy", relic_genesis_locks: "twintails",
+});
+const RELIC_OUTFIT_BASE = Object.freeze({
+  relic_scout_mantle: "wanderer", relic_mossguard: "vanguard", relic_azure_ranger: "wanderer", relic_voidweave: "mythic",
+  relic_seraph_vestment: "mythic", relic_garuda_regalia: "vanguard", relic_bloodmoon_armor: "vanguard", relic_heavenweave: "mythic",
+});
+
+function resolvedOutfit(look) {
+  const id = look.outfit || "wanderer", relic = COSMETIC_BY_ID[id];
+  return { id, style: RELIC_OUTFIT_BASE[id] || id, accent: relic?.color || look.accent || DEFAULT_LOOK.accent, glow: relic?.glow || null, rarity: relic?.rarityIndex ?? -1 };
+}
+
 function pixelLine(ctx, x0, y0, x1, y1, color, size = 1) {
   x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
   const dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
@@ -80,8 +97,8 @@ function pixelLine(ctx, x0, y0, x1, y1, color, size = 1) {
 // read as a genuinely different traveler instead of a recolored base sprite.
 function drawClassBack(ctx, look, dir, cx, by, frame = 0) {
   const cls = look.cls || "warrior";
-  const outfit = look.outfit || "wanderer";
-  const accent = look.accent || DEFAULT_LOOK.accent;
+  const relicOutfit = resolvedOutfit(look), outfit = relicOutfit.style;
+  const accent = relicOutfit.accent;
   const deep = shade(accent, 0.36), mid = shade(accent, 0.62), hi = shade(accent, 1.18);
   const sway = [-1, 0, 1, 0][frame % 4];
 
@@ -199,8 +216,8 @@ function drawClassBack(ctx, look, dir, cx, by, frame = 0) {
 
 function drawClassFront(ctx, look, dir, cx, by, frame = 0) {
   const cls = look.cls || "warrior";
-  const outfit = look.outfit || "wanderer";
-  const accent = look.accent || DEFAULT_LOOK.accent;
+  const relicOutfit = resolvedOutfit(look), outfit = relicOutfit.style;
+  const accent = relicOutfit.accent;
   const deep = shade(accent, 0.36), mid = shade(accent, 0.62), hi = shade(accent, 1.2);
   const tTop = 16 + by, tBot = 27 + by;
 
@@ -372,6 +389,25 @@ function drawAura(ctx, look, frame, energy = 0) {
   ctx.restore();
 }
 
+function drawRelicOutfitOverlay(ctx, look, dir, cx, by, frame) {
+  const relic = COSMETIC_BY_ID[look.outfit];
+  if (!relic) return;
+  const top = 18 + by, side = dir === "left" ? -1 : 1;
+  const color = relic.color, hi = relic.glow, deep = shade(relic.color, .45);
+  if (dir === "down" || dir === "up") {
+    px(ctx, cx - 8, top + 1, 3, 3 + Math.min(4, relic.rarityIndex), deep);
+    px(ctx, cx + 5, top + 1, 3, 3 + Math.min(4, relic.rarityIndex), deep);
+    px(ctx, cx - 1, top + 3, 2, 2, hi);
+    if (relic.rarityIndex >= 3) { px(ctx, cx - 5, top + 9, 2, 6 + (frame % 2), color); px(ctx, cx + 3, top + 9, 2, 6 - (frame % 2), color); }
+    if (relic.rarityIndex >= 5) { pixelLine(ctx, cx - 5, top + 2, cx, top + 8, hi); pixelLine(ctx, cx + 5, top + 2, cx, top + 8, color); }
+    if (relic.rarityIndex === 7) { px(ctx, cx - 7, top - 1, 2, 2, "#fffbd2"); px(ctx, cx + 5, top - 1, 2, 2, "#77f7e5"); }
+  } else {
+    px(ctx, cx + side * 5, top + 1, 3, 5 + Math.min(3, relic.rarityIndex), deep);
+    px(ctx, cx + side * 6, top + 2, 2, 2, hi);
+    if (relic.rarityIndex >= 4) pixelLine(ctx, cx - side * 3, top + 7, cx - side * 7, top + 14 + (frame % 2), color, 2);
+  }
+}
+
 function drawFaceMark(ctx, look, dir, cx, hy, skinShade) {
   const mark = look.mark || "none";
   const accent = look.accent || DEFAULT_LOOK.accent;
@@ -414,10 +450,32 @@ function drawFaceMark(ctx, look, dir, cx, hy, skinShade) {
 
 function drawAccessory(ctx, look, dir, cx, hy, frame) {
   const accessory = look.accessory || "none";
-  const accent = look.accent || DEFAULT_LOOK.accent;
+  const relic = COSMETIC_BY_ID[accessory];
+  const accent = relic?.color || look.accent || DEFAULT_LOOK.accent;
   const hi = shade(accent, 1.22), deep = shade(accent, 0.52);
   const sway = [-1, 0, 1, 0][frame % 4];
   if (accessory === "none") return;
+
+  if (relic) {
+    const tier = relic.rarityIndex;
+    if (accessory === "relic_copper_pin" || accessory === "relic_jade_circlet") {
+      const x = dir === "right" ? cx - 7 : cx + 5;
+      px(ctx, x, hy - 5, 3, 4, accent); px(ctx, x + (dir === "right" ? -1 : 1), hy - 6, 2, 2, hi);
+    } else if (accessory === "relic_moon_lens") {
+      if (dir !== "up") { px(ctx, cx - 5, hy - 1, 10, 1, deep); px(ctx, dir === "right" ? cx + 2 : cx - 4, hy, 3, 3, hi); }
+    } else if (accessory === "relic_amethyst_horns") {
+      pixelLine(ctx, cx - 5, hy - 5, cx - 8, hy - 11, accent, 2); pixelLine(ctx, cx + 4, hy - 5, cx + 7, hy - 11, hi, 2);
+    } else if (accessory === "relic_star_halo" || accessory === "relic_ritual_sigil") {
+      px(ctx, cx - 7, hy - 11, 14, 1, hi); px(ctx, cx - 4, hy - 12, 8, 1, accent);
+      for (let i = 0; i < (tier >= 7 ? 4 : 2); i++) px(ctx, cx - 8 + i * 5 + (frame % 2), hy - 10 - (i % 2) * 2, 2, 2, i % 2 ? hi : accent);
+    } else if (accessory === "relic_phoenix_mask") {
+      px(ctx, cx - 6, hy - 4, 12, 6, "#f6e4bd"); px(ctx, cx - 5, hy - 6, 3, 4, accent); px(ctx, cx + 2, hy - 6, 3, 4, hi);
+      px(ctx, cx - 3, hy - 1, 2, 1, deep); px(ctx, cx + 2, hy - 1, 2, 1, deep);
+    } else if (accessory === "relic_eclipse_crown") {
+      px(ctx, cx - 6, hy - 8, 12, 3, deep); px(ctx, cx - 5, hy - 11, 3, 5, accent); px(ctx, cx - 1, hy - 13, 2, 7, hi); px(ctx, cx + 3, hy - 11, 3, 5, accent);
+    }
+    return;
+  }
 
   if (accessory === "headband") {
     px(ctx, cx - 6, hy - 2, 12, 2, deep); px(ctx, cx - 4, hy - 2, 8, 1, accent);
@@ -482,7 +540,8 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
   const pn = look.pants, pn2 = shade(look.pants, 0.78), pn3 = shade(look.pants, 0.62);
   const bt = look.boots, bt2 = shade(look.boots, 0.72);
   const eyeCol = look.eyes || "#26222a";
-  const st = look.style;
+  const relicHair = COSMETIC_BY_ID[look.style];
+  const st = RELIC_HAIR_BASE[look.style] || look.style;
 
   const attacking = atkPhase != null;
   const walking = !attacking && pose === "walk";
@@ -670,6 +729,7 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
       px(ctx, cx - 3, tTop + 4, 6, 4, shade(accent, .55)); px(ctx, cx - 1, tTop + 4, 2, 4, shade(accent, 1.24));
     }
   }
+  drawRelicOutfitOverlay(ctx, look, dir, cx, by, frame);
 
   // ================= HEAD (defined, slightly large but not a blob) =========
   const hy = 10 + by;
@@ -745,6 +805,14 @@ function drawBody(ctx, look, dir, frame, atkPhase, pose = "walk", posePhase = 0)
         px(ctx, cx - 4, hy - 2, 1, 1, hr3); px(ctx, cx + 3, hy - 1, 1, 1, hr3);
       }
     }
+  }
+
+  if (relicHair) {
+    const hc = relicHair.color, hg = relicHair.glow, tier = relicHair.rarityIndex;
+    px(ctx, cx - 4, hy - 7, 3, 1, hg); px(ctx, cx + 1, hy - 6, 3, 1, hc);
+    if (tier >= 2) { px(ctx, cx - 7, hy - 3 + hairSway, 2, 3, hc); px(ctx, cx + 5, hy - 4 - hairSway, 2, 3, hg); }
+    if (tier >= 4) { pixelLine(ctx, cx - 5, hy - 7, cx - 8, hy - 11, hc); pixelLine(ctx, cx + 4, hy - 7, cx + 7, hy - 10, hg); }
+    if (tier >= 6) { px(ctx, cx - 1, hy - 12, 2, 2, "#fff3b0"); px(ctx, cx - 8 + (frame % 2), hy + 5, 2, 2, hc); px(ctx, cx + 6 - (frame % 2), hy + 3, 2, 2, hg); }
   }
 
   // ---- face ----
@@ -861,6 +929,7 @@ function drawPixelStaff(ctx, dragon, atkPhase) {
       px(ctx, Math.round(Math.cos(a) * (8 + pulse)) - 1, -21 + Math.round(Math.sin(a) * (5 + pulse)), 2, 2, i === 0 ? core : crystal);
     }
   }
+
 }
 
 function drawPixelScepter(ctx, atkPhase) {

@@ -1,12 +1,12 @@
 export const RARITIES = Object.freeze([
-  { id: "common", name: "Common", color: "#b8c0c7", glow: "#dbe2e8" },
-  { id: "uncommon", name: "Uncommon", color: "#65c979", glow: "#a9f5a9" },
-  { id: "rare", name: "Rare", color: "#54a9ef", glow: "#9edcff" },
-  { id: "epic", name: "Epic", color: "#a66cf0", glow: "#d5a8ff" },
-  { id: "ultra_rare", name: "Ultra Rare", color: "#ef67c5", glow: "#ffb8ed" },
-  { id: "legendary", name: "Legendary", color: "#f2a633", glow: "#ffe08a" },
-  { id: "mythical", name: "Mythical", color: "#ed5353", glow: "#ffae78" },
-  { id: "mythical_radiant", name: "Mythical Radiant", color: "#77f7e5", glow: "#fff7a8" },
+  { id: "common", name: "Common", color: "#b8c0c7", glow: "#dbe2e8", sigil: "◇", fx: "dust" },
+  { id: "uncommon", name: "Uncommon", color: "#65c979", glow: "#a9f5a9", sigil: "❖", fx: "leaves" },
+  { id: "rare", name: "Rare", color: "#54a9ef", glow: "#9edcff", sigil: "✧", fx: "tide" },
+  { id: "epic", name: "Epic", color: "#a66cf0", glow: "#d5a8ff", sigil: "✦", fx: "arcane" },
+  { id: "ultra_rare", name: "Ultra Rare", color: "#ef67c5", glow: "#ffb8ed", sigil: "✺", fx: "blossom" },
+  { id: "legendary", name: "Legendary", color: "#f2a633", glow: "#ffe08a", sigil: "☀", fx: "sunfire" },
+  { id: "mythical", name: "Mythical", color: "#ed5353", glow: "#ffae78", sigil: "♜", fx: "eclipse" },
+  { id: "mythical_radiant", name: "Mythical Radiant", color: "#77f7e5", glow: "#fff7a8", sigil: "✹", fx: "radiant" },
 ]);
 
 const rows = [
@@ -41,6 +41,31 @@ export const GACHA_WEAPONS = Object.freeze(Object.fromEntries(rows.map(([id, nam
 
 export const GACHA_BY_ITEM_ID = Object.freeze(Object.fromEntries(Object.values(GACHA_WEAPONS).map((weapon) => [weapon.itemId, weapon])));
 export const gachaWeapon = (id) => GACHA_WEAPONS[id] || null;
+
+const cosmeticRows = [
+  ["relic_trailcut", "Trailcut Fringe", "style"], ["relic_scout_mantle", "Scout Mantle", "outfit"], ["relic_copper_pin", "Copper Wisp Pin", "accessory"],
+  ["relic_grove_braid", "Grovekeeper Braid", "style"], ["relic_mossguard", "Mossguard Coat", "outfit"], ["relic_jade_circlet", "Jade Leaf Circlet", "accessory"],
+  ["relic_tidewave", "Tidewave Locks", "style"], ["relic_azure_ranger", "Azure Ranger Coat", "outfit"], ["relic_moon_lens", "Moonseer Lens", "accessory"],
+  ["relic_astral_tail", "Astral Comet Tail", "style"], ["relic_voidweave", "Voidweave Robe", "outfit"], ["relic_amethyst_horns", "Amethyst Horns", "accessory"],
+  ["relic_witchflare", "Witchflare Hair", "style"], ["relic_seraph_vestment", "Seraph Vestment", "outfit"], ["relic_star_halo", "Starfall Halo", "accessory"],
+  ["relic_suncrest", "Suncrest Mane", "style"], ["relic_garuda_regalia", "Garuda Regalia", "outfit"], ["relic_phoenix_mask", "Phoenix Visage", "accessory"],
+  ["relic_oni_mane", "Oni Eclipse Mane", "style"], ["relic_bloodmoon_armor", "Bloodmoon Armor", "outfit"], ["relic_eclipse_crown", "Eclipse Crown", "accessory"],
+  ["relic_genesis_locks", "Genesis Starlight", "style"], ["relic_heavenweave", "Heavenweave Raiment", "outfit"], ["relic_ritual_sigil", "Eternal Ritual Sigil", "accessory"],
+];
+
+export const GACHA_COSMETICS = Object.freeze(cosmeticRows.map(([id, name, slot], index) => {
+  const rarityIndex = Math.floor(index / 3), rarity = RARITIES[rarityIndex];
+  return Object.freeze({ id, name, slot, category: slot === "style" ? "Hair" : slot === "outfit" ? "Outfit" : "Accessory", cosmetic: true, rarity: rarity.id, rarityIndex, color: rarity.color, glow: rarity.glow });
+}));
+export const COSMETIC_BY_ID = Object.freeze(Object.fromEntries(GACHA_COSMETICS.map((item) => [item.id, item])));
+export const isGachaCosmetic = (id) => !!COSMETIC_BY_ID[id];
+
+export function cosmeticForRelic(itemId, sequence = 0) {
+  const weapon = GACHA_BY_ITEM_ID[itemId];
+  if (!weapon) return null;
+  const variant = (Number(itemId) + Number(sequence || 0)) % 3;
+  return GACHA_COSMETICS[weapon.rarityIndex * 3 + variant] || null;
+}
 
 const RARITY_CUTOFFS = Object.freeze([15, 80, 250, 600, 1300, 2500, 5000]);
 function secureRoll(max) {

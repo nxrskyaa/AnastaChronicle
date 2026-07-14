@@ -78,6 +78,14 @@ class Audio {
         [392, 523, 659, 988, 1319].forEach((f, i) => setTimeout(() => this.blip(f, .3, "triangle", .2 + i * .018, f * 1.04), i * 72));
         setTimeout(() => this.noise(.24, .16, 1500), 90);
         break;
+      case "gachaMythic":
+        [147, 220, 294, 440, 587, 880].forEach((f, i) => setTimeout(() => this.blip(f, .42, i < 2 ? "sawtooth" : "triangle", .18 + i * .022, f * 1.12), i * 82));
+        setTimeout(() => this.noise(.48, .24, 920), 120);
+        break;
+      case "gachaRadiant":
+        [262, 392, 523, 659, 1047, 1319, 2093].forEach((f, i) => setTimeout(() => this.blip(f, .48, "triangle", .18 + i * .02, f * 1.06), i * 68));
+        [0, 110, 220].forEach((delay) => setTimeout(() => this.noise(.3, .2, 1800 + delay * 3), delay));
+        break;
     }
   }
 

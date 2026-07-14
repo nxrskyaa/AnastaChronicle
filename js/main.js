@@ -26,7 +26,7 @@ import {
   readV3Save, saveProgressOnchain, v3Configured,
   readOwnedWeapons, readLastPull, pullGachaFree, pullGachaGold, pullGachaRitual,
 } from "./wallet.js";
-import { drawGuestGacha, GACHA_BY_ITEM_ID } from "./gacha.js";
+import { COSMETIC_BY_ID, cosmeticForRelic, drawGuestGacha, GACHA_BY_ITEM_ID, isGachaCosmetic } from "./gacha.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -115,6 +115,8 @@ let previewCache = null;
 let previewWeapon = null;
 let previewLookKey = "";
 let previewRAF = null;
+let creatorMode = "new";
+let wardrobeOriginalLook = null;
 
 function invalidatePreview() { previewLookKey = ""; }
 
@@ -194,16 +196,20 @@ function startPreviewLoop() {
 function swatch(part) {
   const wrap = document.getElementById("sw-" + part); if (!wrap) return;
   wrap.innerHTML = "";
-  const vals = part === "style" ? HAIRSTYLES : part === "mark" ? FACE_MARKS : part === "accessory" ? ACCESSORIES : part === "outfit" ? OUTFITS : part === "aura" ? AURAS : PRESETS[part];
+  const allValues = part === "style" ? HAIRSTYLES : part === "mark" ? FACE_MARKS : part === "accessory" ? ACCESSORIES : part === "outfit" ? OUTFITS : part === "aura" ? AURAS : PRESETS[part];
+  const vals = creatorMode === "new" ? allValues.filter((value) => !isGachaCosmetic(value)) : allValues;
   const textPart = ["style", "mark", "accessory", "outfit", "aura"].includes(part);
   for (const v of vals) {
+    const relic = COSMETIC_BY_ID[v];
+    const locked = creatorMode === "wardrobe" && !!relic && !game?.cosmeticsOwned?.includes(v);
     const b = document.createElement("button");
-    b.className = "swatch" + (look[part] === v ? " sel" : "");
+    b.className = "swatch" + (look[part] === v ? " sel" : "") + (locked ? " locked" : "") + (relic ? ` relic-swatch ${relic.rarity}` : "");
     b.type = "button";
-    b.title = `${part}: ${v}`;
-    b.setAttribute("aria-label", `${part} ${v}`);
+    b.title = locked ? `${relic.name} · locked in Relic Constellation` : `${part}: ${relic?.name || v}`;
+    b.setAttribute("aria-label", locked ? `${relic.name}, locked` : `${part} ${relic?.name || v}`);
     b.setAttribute("aria-pressed", look[part] === v ? "true" : "false");
-    if (textPart) { b.textContent = v; b.classList.add("txt"); }
+    b.disabled = locked;
+    if (textPart) { b.textContent = locked ? `LOCKED · ${relic.name}` : relic?.name || v; b.classList.add("txt"); }
     else b.style.background = v;
     b.addEventListener("click", () => {
       audio.sfx("ui"); look[part] = v; invalidatePreview();
@@ -215,6 +221,17 @@ function swatch(part) {
 }
 function initCreator() {
   look = normalizeLook(look);
+  const wardrobe = creatorMode === "wardrobe";
+  document.getElementById("creator-step-label").textContent = wardrobe ? "TRAVELER WARDROBE / LIVE" : "CHRONICLE GENESIS / 02";
+  document.getElementById("creator-title").textContent = wardrobe ? "RESTYLE YOUR TRAVELER" : "CREATE YOUR TRAVELER";
+  document.getElementById("creator-subtitle").textContent = wardrobe ? "Equip unlocked hair, outfits, accessories, and aura without leaving the realm." : "Choose a path, shape your look, then begin the chronicle.";
+  document.getElementById("btn-enter").innerHTML = wardrobe ? "SAVE APPEARANCE <b>&rsaquo;</b>" : "BEGIN CHRONICLE <b>&rsaquo;</b>";
+  document.getElementById("btn-creator-close")?.classList.toggle("hidden", !wardrobe);
+  document.querySelector('[data-creator-tab="identity"]')?.classList.toggle("hidden", wardrobe);
+  if (wardrobe) {
+    document.querySelectorAll("[data-creator-tab]").forEach((tab) => tab.classList.toggle("active", tab.dataset.creatorTab === "appearance"));
+    document.querySelectorAll("[data-creator-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.creatorPanel === "appearance"));
+  }
   const parts = ["style", "hair", "eyes", "skin", "mark", "accessory", "outfit", "accent", "shirt", "pants", "boots", "aura"];
   parts.forEach(swatch);
   updateCreatorSummary();
@@ -259,10 +276,47 @@ function initCreator() {
     });
     parts.forEach(swatch); invalidatePreview(); updateCreatorSummary(); drawPreview();
   });
-  document.getElementById("btn-enter").addEventListener("click", () => startGame());
+  document.getElementById("btn-enter").addEventListener("click", () => {
+    if (creatorMode !== "wardrobe") return startGame();
+    look = normalizeLook(look);
+    game.rebuildCharacter(look);
+    game.player.cls = look.cls;
+    game.onProgressChange?.();
+    creator.classList.add("hidden");
+    creatorMode = "new";
+    wardrobeOriginalLook = null;
+    game.paused = false; game.inputLocked = false; game.suspendInput(220);
+    game.ui.toast("Appearance saved · your new look is active");
+  });
   drawPreview();
   startPreviewLoop();
 }
+
+function closeWardrobe() {
+  if (creatorMode !== "wardrobe") return;
+  look = normalizeLook(wardrobeOriginalLook || game?.look || look);
+  creator.classList.add("hidden");
+  creatorMode = "new";
+  wardrobeOriginalLook = null;
+  if (game) { game.paused = false; game.inputLocked = false; game.suspendInput(220); }
+}
+
+function openWardrobe() {
+  if (!game?.player) return;
+  game.ui.closeAll();
+  game.paused = true; game.inputLocked = true; game.resetInputState();
+  wardrobeOriginalLook = normalizeLook(game.look);
+  look = normalizeLook(game.look);
+  creatorMode = "wardrobe";
+  invalidatePreview();
+  creator.classList.remove("hidden");
+  initCreator();
+  const progress = document.getElementById("menu-style-progress");
+  if (progress) progress.textContent = `${game.cosmeticsOwned.length} Style Echoes unlocked`;
+}
+
+document.getElementById("btn-open-wardrobe")?.addEventListener("click", openWardrobe);
+document.getElementById("btn-creator-close")?.addEventListener("click", closeWardrobe);
 
 function wireSettings() {
   const musicR = document.getElementById("set-music");
@@ -344,6 +398,7 @@ function savePayload(g) {
     quests: g.quests?.serialize?.(),
     afkFishing: g.afkFishingJob || null,
     flags: g.flags,
+    cosmeticsOwned: Array.isArray(g.cosmeticsOwned) ? [...g.cosmeticsOwned] : [],
     equipped: p.equipped,
     pets: Array.isArray(g.pets) ? [...g.pets] : [],
     activePetId: g.activePetId || g.pet?.id || null,
@@ -358,7 +413,8 @@ function safeRestorePosition(g, x, y) {
   const fallback = { x: g.player.x, y: g.player.y };
   const valid = (px, py) => {
     if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
-    if (g.tileAt?.(px, py) === 2) return false;
+    if (px < 12 || py < 12 || px > 110 * 24 - 12 || py > 110 * 24 - 12) return false;
+    if (g.isSolidAt?.(px, py, 7) ?? g.tileAt?.(px, py) === 2) return false;
     if (g.bossArena && Math.hypot(px - g.bossArena.x, py - g.bossArena.y) < g.bossArena.radius + 20) return false;
     return true;
   };
@@ -509,6 +565,8 @@ function startGame(savedLook, savedName, saveData) {
         game.flags = { ...game.flags, ...saveData.flags };
         if (game.flags.starterCache) { const cache = game.chests.find((chest) => chest.starter); if (cache) cache.opened = true; }
       }
+      if (Array.isArray(saveData.cosmeticsOwned)) game.cosmeticsOwned = [...new Set(saveData.cosmeticsOwned.filter((id) => COSMETIC_BY_ID[id]))];
+      for (const slot of [look.style, look.outfit, look.accessory]) if (COSMETIC_BY_ID[slot] && !game.cosmeticsOwned.includes(slot)) game.cosmeticsOwned.push(slot);
       if (saveData.equipped) { p.equipped = saveData.equipped; }
       game.ui.toast(`Welcome back, ${look.name}!`);
     }
@@ -540,6 +598,22 @@ function startGame(savedLook, savedName, saveData) {
       ui.markSaved?.(payload.ts);
       return payload.ts;
     };
+    const grantGachaRewards = (weapons) => {
+      const rewards = [];
+      for (const weapon of weapons) {
+        game.player.inv[weapon.id] = (game.player.inv[weapon.id] || 0) + 1;
+        rewards.push(weapon);
+        const sequence = Math.max(0, Number(game.flags.gachaSequence) || 0);
+        const cosmetic = cosmeticForRelic(weapon.itemId, sequence);
+        game.flags.gachaSequence = sequence + 1;
+        if (cosmetic) {
+          const duplicate = game.cosmeticsOwned.includes(cosmetic.id);
+          if (!duplicate) game.cosmeticsOwned.push(cosmetic.id);
+          rewards.push({ ...cosmetic, duplicate });
+        }
+      }
+      return rewards;
+    };
     game.requestSave = async () => {
       const savedAt = persist();
       if (saveMode !== "wallet") return { local: true, savedAt };
@@ -566,10 +640,10 @@ function startGame(savedLook, savedName, saveData) {
           game.player.gold -= price;
         }
         const weapons = drawGuestGacha(pulls).filter(Boolean);
-        for (const weapon of weapons) game.player.inv[weapon.id] = (game.player.inv[weapon.id] || 0) + 1;
+        const rewards = grantGachaRewards(weapons);
         persist();
         game.ui.sync?.();
-        return weapons;
+        return rewards;
       }
       if (!v3Configured) throw new Error("Anasta V3 contract is not configured.");
       if (!(await ensureOnchainProfile(game, ui))) throw new Error("Ritual profile is not ready.");
@@ -583,10 +657,10 @@ function startGame(savedLook, savedName, saveData) {
       const itemIds = await readLastPull(walletState.address);
       const weapons = itemIds.map((itemId) => GACHA_BY_ITEM_ID[itemId]).filter(Boolean);
       if (weapons.length !== pulls) throw new Error("Ritual confirmed the pull but the relic result could not be decoded. Sync again.");
-      for (const weapon of weapons) game.player.inv[weapon.id] = (game.player.inv[weapon.id] || 0) + 1;
+      const rewards = grantGachaRewards(weapons);
       persist();
       game.ui.sync?.();
-      return weapons;
+      return rewards;
     };
     game.requestWalletConnect = async () => {
       await connectRitualWallet();
@@ -621,7 +695,12 @@ function startGame(savedLook, savedName, saveData) {
         if (!room) game.ui.setOnlineState(false, 1);
       })
       .catch(() => {});
-  } catch (e) { console.error(e); alert("Start failed: " + e.message); }
+    return true;
+  } catch (e) {
+    console.error("Chronicle start failed", e);
+    document.getElementById("game-wrap")?.classList.add("hidden");
+    return false;
+  }
 }
 
 // ── LOGIN SYSTEM ──────────────────────────────────────────────
@@ -635,7 +714,35 @@ const btnNewGame = document.getElementById("btn-newgame");
 const SAVE_KEY = "anasta_save";
 let saveMode = "guest";
 
-function getSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
+function normalizeSaveData(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const safe = { ...raw };
+  safe.version = Math.max(3, Number(raw.version) || 1);
+  safe.name = String(raw.name || raw.look?.name || "Traveler").slice(0, 14) || "Traveler";
+  safe.look = normalizeLook({ ...(raw.look && typeof raw.look === "object" ? raw.look : {}), name: safe.name });
+  const stats = raw.stats && typeof raw.stats === "object" ? raw.stats : {};
+  safe.stats = {
+    level: Math.max(1, Math.min(999, Math.floor(Number(stats.level) || 1))),
+    xp: Math.max(0, Number(stats.xp) || 0), gold: Math.max(0, Number(stats.gold) || 0),
+    hp: Math.max(1, Number(stats.hp) || 999), cls: CLASSES[stats.cls] ? stats.cls : safe.look.cls,
+  };
+  const position = raw.position && typeof raw.position === "object" ? raw.position : {};
+  safe.position = { x: Number(position.x), y: Number(position.y), dir: ["up", "down", "left", "right"].includes(position.dir) ? position.dir : "down" };
+  safe.inv = raw.inv && typeof raw.inv === "object" && !Array.isArray(raw.inv)
+    ? Object.fromEntries(Object.entries(raw.inv).slice(0, 256).map(([id, count]) => [id, Math.max(0, Math.floor(Number(count) || 0))])) : {};
+  safe.pets = Array.isArray(raw.pets) ? [...new Set(raw.pets.filter((id) => typeof id === "string").slice(0, 64))] : [];
+  safe.cosmeticsOwned = Array.isArray(raw.cosmeticsOwned) ? [...new Set(raw.cosmeticsOwned.filter((id) => COSMETIC_BY_ID[id]))] : [];
+  const flags = raw.flags && typeof raw.flags === "object" ? raw.flags : {};
+  safe.flags = {
+    starterCache: !!flags.starterCache,
+    guestGachaFreePulls: Object.prototype.hasOwnProperty.call(flags, "guestGachaFreePulls") ? Math.max(0, Math.min(5, Math.floor(Number(flags.guestGachaFreePulls) || 0))) : 5,
+    gachaSequence: Math.max(0, Math.floor(Number(flags.gachaSequence) || 0)),
+  };
+  safe.activeFoodBuffs = Array.isArray(raw.activeFoodBuffs) ? raw.activeFoodBuffs.slice(0, 24) : [];
+  return safe;
+}
+
+function getSave() { try { return normalizeSaveData(JSON.parse(localStorage.getItem(SAVE_KEY))); } catch { return null; } }
 function putSave(data) { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
 
 const mainMenuChoices = document.getElementById("main-menu-choices");
@@ -822,7 +929,8 @@ function buildWalletRecoverySave() {
     fishing: { total: 0, best: 0, records: {} },
     quests: null,
     afkFishing: null,
-    flags: { starterCache: false, guestGachaFreePulls: 5 },
+    flags: { starterCache: false, guestGachaFreePulls: 5, gachaSequence: 0 },
+    cosmeticsOwned: [],
     equipped: "fist",
     pets: [], activePetId: null, mountId: null, mounted: false,
     activeFoodBuffs: [], ts: Date.now(), wallet: walletState.address,
@@ -880,11 +988,28 @@ function showLogin() {
   }
 }
 
-function enterGameWithSave(save) {
+let resumeInFlight = false;
+async function enterGameWithSave(rawSave) {
+  if (resumeInFlight || game) return;
+  const save = normalizeSaveData(rawSave);
+  if (!save) return;
+  resumeInFlight = true;
   if (loginScreen._raf) cancelAnimationFrame(loginScreen._raf);
   loginScreen.classList.add("hidden");
-  // Use saved look + skip creator
-  startGame(save.look, save.name, save);
+  const resume = document.getElementById("resume-loading");
+  const resumeText = document.getElementById("resume-loading-text");
+  resume?.classList.remove("hidden");
+  if (resumeText) resumeText.textContent = `Preparing ${save.name} · Level ${save.stats.level}`;
+  await new Promise((resolve) => setTimeout(resolve, 48));
+  const started = startGame(save.look, save.name, save);
+  resume?.classList.add("hidden");
+  resumeInFlight = false;
+  if (!started) {
+    game = null;
+    loginScreen.classList.remove("hidden");
+    setLoginMode("guest");
+    if (resumeText) resumeText.textContent = "Save recovery failed · returned safely to menu";
+  }
 }
 
 function enterNewGame(name) {
