@@ -30,8 +30,8 @@ export function getServerUrl(id = getSelectedServerId()) {
 // Kept as a compatibility export for diagnostics and older integrations.
 export const SERVER_URL = getServerUrl();
 
-// Deployed from contracts/AnastaChronicleProfiles.sol on Ritual Testnet.
-export const PROFILE_CONTRACT_ADDRESS = "0x6eDc6a30D2735E71afDB622026a46343e6dD81fa";
+// Deployed from contracts/AnastaChronicleProfilesV2.sol on Ritual Testnet.
+export const PROFILE_CONTRACT_ADDRESS = "0xec33bc86a1154d16C60f35CEE58CCB1a4ef0543B";
 export const LEVEL_TX_FEE_RIT = "0.00067";
 export const RITUAL_TESTNET = Object.freeze({
   name: "Ritual Testnet",
