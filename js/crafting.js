@@ -1,3 +1,5 @@
+import { GACHA_WEAPONS } from "./gacha.js";
+
 export const ITEMS = {
   fist: { name: "Fist", glyph: "F" },
   wood: { name: "Wood", glyph: "W", source: "Bamboo shoots and forest plants" },
@@ -21,6 +23,11 @@ export const ITEMS = {
   dragonblade: { name: "Dragon Blade", glyph: "/", weapon: true, rare: true },
   dragonbow: { name: "Dragon Bow", glyph: ")", weapon: true, rare: true },
   dragonstaff: { name: "Dragon Staff", glyph: "*", weapon: true, rare: true },
+};
+
+for (const weapon of Object.values(GACHA_WEAPONS)) ITEMS[weapon.id] = {
+  name: weapon.name, glyph: "✦", weapon: true, rare: weapon.rarityIndex >= 2,
+  gacha: true, rarity: weapon.rarity, color: weapon.color,
 };
 
 export const RECIPES = [

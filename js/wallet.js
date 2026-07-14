@@ -1,7 +1,10 @@
-import { PROFILE_CONTRACT_ADDRESS, LEVEL_TX_FEE_RIT, RITUAL_TESTNET } from "./config.js";
+import { GAME_V3_CONTRACT_ADDRESS, PROFILE_CONTRACT_ADDRESS, LEVEL_TX_FEE_RIT, RITUAL_TESTNET } from "./config.js";
 
 export const walletState = { address: "", chainId: null, connected: false, provider: null };
-export const contractConfigured = /^0x[a-fA-F0-9]{40}$/.test(PROFILE_CONTRACT_ADDRESS);
+export const v3Configured = /^0x[a-fA-F0-9]{40}$/.test(GAME_V3_CONTRACT_ADDRESS);
+const profileV2Configured = /^0x[a-fA-F0-9]{40}$/.test(PROFILE_CONTRACT_ADDRESS);
+const activeContractAddress = () => v3Configured ? GAME_V3_CONTRACT_ADDRESS : PROFILE_CONTRACT_ADDRESS;
+export const contractConfigured = v3Configured || profileV2Configured;
 let listenersBound = false;
 const subscribers = new Set();
 const MASK_64 = (1n << 64n) - 1n;
@@ -86,10 +89,22 @@ function encodeRegister(name, lookHash) {
 }
 function encodeRecordLevel(level, saveHash) { return hexData(`${selector("recordLevel(uint32,bytes32)")}${word(level)}${bytes32(saveHash)}`); }
 function encodeAddressCall(signature, address) { return hexData(`${selector(signature)}${addressWord(address)}`); }
+function encodeBytes(value) {
+  const encoded = value instanceof Uint8Array ? value : new TextEncoder().encode(String(value || ""));
+  const paddedLength = Math.ceil(encoded.length / 32) * 32;
+  const padded = new Uint8Array(paddedLength); padded.set(encoded);
+  return `${word(encoded.length)}${bytesToHex(padded)}`;
+}
+function encodeSaveProgress(level, saveHash, saveData) {
+  return hexData(`${selector("saveProgress(uint32,bytes32,bytes)")}${word(level)}${bytes32(saveHash)}${word(96)}${encodeBytes(saveData)}`);
+}
+function encodePullFree(count) { return hexData(`${selector("pullFree(uint8)")}${word(count)}`); }
+function encodePullGold(count, saveHash) { return hexData(`${selector("pullWithGold(uint8,bytes32)")}${word(count)}${bytes32(saveHash)}`); }
+function encodePullRitual(count) { return hexData(`${selector("pullWithRitual(uint8)")}${word(count)}`); }
 
 export function hashJson(value) { return keccak256(JSON.stringify(value)); }
 export function hashLook(look) { return hashJson(look || {}); }
-export function hashSave(save) { return hashJson({ name: save?.name, level: save?.stats?.level, xp: save?.stats?.xp, ts: save?.ts }); }
+export function hashSave(save) { return hashJson(save || {}); }
 
 export function walletShortAddress(address) {
   const value = String(address || "");
@@ -146,10 +161,10 @@ export async function connectRitualWallet() {
 }
 export function disconnectWallet() { walletState.address = ""; walletState.chainId = null; walletState.connected = false; notify(); }
 
-async function contractCall(data) {
-  if (!contractConfigured) throw new Error("Profile contract address is not configured.");
+async function contractCall(data, target = PROFILE_CONTRACT_ADDRESS) {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(target)) throw new Error("Contract address is not configured.");
   const provider = walletState.provider || getProvider();
-  return provider.request({ method: "eth_call", params: [{ to: PROFILE_CONTRACT_ADDRESS, data: hexData(data) }, "latest"] });
+  return provider.request({ method: "eth_call", params: [{ to: target, data: hexData(data) }, "latest"] });
 }
 async function waitForTransaction(hash, timeoutMs = 120000) {
   const provider = walletState.provider || getProvider();
@@ -161,17 +176,17 @@ async function waitForTransaction(hash, timeoutMs = 120000) {
   }
   throw new Error("Timed out waiting for the Ritual transaction.");
 }
-async function contractTransaction(data, value = 0n) {
+async function contractTransaction(data, value = 0n, target = PROFILE_CONTRACT_ADDRESS) {
   if (!walletState.connected) throw new Error("Connect the Ritual wallet first.");
-  if (!contractConfigured) throw new Error("Profile contract address is not configured.");
+  if (!/^0x[a-fA-F0-9]{40}$/.test(target)) throw new Error("Contract address is not configured.");
   const provider = walletState.provider || getProvider();
-  const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from: walletState.address, to: PROFILE_CONTRACT_ADDRESS, data: hexData(data), value: `0x${value.toString(16)}` }] });
+  const hash = await provider.request({ method: "eth_sendTransaction", params: [{ from: walletState.address, to: target, data: hexData(data), value: `0x${value.toString(16)}` }] });
   return { hash, receipt: await waitForTransaction(hash) };
 }
 
 export async function readOnchainProfile(address = walletState.address) {
   if (!contractConfigured || !/^0x[a-f0-9]{40}$/i.test(String(address || ""))) return null;
-  const bytes = hexToBytes(await contractCall(encodeAddressCall("getProfile(address)", address)));
+  const bytes = hexToBytes(await contractCall(encodeAddressCall("getProfile(address)", address), activeContractAddress()));
   if (bytes.length < 32 * 10) return null;
   const tupleOffset = Number(readUint(bytes, 0));
   if (!Number.isSafeInteger(tupleOffset) || tupleOffset < 0 || tupleOffset % 32 !== 0) return null;
@@ -192,14 +207,72 @@ export async function readOnchainProfile(address = walletState.address) {
   };
 }
 export async function readOnchainLevelFee() {
-  const bytes = hexToBytes(await contractCall(selector("levelFee()")));
+  const bytes = hexToBytes(await contractCall(selector(v3Configured ? "ACTION_FEE()" : "levelFee()"), activeContractAddress()));
   return bytes.length >= 32 ? readUint(bytes, 0) : decimalToWei(LEVEL_TX_FEE_RIT);
 }
-export async function registerOnchainProfile(displayName, look) { return contractTransaction(encodeRegister(displayName, hashLook(look))); }
-export async function deleteOnchainProfile() { return contractTransaction(hexData(selector("deleteProfile()"))); }
+export async function registerOnchainProfile(displayName, look) { return contractTransaction(encodeRegister(displayName, hashLook(look)), 0n, activeContractAddress()); }
+export async function deleteOnchainProfile() { return contractTransaction(hexData(selector("deleteProfile()")), 0n, activeContractAddress()); }
 export async function recordOnchainLevel(level, save) {
   const fee = await readOnchainLevelFee();
-  return contractTransaction(encodeRecordLevel(level, hashSave(save)), fee);
+  return contractTransaction(encodeRecordLevel(level, hashSave(save)), fee, activeContractAddress());
+}
+
+function decodeDynamicBytes(result) {
+  const bytes = hexToBytes(result);
+  if (bytes.length < 64) return new Uint8Array();
+  const offset = Number(readUint(bytes, 0));
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset + 32 > bytes.length) return new Uint8Array();
+  const length = Number(BigInt(`0x${bytesToHex(bytes.slice(offset, offset + 32))}`));
+  if (!Number.isSafeInteger(length) || length < 0 || offset + 32 + length > bytes.length) return new Uint8Array();
+  return bytes.slice(offset + 32, offset + 32 + length);
+}
+
+export async function readV3Save(address = walletState.address) {
+  if (!v3Configured || !/^0x[a-fA-F0-9]{40}$/i.test(String(address || ""))) return null;
+  const raw = await contractCall(encodeAddressCall("getSave(address)", address), GAME_V3_CONTRACT_ADDRESS);
+  const data = decodeDynamicBytes(raw);
+  if (!data.length) return null;
+  try { return JSON.parse(new TextDecoder().decode(data)); } catch { return null; }
+}
+
+export async function saveProgressOnchain(save) {
+  if (!v3Configured) throw new Error("Anasta V3 contract is not configured.");
+  const encoded = new TextEncoder().encode(JSON.stringify(save));
+  if (encoded.length > 12288) throw new Error("Save exceeds the 12 KB onchain checkpoint limit.");
+  return contractTransaction(encodeSaveProgress(save?.stats?.level || 1, hashSave(save), encoded), decimalToWei(LEVEL_TX_FEE_RIT), GAME_V3_CONTRACT_ADDRESS);
+}
+
+export async function readFreePulls(address = walletState.address) {
+  if (!v3Configured) return 0;
+  const bytes = hexToBytes(await contractCall(encodeAddressCall("freePulls(address)", address), GAME_V3_CONTRACT_ADDRESS));
+  return bytes.length >= 32 ? Number(readUint(bytes, 0)) : 0;
+}
+
+export async function readLastPull(address = walletState.address) {
+  if (!v3Configured) return [];
+  const bytes = hexToBytes(await contractCall(encodeAddressCall("getLastPull(address)", address), GAME_V3_CONTRACT_ADDRESS));
+  if (bytes.length < 64) return [];
+  const offset = Number(readUint(bytes, 0)), base = offset / 32;
+  if (!Number.isSafeInteger(base) || base < 1 || base >= bytes.length / 32) return [];
+  const length = Math.min(10, Number(readUint(bytes, base)) || 0);
+  return Array.from({ length }, (_, index) => Number(readUint(bytes, base + 1 + index)));
+}
+
+export async function readOwnedWeapons(address = walletState.address) {
+  if (!v3Configured) return [];
+  const bytes = hexToBytes(await contractCall(encodeAddressCall("getOwnedWeapons(address)", address), GAME_V3_CONTRACT_ADDRESS));
+  if (bytes.length < 24 * 32) return [];
+  return Array.from({ length: 24 }, (_, index) => Number(readUint(bytes, index)));
+}
+
+export async function pullGachaFree(count) {
+  return contractTransaction(encodePullFree(count), 0n, GAME_V3_CONTRACT_ADDRESS);
+}
+export async function pullGachaGold(count, save) {
+  return contractTransaction(encodePullGold(count, hashSave(save)), decimalToWei(LEVEL_TX_FEE_RIT), GAME_V3_CONTRACT_ADDRESS);
+}
+export async function pullGachaRitual(count) {
+  return contractTransaction(encodePullRitual(count), decimalToWei("0.005") * BigInt(count), GAME_V3_CONTRACT_ADDRESS);
 }
 
 export function walletSaveKey(address = walletState.address) {

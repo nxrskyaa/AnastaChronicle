@@ -11,6 +11,8 @@ import {
   COOKING_RECIPES, FOOD_ITEMS, canCook, knownRecipeIds,
   displayIngredientName, activeBuffTotals, normalizeActiveBuffs,
 } from "./cooking.js";
+import { GACHA_BY_ITEM_ID, RARITIES } from "./gacha.js";
+import { readFreePulls, v3Configured, walletState } from "./wallet.js";
 
 const PET_COLORS = {
   grass: ["#baf39a", "#55b878"], fire: ["#ffd070", "#e45f3d"], water: ["#a4efff", "#4aa6d4"],
@@ -27,6 +29,7 @@ export class UI {
     this.panels = {
       inv: document.getElementById("panel-inv"),
       shop: document.getElementById("panel-shop"),
+      gacha: document.getElementById("panel-gacha"),
       afk: document.getElementById("panel-afk"),
       fishingMode: document.getElementById("panel-fishing-mode"),
       menu: document.getElementById("panel-menu"),
@@ -69,11 +72,23 @@ export class UI {
     document.getElementById("auto-battle-chip")?.addEventListener("click", () => this.toggleAutoBattle(false));
     document.getElementById("fishing-mode-manual")?.addEventListener("click", () => this.chooseFishingMode("manual"));
     document.getElementById("fishing-mode-auto")?.addEventListener("click", () => this.chooseFishingMode("auto"));
-    document.getElementById("btn-save-progress")?.addEventListener("click", () => {
+    document.getElementById("btn-save-progress")?.addEventListener("click", async () => {
       if (!this.game?.requestSave) { this.toast("Save system is still preparing."); return; }
-      this.game.requestSave();
-      this.markSaved();
-      this.toast("Progress saved · level and inventory are safe.");
+      const button = document.getElementById("btn-save-progress");
+      if (button) button.disabled = true;
+      try {
+        this.toast("Preparing Chronicle checkpoint…");
+        const result = await this.game.requestSave();
+        this.markSaved(result?.savedAt);
+        this.toast(result?.onchain ? "Onchain checkpoint confirmed · progress is wallet-recoverable." : "Local checkpoint saved on this device.");
+      } catch (error) { this.toast(error?.message || "Checkpoint failed. Progress remains saved locally."); }
+      finally { if (button) button.disabled = false; }
+    });
+    document.querySelectorAll("[data-gacha-kind]").forEach((button) => button.addEventListener("click", () => this.summonGacha(button)));
+    document.getElementById("gacha-connect")?.addEventListener("click", async () => {
+      if (!this.game?.requestWalletConnect) return;
+      try { await this.game.requestWalletConnect(); this.toast("Ritual wallet linked."); await this.renderGacha(); }
+      catch (error) { this.toast(error?.message || "Wallet connection cancelled."); }
     });
     document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
@@ -280,6 +295,7 @@ export class UI {
       p.classList.remove("hidden");
       if (name === "inv") this.renderInv();
       if (name === "shop") this.renderShop();
+      if (name === "gacha") this.renderGacha();
       if (name === "afk") this.renderAfkFishing();
       if (name === "craft") this.renderCraft();
       if (name === "cooking") this.renderCooking();
@@ -294,9 +310,9 @@ export class UI {
     }
   }
   close(name) { this.panels[name]?.classList.add("hidden"); if (name === "afk") clearInterval(this._afkClock); if (name === "fishingMode") this._fishingSpot = null; if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "shop", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); clearInterval(this._afkClock); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
-  hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); clearInterval(this._afkClock); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   toggleAutoBattle(force) {
     if (!this.game) return false;
@@ -1053,6 +1069,60 @@ export class UI {
       if (this.panels.cooking?.classList.contains("hidden")) { clearInterval(this._cookingClock); return; }
       this.syncFoodBuffs(false);
     }, 1000);
+  }
+
+  async renderGacha() {
+    if (!this.game) return;
+    const wallet = document.getElementById("gacha-wallet-state");
+    const free = document.getElementById("gacha-free-count");
+    const gold = document.getElementById("gacha-gold-count");
+    const connect = document.getElementById("gacha-connect");
+    if (wallet) wallet.textContent = walletState.connected ? (v3Configured ? "RITUAL LINKED" : "V3 NOT DEPLOYED") : "NOT LINKED";
+    if (gold) gold.textContent = `${Math.max(0, this.game.player.gold || 0).toLocaleString()} G`;
+    connect?.classList.toggle("linked", walletState.connected);
+    if (free) free.textContent = walletState.connected && v3Configured ? "READING…" : "—";
+    if (walletState.connected && v3Configured) {
+      try { if (free) free.textContent = `${await readFreePulls()} / 5`; }
+      catch { if (free) free.textContent = "SYNC FAILED"; }
+    }
+    for (const button of document.querySelectorAll("[data-gacha-kind]")) button.disabled = this._gachaBusy || !walletState.connected || !v3Configured;
+  }
+
+  async summonGacha(button) {
+    if (!this.game?.requestGacha || this._gachaBusy) return;
+    const kind = button.dataset.gachaKind;
+    const count = Number(button.dataset.gachaCount) || 1;
+    this._gachaBusy = true;
+    document.getElementById("panel-gacha")?.classList.add("summoning");
+    await this.renderGacha();
+    try {
+      this.toast("Constellation opening · confirm the Ritual action…");
+      const weapons = await this.game.requestGacha(kind, count);
+      this.revealGacha(weapons);
+      this.toast(`${weapons.length} relic${weapons.length === 1 ? "" : "s"} entered your inventory.`);
+    } catch (error) { this.toast(error?.message || "The constellation rejected this summon."); }
+    finally {
+      this._gachaBusy = false;
+      document.getElementById("panel-gacha")?.classList.remove("summoning");
+      await this.renderGacha();
+    }
+  }
+
+  revealGacha(weapons) {
+    const reveal = document.getElementById("gacha-reveal"); if (!reveal) return;
+    reveal.className = "gacha-reveal";
+    reveal.innerHTML = "";
+    for (const weapon of weapons) {
+      const card = document.createElement("article");
+      card.className = `gacha-card ${weapon.rarity}`;
+      card.style.setProperty("--relic", weapon.color); card.style.setProperty("--relic-glow", weapon.glow);
+      const canvas = document.createElement("canvas"); canvas.width = 80; canvas.height = 80;
+      const ctx = canvas.getContext("2d"), frame = this.game.weaponFrames?.(weapon.id)?.walk?.down;
+      if (ctx && frame) { ctx.imageSmoothingEnabled = false; ctx.drawImage(frame, 0, 0, frame.width, frame.height, 0, 0, 80, 80); }
+      const rarity = RARITIES[weapon.rarityIndex]?.name || "Relic";
+      const copy = document.createElement("div"); copy.innerHTML = `<small>${rarity}</small><strong>${weapon.name}</strong><span>DMG ${weapon.dmg} · RNG ${weapon.range}</span>`;
+      card.append(canvas, copy); reveal.appendChild(card);
+    }
   }
 
   renderInv() {

@@ -23,7 +23,10 @@ import {
   getWalletSave, putWalletSave, clearWalletSave, contractConfigured,
   readOnchainProfile, registerOnchainProfile, deleteOnchainProfile,
   recordOnchainLevel, hashSave, walletErrorMessage,
+  readV3Save, saveProgressOnchain, v3Configured,
+  readOwnedWeapons, readLastPull, pullGachaFree, pullGachaGold, pullGachaRitual,
 } from "./wallet.js";
+import { GACHA_BY_ITEM_ID } from "./gacha.js";
 
 const boot = document.getElementById("boot");
 const bootStatus = document.getElementById("boot-status");
@@ -34,6 +37,8 @@ let look = { ...DEFAULT_LOOK };
 let game = null;
 let walletContractProfile = null;
 let walletProfileReadError = false;
+let walletChainSave = null;
+let walletOwnedWeapons = [];
 let onchainPolicy = (() => { try { return localStorage.getItem("anasta_level_policy") === "every" ? "every" : "milestone"; } catch { return "milestone"; } })();
 
 // ---- Boot screen ambient particles (fireflies + drifting embers) ----
@@ -328,7 +333,7 @@ function showArrivalGuide(isReturning) {
 function savePayload(g) {
   const p = g.player;
   return {
-    version: 2,
+    version: 3,
     name: look.name,
     look: normalizeLook(look),
     stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
@@ -535,7 +540,43 @@ function startGame(savedLook, savedName, saveData) {
       ui.markSaved?.(payload.ts);
       return payload.ts;
     };
-    game.requestSave = () => persist();
+    game.requestSave = async () => {
+      const savedAt = persist();
+      if (saveMode !== "wallet") return { local: true, savedAt };
+      if (!walletState.connected) throw new Error("Reconnect the Ritual wallet before creating an onchain checkpoint.");
+      if (!v3Configured) throw new Error("Deploy and configure Anasta V3 before using recoverable wallet saves.");
+      if (!(await ensureOnchainProfile(game, ui))) throw new Error("Ritual profile is not ready.");
+      const payload = savePayload(game);
+      const transaction = await saveProgressOnchain(payload);
+      walletChainSave = payload;
+      walletContractProfile = { ...(walletContractProfile || {}), active: true, level: payload.stats.level, lastSaveHash: hashSave(payload) };
+      return { local: true, onchain: true, savedAt, hash: transaction.hash };
+    };
+    game.requestGacha = async (kind, count) => {
+      if (!walletState.connected) throw new Error("Connect your Ritual wallet before summoning relics.");
+      if (!v3Configured) throw new Error("Deploy Anasta V3, then set GAME_V3_CONTRACT_ADDRESS in js/config.js.");
+      if (!(await ensureOnchainProfile(game, ui))) throw new Error("Ritual profile is not ready.");
+      const pulls = count === 10 ? 10 : 1;
+      if (kind === "gold") {
+        const price = pulls * 500;
+        if (game.player.gold < price) throw new Error(`Need ${price.toLocaleString()} gold for this summon.`);
+        await pullGachaGold(pulls, savePayload(game));
+        game.player.gold -= price;
+      } else if (kind === "ritual") await pullGachaRitual(pulls);
+      else await pullGachaFree(pulls);
+      const itemIds = await readLastPull(walletState.address);
+      const weapons = itemIds.map((itemId) => GACHA_BY_ITEM_ID[itemId]).filter(Boolean);
+      if (weapons.length !== pulls) throw new Error("Ritual confirmed the pull but the relic result could not be decoded. Sync again.");
+      for (const weapon of weapons) game.player.inv[weapon.id] = (game.player.inv[weapon.id] || 0) + 1;
+      persist();
+      game.ui.sync?.();
+      return weapons;
+    };
+    game.requestWalletConnect = async () => {
+      await connectRitualWallet();
+      await syncWalletContractProfile();
+      return walletState.address;
+    };
     ui.markSaved?.(saveData?.ts || Date.now());
     game.onCompanionChange = persist;
     game.onProgressChange = persist;
@@ -615,7 +656,16 @@ function setOnchainPolicy(policy) {
 async function syncWalletContractProfile() {
   if (!contractConfigured || !walletState.connected) { walletContractProfile = null; return null; }
   walletProfileReadError = false;
-  try { walletContractProfile = await readOnchainProfile(walletState.address); }
+  try {
+    walletContractProfile = await readOnchainProfile(walletState.address);
+    walletChainSave = v3Configured && walletContractProfile?.active ? await readV3Save(walletState.address) : null;
+    walletOwnedWeapons = v3Configured && walletContractProfile?.active ? await readOwnedWeapons(walletState.address) : [];
+    if (walletChainSave) {
+      walletChainSave.inv ||= {};
+      walletOwnedWeapons.forEach((count, index) => { const weapon = GACHA_BY_ITEM_ID[index + 1]; if (weapon && count > 0) walletChainSave.inv[weapon.id] = count; });
+    }
+    if (walletChainSave) putWalletSave(walletChainSave, walletState.address);
+  }
   catch { walletContractProfile = null; walletProfileReadError = true; }
   return walletContractProfile;
 }
@@ -636,6 +686,8 @@ async function ensureOnchainProfile(g, ui) {
   })().catch((error) => {
     ui.toast(walletErrorMessage(error, "Profile transaction could not be completed."));
     return false;
+  }).finally(() => {
+    if (!g._onchainProfileRegistered) g._onchainProfilePromise = null;
   });
   return g._onchainProfilePromise;
 }
@@ -649,7 +701,8 @@ async function submitLevelProof(g, ui, level) {
   const payload = savePayload(g);
   ui.toast(`Level ${level} proof ready · confirm ${"0.00067 RITUAL"} tx`);
   try {
-    await recordOnchainLevel(level, payload);
+    if (v3Configured) await saveProgressOnchain(payload);
+    else await recordOnchainLevel(level, payload);
     walletContractProfile = { ...(walletContractProfile || {}), level, active: true, lastSaveHash: hashSave(payload) };
     ui.toast(`Level ${level} recorded on Ritual`);
   } catch (error) {
@@ -692,7 +745,7 @@ function renderServerPicker() {
 }
 
 function refreshWalletPanel() {
-  const save = walletState.address ? getWalletSave(walletState.address) : null;
+  const save = walletState.address ? (walletChainSave || getWalletSave(walletState.address)) : null;
   const actionNote = document.getElementById("wallet-action-note");
   if (!walletState.connected) {
     if (walletStatusTitle) walletStatusTitle.textContent = "WALLET PASSPORT";
@@ -706,12 +759,12 @@ function refreshWalletPanel() {
   if (walletStatusText) walletStatusText.textContent = walletProfileReadError
     ? "Ritual profile read failed · check RPC and retry wallet sync."
     : walletContractProfile?.active
-    ? (save ? `Ritual profile linked · Level ${walletContractProfile.level || save.stats?.level || 1}.` : `Onchain profile found · Level ${walletContractProfile.level || 1}; recover the level locally to continue.`)
+    ? (save ? `Ritual checkpoint ready · Level ${walletContractProfile.level || save.stats?.level || 1}.` : `Legacy profile found · Level ${walletContractProfile.level || 1}; full recovery needs V3.`)
     : (save ? `Local chronicle found · Level ${save.stats?.level || 1}.` : "Ritual network linked · no profile yet.");
   walletActions?.classList.toggle("hidden", false);
   walletSync?.classList.remove("hidden");
   walletContinue?.classList.toggle("hidden", !save && !walletContractProfile?.active);
-  if (walletContinue) walletContinue.innerHTML = save ? "CONTINUE PROFILE <span>›</span>" : "RECOVER LEVEL <span>›</span>";
+  if (walletContinue) walletContinue.innerHTML = save ? "CONTINUE CHECKPOINT <span>›</span>" : "RECOVER LEVEL <span>›</span>";
   walletDelete?.classList.toggle("hidden", !save && !walletContractProfile?.active);
   if (actionNote) actionNote.textContent = walletContractProfile?.active
     ? "Deleting this Ritual profile needs one wallet confirmation."
@@ -749,7 +802,7 @@ function buildWalletRecoverySave() {
     stats: { level, xp: 0, gold: 0, hp: 999, cls: recoveryLook.cls },
     position: { x: 55 * 24, y: 55 * 24 + 46, dir: "down" },
     onchainPolicy,
-    inv: {},
+    inv: Object.fromEntries(walletOwnedWeapons.map((count, index) => [GACHA_BY_ITEM_ID[index + 1]?.id, count]).filter(([id, count]) => id && count > 0)),
     fishing: { total: 0, best: 0, records: {} },
     quests: null,
     afkFishing: null,
@@ -890,7 +943,7 @@ walletSync?.addEventListener("click", async () => {
   walletSync.disabled = false;
 });
 document.getElementById("btn-wallet-continue")?.addEventListener("click", () => {
-  const save = getWalletSave(walletState.address);
+  const save = walletChainSave || getWalletSave(walletState.address);
   const recovered = save || buildWalletRecoverySave();
   if (!recovered) return refreshWalletPanel();
   saveMode = "wallet";

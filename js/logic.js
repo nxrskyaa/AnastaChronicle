@@ -6,6 +6,7 @@ import { net, sendBossHit, sendPvpHit } from "./net.js";
 import { CLASSES } from "./classes.js";
 import { COOKING_RECIPES, activeBuffTotals, cookRecipe, knownRecipeIds, normalizeActiveBuffs, useFood } from "./cooking.js";
 import { activeRod } from "./fishing.js";
+import { GACHA_WEAPONS } from "./gacha.js";
 import { buyItem, getShopListing, marketDayKey, sellItem } from "./shop.js";
 import {
   afkFishingStatus, claimAfkFishingJob, createAfkFishingJob,
@@ -512,8 +513,12 @@ Game.prototype.updateEnemies = function (dt) {
     const AGGRO = 78;          // small aggro radius — must get close
     const LEASH = 260;         // give up if player runs
 
-    // state machine: passive wander unless provoked or player very close
-    if (e.angry > 0 && d < LEASH) {
+    // Fishing is a protected activity. Hostile creatures lose aggro instead
+    // of crowding or killing a player who is locked into the reel minigame.
+    if (this.fishing) {
+      e.angry = 0;
+      if (e.state === "chase") e.state = "wander";
+    } else if (e.angry > 0 && d < LEASH) {
       e.state = "chase";
     } else if (d < AGGRO && e.angry <= 0 && Math.random() < 0.02) {
       // only *some* monsters notice you nearby, occasionally
@@ -1033,6 +1038,7 @@ Game.prototype.respawn = function () {
   this.ui.hideDeath();
   this.ui.toast("Returned to Hearth Camp · progress safe");
 };
+Object.assign(WEAPONS, GACHA_WEAPONS);
 
 // ---- WORLD BOSS: one server-owned HP pool, local AI presentation ----
 Game.prototype.applySharedBoss = function (state) {
@@ -1318,6 +1324,7 @@ Game.prototype.updatePlants = function (dt) {
 
 Game.prototype.damagePlayer = function (raw) {
   const p = this.player;
+  if (this.fishing) return false;
   if (p.invuln > 0) return;
   if (p.shield) { p.stamina = Math.max(0, p.stamina - 6); if (p.stamina > 0) { p.invuln = 0.2; return; } }
   const ward = p.wardT > 0 ? .62 : 1;
@@ -1329,6 +1336,7 @@ Game.prototype.damagePlayer = function (raw) {
 };
 Game.prototype.damagePlayerPvp = function (acceptedDamage) {
   const p = this.player;
+  if (this.fishing) return 0;
   const ward = p.wardT > 0 ? .62 : 1;
   const foodGuard = Math.max(.55, 1 - (this.foodBuffTotals?.defense || 0));
   const dmg = Math.max(1, Math.round((Number(acceptedDamage) || 0) * ward * foodGuard));

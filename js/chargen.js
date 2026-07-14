@@ -1,3 +1,5 @@
+import { gachaWeapon } from "./gacha.js";
+
 // Runtime character generator: draws player from parametric parts into cached canvases.
 // Enables customization (skin/hair/shirt/pants/boots/hairstyle) + smooth weapon swing.
 
@@ -938,6 +940,9 @@ function drawPixelGreatblade(ctx, atkPhase) {
 // weapon overlay drawn relative to hand, animated by atkPhase (0..1)
 function drawWeapon(ctx, weapon, dir, atkPhase) {
   if (weapon === "fist") return;
+  const relic = gachaWeapon(weapon);
+  const relicId = weapon;
+  if (relic) weapon = relic.base;
   const isBow = weapon === "bow" || weapon === "dragonbow" || weapon === "crossbow";
   const isStaff = weapon === "staff" || weapon === "dragonstaff" || weapon === "scepter";
   let hx, hy, baseAng;
@@ -1054,6 +1059,25 @@ function drawWeapon(ctx, weapon, dir, atkPhase) {
     drawPixelStaff(ctx, true, atkPhase);
   }
   ctx.restore();
+
+  if (relic) {
+    const pulse = .55 + Math.sin((atkPhase == null ? .25 : atkPhase) * Math.PI) * .35;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = Math.min(.9, .28 + relic.rarityIndex * .07 + pulse * .16);
+    ctx.strokeStyle = relic.glow;
+    ctx.lineWidth = 1 + Math.floor(relic.rarityIndex / 3);
+    const radius = 7 + relic.rarityIndex * .75;
+    ctx.beginPath(); ctx.arc(hx, hy - 6, radius, 0, Math.PI * 2); ctx.stroke();
+    if (relic.rarityIndex >= 4) {
+      const sparks = 3 + Math.floor(relic.rarityIndex / 2);
+      for (let i = 0; i < sparks; i++) {
+        const a = i / sparks * Math.PI * 2 + (relicId.length % 5) * .3;
+        px(ctx, Math.round(hx + Math.cos(a) * (radius + 2)), Math.round(hy - 6 + Math.sin(a) * (radius + 2)), relic.rarityIndex >= 7 ? 2 : 1, 1, i % 2 ? relic.color : relic.glow);
+      }
+    }
+    ctx.restore();
+  }
 
   if (atkPhase != null && atkPhase > 0.12 && atkPhase < 0.88 && !isBow && !isStaff) {
     const dragon = weapon === "dragonblade";
