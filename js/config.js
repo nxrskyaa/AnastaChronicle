@@ -34,7 +34,7 @@ export const SERVER_URL = getServerUrl();
 export const PROFILE_CONTRACT_ADDRESS = "0xec33bc86a1154d16C60f35CEE58CCB1a4ef0543B";
 // Paste the deployed AnastaChronicleV3 address here. Until then the existing
 // V2 profile remains readable, while recoverable saves and paid gacha stay locked.
-export const GAME_V3_CONTRACT_ADDRESS = "";
+export const GAME_V3_CONTRACT_ADDRESS = "0x855d56B905B3Fe23112bd6C597B11Da40A6a9DB2";
 export const LEVEL_TX_FEE_RIT = "0.00067";
 export const GACHA_GOLD_PRICE = 500;
 export const GACHA_RITUAL_PRICE = "0.005";
