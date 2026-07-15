@@ -74,6 +74,10 @@ export class UI {
     this._shopMode = "buy";
     this._afkSelection = AFK_FISHING_OPTIONS[0]?.minutes || 2;
     this._levelHideTimer = null;
+    // A delayed focus must never bring an already-closed chat back into the
+    // interaction flow (especially after Continue on mobile keyboards).
+    this._chatFocusTimer = null;
+    this._chatOpenBlockedUntil = 0;
     document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => { this.audio?.sfx("ui"); this.close(b.dataset.close); }));
     document.getElementById("btn-level-ok")?.addEventListener("click", () => this.dismissLevel());
     document.getElementById("btn-respawn")?.addEventListener("click", () => this.game?.respawn());
@@ -114,12 +118,17 @@ export class UI {
     chatInput?.addEventListener("input", () => { const count = document.getElementById("chat-count"); if (count) count.textContent = `${chatInput.value.length}/160`; });
     document.getElementById("chat-form")?.addEventListener("submit", (event) => { event.preventDefault(); this.submitChat(); });
     document.addEventListener("keydown", (event) => {
+      // A previous Game/UI instance can remain wired while the login flow is
+      // transitioning. Ignore its shortcuts once a newer game owns the page.
+      if (this.game && window.__ANASTA__ && window.__ANASTA__ !== this.game) return;
       if (event.code !== "KeyP" || event.repeat || !this.game || /INPUT|TEXTAREA|SELECT/.test(event.target?.tagName || "")) return;
       const sanctuaryOpen = !this.panels.companions?.classList.contains("hidden");
       if (this.anyOpen() && !sanctuaryOpen) return;
       event.preventDefault(); this.cyclePet();
     });
     document.addEventListener("keydown", (event) => {
+      // Do not let a stale UI instance re-open panels during Continue/resume.
+      if (this.game && window.__ANASTA__ && window.__ANASTA__ !== this.game) return;
       const tag = event.target?.tagName || "";
       const typing = /INPUT|TEXTAREA|SELECT/.test(tag);
       if (event.code === "Escape" && this.anyOpen()) {
@@ -130,6 +139,11 @@ export class UI {
       }
       if (typing) return;
       if (event.code === "Enter" && !event.repeat) {
+        // Enter already activates buttons/links. Handling it a second time
+        // here used to toggle Chat open -> closed (or re-open it after the
+        // close button), which made Continue and close feel broken.
+        const interactive = event.target?.closest?.("button, a, [role=button], #panel-chat");
+        if (interactive || performance.now() < this._chatOpenBlockedUntil) return;
         if (this.panels.level && !this.panels.level.classList.contains("hidden")) return;
         event.preventDefault(); this.openChat(true);
       }
@@ -221,11 +235,16 @@ export class UI {
   }
 
   openChat(focus = false) {
+    this._chatOpenBlockedUntil = 0;
     if (this.panels.chat?.classList.contains("hidden")) this.toggle("chat");
     this.game?.resetInputState?.();
     if (this.game) this.game.inputLocked = true;
     this.chatUnread = 0; this.syncUnread();
-    setTimeout(() => document.getElementById("chat-input")?.focus(), focus ? 0 : 20);
+    clearTimeout(this._chatFocusTimer);
+    this._chatFocusTimer = setTimeout(() => {
+      this._chatFocusTimer = null;
+      if (!this.panels.chat?.classList.contains("hidden")) document.getElementById("chat-input")?.focus();
+    }, focus ? 0 : 20);
   }
 
   submitChat() {
@@ -322,13 +341,48 @@ export class UI {
       if (name === "menu") this.renderMenu();
       if (name === "chat") this.renderChat();
       if (name === "collection") this.renderCollection();
-      if (this.game && name === "chat") { this.game.resetInputState?.(); this.game.inputLocked = true; setTimeout(() => document.getElementById("chat-input")?.focus(), 0); }
+      if (this.game && name === "chat") {
+        this.game.resetInputState?.(); this.game.inputLocked = true;
+        clearTimeout(this._chatFocusTimer);
+        this._chatFocusTimer = setTimeout(() => {
+          this._chatFocusTimer = null;
+          if (!this.panels.chat?.classList.contains("hidden")) document.getElementById("chat-input")?.focus();
+        }, 0);
+      }
       if (this.game && name !== "chat") { this.game.resetInputState?.(); this.game.paused = true; }
       if (name !== "chat") setTimeout(() => p.querySelector(".panel-close,button,input")?.focus(), 0);
     }
   }
-  close(name) { this.panels[name]?.classList.add("hidden"); if (name === "afk") clearInterval(this._afkClock); if (name === "fishingMode") this._fishingSpot = null; if (this.game && name === "chat") this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
-  closeAll() { for (const k of ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden"); clearInterval(this._afkClock); if (this.game) this.game.inputLocked = false; if (this.game && !this.hasBlockingOpen()) this.game.paused = false; }
+  close(name) {
+    this.panels[name]?.classList.add("hidden");
+    if (name === "afk") clearInterval(this._afkClock);
+    if (name === "fishingMode") this._fishingSpot = null;
+    if (name === "chat") {
+      clearTimeout(this._chatFocusTimer);
+      this._chatFocusTimer = null;
+      // Prevent the keyup/default activation that closed the panel from
+      // immediately triggering the global Enter-to-chat shortcut.
+      this._chatOpenBlockedUntil = performance.now() + 260;
+      const active = document.activeElement;
+      if (active && this.panels.chat?.contains(active)) active.blur?.();
+      if (this.game) this.game.inputLocked = false;
+    }
+    if (this.game && !this.hasBlockingOpen()) this.game.paused = false;
+  }
+  closeAll() {
+    const chatWasOpen = !!this.panels.chat && !this.panels.chat.classList.contains("hidden");
+    for (const k of ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden");
+    clearInterval(this._afkClock);
+    if (chatWasOpen) {
+      clearTimeout(this._chatFocusTimer);
+      this._chatFocusTimer = null;
+      this._chatOpenBlockedUntil = performance.now() + 260;
+      const active = document.activeElement;
+      if (active && this.panels.chat?.contains(active)) active.blur?.();
+    }
+    if (this.game) { this.game.inputLocked = false; }
+    if (this.game && !this.hasBlockingOpen()) this.game.paused = false;
+  }
   anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
   hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
