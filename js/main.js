@@ -537,6 +537,9 @@ function startGame(savedLook, savedName, saveData) {
     const ui = new UI(audio);
     game = new Game(canvas, ui, look);
     ui.bind(game);
+    // Panels live outside the canvas and survive login/continue transitions.
+    // Always enter a fresh world with chat (and other transient panels) closed.
+    ui.closeAll();
     // Apply saved game state if continuing
     if (saveData && saveData.stats) {
       const p = game.player;
