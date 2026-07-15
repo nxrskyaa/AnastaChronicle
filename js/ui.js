@@ -123,6 +123,18 @@ export class UI {
       else if (target === "duel-arena" || target === "raid-sanctum") this.requestRealm(target);
       else this.toggle(target);
     }));
+    const handleRealmControl = (event) => {
+      if (event.type === "click" && event.detail !== 0) return;
+      const button = event.target?.closest?.("[data-enter-realm],#battle-realms-return,#battle-realm-exit");
+      if (!button || button.disabled) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.requestRealm(button.dataset.enterRealm || "overworld");
+    };
+    for (const root of [document.getElementById("panel-realms"), document.getElementById("battle-realm-hud")]) {
+      root?.addEventListener("pointerup", handleRealmControl, true);
+      root?.addEventListener("click", handleRealmControl, true);
+    }
     document.querySelectorAll("[data-guide-step]").forEach((button) => button.addEventListener("click", () => this.setGuideStep(Number(button.dataset.guideStep))));
     document.getElementById("guide-prev")?.addEventListener("click", () => this.setGuideStep(this._guideStep - 1));
     document.getElementById("guide-next")?.addEventListener("click", () => {
@@ -285,13 +297,6 @@ export class UI {
   setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
   setRealmSender(sender) {
     this._realmSender = typeof sender === "function" ? sender : null;
-    document.querySelectorAll("[data-enter-realm]").forEach((button) => {
-      button.onclick = () => this.requestRealm(button.dataset.enterRealm);
-    });
-    for (const id of ["battle-realms-return", "battle-realm-exit"]) {
-      const button = document.getElementById(id);
-      if (button) button.onclick = () => this.requestRealm("overworld");
-    }
   }
   setRealmSupported(supported) {
     this.realmSupported = !!supported;
