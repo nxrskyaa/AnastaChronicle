@@ -123,10 +123,13 @@ export class UI {
       else if (target === "duel-arena" || target === "raid-sanctum") this.requestRealm(target);
       else this.toggle(target);
     }));
+    let lastRealmActionAt = 0;
     const handleRealmControl = (event) => {
-      if (event.type === "click" && event.detail !== 0) return;
       const button = event.target?.closest?.("[data-enter-realm],#battle-realms-return,#battle-realm-exit");
       if (!button || button.disabled) return;
+      const now = Date.now();
+      if (now - lastRealmActionAt < 350) return;
+      lastRealmActionAt = now;
       event.preventDefault();
       event.stopPropagation();
       this.requestRealm(button.dataset.enterRealm || "overworld");
