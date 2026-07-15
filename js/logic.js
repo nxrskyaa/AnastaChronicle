@@ -81,7 +81,9 @@ function nearestDuelTarget(game, x, y, radius, fx = 0, fy = 0) {
     const dx = remote.rx - x, dy = remote.ry - y, distance = Math.hypot(dx, dy);
     if (distance > radius || distance >= bestDistance) continue;
     const dot = distance > .001 ? dx / distance * fx + dy / distance * fy : 1;
-    if ((fx || fy) && dot < .1) continue;
+    // Mobile sticks rarely point at a perfect cone. Keep directional intent,
+    // but accept nearby armed opponents slightly off-axis.
+    if ((fx || fy) && dot < -.2) continue;
     best = { id, remote, distance }; bestDistance = distance;
   }
   return best;
@@ -467,7 +469,7 @@ Game.prototype.doAttack = function (damageMul = 1) {
     }
   }
   const duelCrit = Math.random() < .16;
-  this.tryDuelStrike(p.x, p.y, w.range + 14, dmg * (duelCrit ? 1.55 : 1), this._nextDuelKind || "basic", fx, fy);
+  this.tryDuelStrike(p.x, p.y, w.range + 22, dmg * (duelCrit ? 1.55 : 1), this._nextDuelKind || "basic", fx, fy);
   this._nextDuelKind = null;
   // melee also hits harvestable plants in range
   for (const pl of this.plants) {
@@ -1055,6 +1057,7 @@ Game.prototype.applySharedBoss = function (state) {
   if (isNew) {
     this.boss = {
       serverId: state.id, shared: true, x: state.x, y: state.y, sortY: state.y,
+      serverTargetX: state.x, serverTargetY: state.y, serverMoving: false,
       hp: state.hp, maxHp: state.maxHp, dmg: 14 + this.player.level * 2,
       frame: 0, frameT: 0, dead: false, hurt: 0, state: "guard",
       atkCd: 3, breatheCd: 5, breathWindup: 0, t: 0, rage: state.phase === 2,
@@ -1063,10 +1066,19 @@ Game.prototype.applySharedBoss = function (state) {
     this.ui.toast("WORLD BOSS · Infernyx awakened in the Umbral Arena");
     this.ui.receiveSystemChat?.("Infernyx awakened. Contribute damage and remain in the arena; every eligible traveler receives the same reward.");
   } else {
-    Object.assign(this.boss, { x: state.x, y: state.y, sortY: state.y, hp: state.hp, maxHp: state.maxHp, dead: false, rage: state.phase === 2 });
+    Object.assign(this.boss, { serverTargetX: state.x, serverTargetY: state.y, hp: state.hp, maxHp: state.maxHp, dead: false, rage: state.phase === 2 });
     if (Number.isFinite(state.contribution)) this.boss.contribution = state.contribution;
   }
   this.ui.syncBoss?.(this.boss);
+};
+
+Game.prototype.applySharedBossMove = function (message) {
+  const b = this.boss;
+  if (!b?.shared || b.serverId !== message?.bossId || b.dead) return;
+  if (Number.isFinite(message.x)) b.serverTargetX = message.x;
+  if (Number.isFinite(message.y)) b.serverTargetY = message.y;
+  b.serverMoving = message.state === "chase";
+  b.serverTargetId = message.target || null;
 };
 
 Game.prototype.applySharedBossHit = function (message) {
@@ -1178,9 +1190,15 @@ Game.prototype.updateBoss = function (dt) {
   b.rage = rageNow;
 
   if (b.shared) {
+    const targetX = Number.isFinite(b.serverTargetX) ? b.serverTargetX : b.x;
+    const targetY = Number.isFinite(b.serverTargetY) ? b.serverTargetY : b.y;
+    const remaining = Math.hypot(targetX - b.x, targetY - b.y);
+    const blend = Math.min(1, dt * 10);
+    b.x += (targetX - b.x) * blend;
+    b.y += (targetY - b.y) * blend;
     b.sortY = b.y;
     const attack = b.sharedAttack;
-    if (!attack) { b.state = "guard"; b.breathWindup = 0; return; }
+    if (!attack) { b.state = b.serverMoving && remaining > 1 ? "chase" : "guard"; b.breathWindup = 0; return; }
     attack.windup -= dt; attack.life -= dt;
     b.atkCd = Math.max(0, (b.atkCd || 0) - dt);
     if (attack.kind === "breath") b.breathWindup = Math.max(0, attack.windup);

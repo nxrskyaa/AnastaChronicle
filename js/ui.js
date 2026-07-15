@@ -147,6 +147,7 @@ export class UI {
     document.getElementById("guide-skip")?.addEventListener("click", () => this.close("guide"));
     document.getElementById("guide-open-quests")?.addEventListener("click", () => { this.close("guide"); this.toggle("quest"); });
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
+    document.getElementById("battle-realm-duel")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
     const chatInput = document.getElementById("chat-input");
     chatInput?.addEventListener("input", () => { const count = document.getElementById("chat-count"); if (count) count.textContent = `${chatInput.value.length}/160`; });
     document.getElementById("chat-form")?.addEventListener("submit", (event) => { event.preventDefault(); this.submitChat(); });
@@ -315,11 +316,12 @@ export class UI {
   }
   setDuelSupported(supported) {
     this.duelSupported = !!supported;
-    const button = document.getElementById("duel-toggle");
     const outsideCourt = this.game?.realmWorld !== "duel-arena";
-    button?.classList.toggle("unavailable", !this.online);
-    button?.setAttribute("aria-disabled", String(!this.online));
-    if (button) button.title = outsideCourt ? "Enter Crimson Duel Court" : "Mutual opt-in player duel";
+    for (const button of [document.getElementById("duel-toggle"), document.getElementById("battle-realm-duel")]) {
+      button?.classList.toggle("unavailable", !this.online || !this.duelSupported);
+      button?.setAttribute("aria-disabled", String(!this.online || !this.duelSupported));
+      if (button) button.title = outsideCourt ? "Enter Crimson Duel Court" : "Both travelers must arm Duel Mode before attacks deal damage";
+    }
     if (!this.duelSupported) this.duelActive = false;
     this.updateDuel(this.duelActive);
   }
@@ -339,10 +341,14 @@ export class UI {
 
   updateDuel(active) {
     this.duelActive = !!active;
-    const button = document.getElementById("duel-toggle");
-    button?.setAttribute("aria-checked", String(this.duelActive));
+    for (const button of [document.getElementById("duel-toggle"), document.getElementById("battle-realm-duel")]) {
+      button?.setAttribute("aria-checked", String(this.duelActive));
+      button?.classList.toggle("active", this.duelActive);
+    }
     const label = document.getElementById("duel-toggle-label");
     if (label) label.textContent = this.duelActive ? "DUEL ARMED" : this.game?.realmWorld !== "duel-arena" ? "ENTER PVP REALM" : "SAFE MODE";
+    const hudLabel = document.getElementById("battle-realm-duel");
+    if (hudLabel) hudLabel.textContent = this.duelActive ? "DUEL ARMED · TAP FOR SAFE MODE" : "ARM DUEL MODE";
     document.getElementById("hud")?.classList.toggle("duel-armed", this.duelActive);
   }
 
@@ -470,6 +476,7 @@ export class UI {
     hud?.classList.toggle("raid", worldId === "raid-sanctum");
     const name = document.getElementById("battle-realm-name"); if (name) name.textContent = worldName;
     const rule = document.getElementById("battle-realm-rule"); if (rule) rule.textContent = duel ? "MUTUAL DUEL ONLY" : worldId === "raid-sanctum" ? "SHARED BOSS INSTANCE" : "SAFE EXPLORATION";
+    document.getElementById("battle-realm-duel")?.classList.toggle("hidden", !duel);
     const returnButton = document.getElementById("battle-realms-return"); returnButton?.classList.toggle("hidden", !special);
     const menuState = document.getElementById("menu-realm-state"); if (menuState) menuState.textContent = special ? `Inside ${worldName}` : "PvP court & co-op raid";
     const mapTitle = document.querySelector(".minimap-head span"); if (mapTitle) mapTitle.textContent = worldId === "duel-arena" ? "CRIMSON COURT" : worldId === "raid-sanctum" ? "RAID SANCTUM" : "VERDANT TRAIL";

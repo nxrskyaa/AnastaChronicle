@@ -28,6 +28,7 @@ export const net = {
   onPvpHit: null,
   onPvpReject: null,
   onBossState: null,
+  onBossMove: null,
   onBossHit: null,
   onBossAttack: null,
   onBossDefeated: null,
@@ -162,6 +163,12 @@ function handleMessage(message) {
     net.onPvpReject?.(message);
   } else if (message.t === "boss_spawn" || message.t === "boss_state") {
     setBossState(message);
+  } else if (message.t === "boss_move") {
+    if (net.boss?.id === message.bossId) {
+      if (Number.isFinite(message.x)) net.boss.x = message.x;
+      if (Number.isFinite(message.y)) net.boss.y = message.y;
+    }
+    net.onBossMove?.(message);
   } else if (message.t === "boss_hit") {
     if (net.boss?.id === message.bossId) {
       net.boss.hp = message.hp;

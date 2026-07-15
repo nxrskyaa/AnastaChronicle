@@ -3,7 +3,7 @@ import { Game } from "./game.js";
 import "./logic.js";
 import "./interactions.js";
 import "./render.js";
-import { UI } from "./ui.js?v=20260715-realms8";
+import { UI } from "./ui.js?v=20260715-combat1";
 import {
   buildCharacter, buildWeapon, PRESETS, HAIRSTYLES, FACE_MARKS,
   ACCESSORIES, OUTFITS, AURAS, DEFAULT_LOOK, normalizeLook,
@@ -533,6 +533,7 @@ function wireMultiplayer(g, ui) {
     ui.toast(reasons[message.reason] || "The realm rejected that duel strike.");
   };
   net.onBossState = (boss) => g.applySharedBoss?.(boss);
+  net.onBossMove = (message) => g.applySharedBossMove?.(message);
   net.onBossHit = (message) => g.applySharedBossHit?.(message);
   net.onBossAttack = (message) => g.applySharedBossAttack?.(message);
   net.onBossDefeated = (message) => g.applySharedBossDefeat?.(message);
