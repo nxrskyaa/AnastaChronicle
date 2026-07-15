@@ -114,7 +114,10 @@ export class UI {
       try { await this.game.requestWalletConnect(); this.toast("Ritual wallet linked."); await this.renderGacha(); }
       catch (error) { this.toast(error?.message || "Wallet connection cancelled."); }
     });
-    document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
+    document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => {
+      if (button.dataset.openPanel === "guide") this.openStarterGuide(0);
+      else this.toggle(button.dataset.openPanel);
+    }));
     document.querySelectorAll("[data-guide-step]").forEach((button) => button.addEventListener("click", () => this.setGuideStep(Number(button.dataset.guideStep))));
     document.getElementById("guide-prev")?.addEventListener("click", () => this.setGuideStep(this._guideStep - 1));
     document.getElementById("guide-next")?.addEventListener("click", () => {
