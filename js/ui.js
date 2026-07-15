@@ -497,7 +497,7 @@ export class UI {
   closeAll() {
     const chatWasOpen = !!this.panels.chat && !this.panels.chat.classList.contains("hidden");
     const guideWasOpen = !!this.panels.guide && !this.panels.guide.classList.contains("hidden");
-    for (const k of ["menu", "guide", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden");
+    for (const k of ["menu", "realms", "guide", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden");
     clearInterval(this._afkClock);
     if (chatWasOpen) {
       clearTimeout(this._chatFocusTimer);
@@ -510,8 +510,8 @@ export class UI {
     if (this.game) { this.game.inputLocked = false; }
     if (this.game && !this.hasBlockingOpen()) this.game.paused = false;
   }
-  anyOpen() { return ["menu", "guide", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
-  hasBlockingOpen() { return ["menu", "guide", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  anyOpen() { return ["menu", "realms", "guide", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "realms", "guide", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   toggleAutoBattle(force) {
     if (!this.game) return false;
