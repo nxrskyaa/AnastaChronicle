@@ -295,10 +295,10 @@ export class UI {
     const connection = document.getElementById("battle-realm-connection");
     if (connection) connection.textContent = this.realmSupported
       ? "Battle Realm gates online"
-      : "Battle Realm server update required";
+      : "Legacy realm relay · sync update pending";
     document.querySelectorAll("[data-enter-realm]").forEach((button) => {
       const active = button.dataset.enterRealm === this.game?.realmWorld;
-      button.disabled = active || !this.realmSupported;
+      button.disabled = active;
       button.setAttribute("aria-disabled", String(button.disabled));
     });
   }
@@ -437,8 +437,8 @@ export class UI {
   async requestRealm(worldId) {
     const returning = worldId === "overworld";
     if (!this._realmSender) { this.toast("Realm gate is still preparing."); return; }
-    if (!returning && (!this.online || !this.realmSupported)) {
-      this.toast(this.online ? "Battle Realm server update is not live yet." : "Realm connection required to cross a Battle Gate.");
+    if (!returning && !this.online) {
+      this.toast("Realm connection required to cross a Battle Gate.");
       return;
     }
     const buttons = document.querySelectorAll("[data-enter-realm],#battle-realms-return,#battle-realm-exit");
@@ -465,7 +465,7 @@ export class UI {
     document.querySelectorAll("[data-realm-card]").forEach((card) => card.classList.toggle("active", card.dataset.realmCard === worldId));
     document.querySelectorAll("[data-enter-realm]").forEach((button) => {
       const active = button.dataset.enterRealm === worldId;
-      button.disabled = active || !this.realmSupported;
+      button.disabled = active;
       button.setAttribute("aria-disabled", String(button.disabled));
       const label = button.querySelector("span"); if (label) label.textContent = active ? "CURRENT REALM" : button.dataset.enterRealm === "duel-arena" ? "ENTER DUEL COURT" : "ENTER RAID SANCTUM";
     });

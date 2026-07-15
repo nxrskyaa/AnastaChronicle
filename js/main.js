@@ -3,7 +3,7 @@ import { Game } from "./game.js";
 import "./logic.js";
 import "./interactions.js";
 import "./render.js";
-import { UI } from "./ui.js?v=20260715-realms4";
+import { UI } from "./ui.js?v=20260715-realms5";
 import {
   buildCharacter, buildWeapon, PRESETS, HAIRSTYLES, FACE_MARKS,
   ACCESSORIES, OUTFITS, AURAS, DEFAULT_LOOK, normalizeLook,
@@ -459,9 +459,11 @@ function wireMultiplayer(g, ui) {
       }
       throw new Error("Battle Realm service is unavailable. Returned safely to the overworld.");
     }
+    if (next === "raid-sanctum" && net.protocol < 2) g.bossTimer = 0;
     g.paused = false;
     g.inputSuspendUntil = performance.now() + 240;
-    ui.toast(next === "overworld" ? "Returned to Verdant Overworld" : `Entered ${BATTLE_REALMS[next].name}`);
+    const legacy = next !== "overworld" && net.protocol < 2 ? " · legacy preview" : "";
+    ui.toast(next === "overworld" ? "Returned to Verdant Overworld" : `Entered ${BATTLE_REALMS[next].name}${legacy}`);
   });
 
   net.onWelcome = (message) => {
