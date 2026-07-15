@@ -494,11 +494,6 @@ Game.prototype.render = function () {
       ctx.drawImage(cv, -16, -36);
       if (!weaponBehind && remoteWeapon) ctx.drawImage(remoteWeapon, -16, -36);
       ctx.restore();
-      // name tag (blue tint to distinguish other players)
-      ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
-      ctx.fillStyle = o.duel ? "rgba(76,25,29,.78)" : "rgba(20,40,80,0.6)"; ctx.fillRect(rsx - 20, rsy - 46 - remoteLift + remoteBob, 40, 9);
-      if (o.duel) { ctx.fillStyle = "#d95348"; ctx.fillRect(rsx - 20, rsy - 46 - remoteLift + remoteBob, 2, 9); }
-      ctx.fillStyle = o.duel ? "#ffc0ab" : "#9fd0ff"; ctx.fillText(o.name, rsx, rsy - 39 - remoteLift + remoteBob); ctx.textAlign = "left";
     }
     else if (d.k === "enemy") {
       const im = this.monCache[o.id] ? this.monCache[o.id][o.frame % 4] : null;
@@ -896,8 +891,64 @@ Game.prototype.render = function () {
   this.renderDayNight(ctx, camx, camy);
   this.renderWeather(ctx);
   this.renderPostFX(ctx);
+  this.renderWorldNames(camx, camy);
   this.renderWorldChat(ctx, camx, camy);
   this.renderMinimap();
+};
+
+// Remote names are a DOM overlay instead of canvas text. The game canvas is
+// intentionally low-resolution and pixel-scaled, which makes small glyphs
+// smear on phones. The overlay keeps the world art pixelated while names stay
+// crisp and readable at the device's native resolution.
+Game.prototype.renderWorldNames = function (camx, camy) {
+  const layer = document.getElementById("world-name-layer");
+  if (!layer) return;
+  const rectKey = `${innerWidth}x${innerHeight}:${view.w}x${view.h}`;
+  if (this._worldChatRectKey !== rectKey) {
+    this._worldChatRectKey = rectKey;
+    this._worldChatRect = this.canvas.getBoundingClientRect();
+  }
+  const rect = this._worldChatRect;
+  const scaleX = rect.width / view.w;
+  const scaleY = rect.height / view.h;
+  const active = new Set();
+  this._worldNameEls ||= new Map();
+
+  for (const [id, remote] of Object.entries(net.remote)) {
+    if (!Number.isFinite(remote.rx) || !Number.isFinite(remote.ry)) continue;
+    const x = remote.rx - camx;
+    const y = remote.ry - camy;
+    if (x < -48 || x > view.w + 48 || y < -80 || y > view.h + 48) continue;
+    active.add(id);
+    let el = this._worldNameEls.get(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "world-name-tag";
+      el.appendChild(document.createElement("span"));
+      layer.appendChild(el);
+      this._worldNameEls.set(id, el);
+    }
+    const name = String(remote.name || "Traveler").slice(0, 24);
+    const label = el.firstElementChild;
+    if (label.textContent !== name) {
+      label.textContent = name;
+      el._nameHalf = Math.ceil(el.offsetWidth / 2) + 8;
+    }
+    el.classList.toggle("duel", !!remote.duel);
+    el.setAttribute("data-duel", remote.duel ? "true" : "false");
+    const rawPx = rect.left + x * scaleX;
+    const tagMargin = Math.min(rect.width / 2, el._nameHalf || 42);
+    const px = clamp(rawPx, rect.left + tagMargin, rect.right - tagMargin);
+    const py = clamp(rect.top + (y - (remote.mounted ? 65 : 48)) * scaleY, rect.top + 18, rect.bottom - 10);
+    el.style.left = `${Math.round(px)}px`;
+    el.style.top = `${Math.round(py)}px`;
+  }
+
+  for (const [id, el] of this._worldNameEls) {
+    if (active.has(id)) continue;
+    el.remove();
+    this._worldNameEls.delete(id);
+  }
 };
 
 // World speech is a DOM overlay. Canvas text was rendered at the low internal
