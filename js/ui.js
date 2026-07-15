@@ -117,8 +117,10 @@ export class UI {
       catch (error) { this.toast(error?.message || "Wallet connection cancelled."); }
     });
     document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => {
-      if (button.dataset.openPanel === "guide") this.openStarterGuide(0);
-      else this.toggle(button.dataset.openPanel);
+      const target = button.dataset.openPanel;
+      if (target === "guide") this.openStarterGuide(0);
+      else if (target === "duel-arena" || target === "raid-sanctum") this.requestRealm(target);
+      else this.toggle(target);
     }));
     document.querySelectorAll("[data-guide-step]").forEach((button) => button.addEventListener("click", () => this.setGuideStep(Number(button.dataset.guideStep))));
     document.getElementById("guide-prev")?.addEventListener("click", () => this.setGuideStep(this._guideStep - 1));
@@ -282,9 +284,6 @@ export class UI {
   setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
   setRealmSender(sender) {
     this._realmSender = typeof sender === "function" ? sender : null;
-    document.querySelectorAll("[data-enter-realm]").forEach((button) => {
-      button.onclick = () => this.requestRealm(button.dataset.enterRealm);
-    });
     for (const id of ["battle-realms-return", "battle-realm-exit"]) {
       const button = document.getElementById(id);
       if (button) button.onclick = () => this.requestRealm("overworld");

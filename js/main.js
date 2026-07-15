@@ -3,7 +3,7 @@ import { Game } from "./game.js";
 import "./logic.js";
 import "./interactions.js";
 import "./render.js";
-import { UI } from "./ui.js?v=20260715-realms2";
+import { UI } from "./ui.js?v=20260715-realms3";
 import {
   buildCharacter, buildWeapon, PRESETS, HAIRSTYLES, FACE_MARKS,
   ACCESSORIES, OUTFITS, AURAS, DEFAULT_LOOK, normalizeLook,
