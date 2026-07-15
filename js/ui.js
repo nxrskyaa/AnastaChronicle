@@ -129,9 +129,6 @@ export class UI {
     document.getElementById("guide-skip")?.addEventListener("click", () => this.close("guide"));
     document.getElementById("guide-open-quests")?.addEventListener("click", () => { this.close("guide"); this.toggle("quest"); });
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
-    document.querySelectorAll("[data-enter-realm]").forEach((button) => button.addEventListener("click", () => this.requestRealm(button.dataset.enterRealm)));
-    document.getElementById("battle-realms-return")?.addEventListener("click", () => this.requestRealm("overworld"));
-    document.getElementById("battle-realm-exit")?.addEventListener("click", () => this.requestRealm("overworld"));
     const chatInput = document.getElementById("chat-input");
     chatInput?.addEventListener("input", () => { const count = document.getElementById("chat-count"); if (count) count.textContent = `${chatInput.value.length}/160`; });
     document.getElementById("chat-form")?.addEventListener("submit", (event) => { event.preventDefault(); this.submitChat(); });
@@ -283,7 +280,16 @@ export class UI {
 
   setChatSender(sender) { this._chatSender = typeof sender === "function" ? sender : null; }
   setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
-  setRealmSender(sender) { this._realmSender = typeof sender === "function" ? sender : null; }
+  setRealmSender(sender) {
+    this._realmSender = typeof sender === "function" ? sender : null;
+    document.querySelectorAll("[data-enter-realm]").forEach((button) => {
+      button.onclick = () => this.requestRealm(button.dataset.enterRealm);
+    });
+    for (const id of ["battle-realms-return", "battle-realm-exit"]) {
+      const button = document.getElementById(id);
+      if (button) button.onclick = () => this.requestRealm("overworld");
+    }
+  }
   setDuelSupported(supported) {
     this.duelSupported = !!supported;
     const button = document.getElementById("duel-toggle");
