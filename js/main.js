@@ -3,7 +3,7 @@ import { Game } from "./game.js";
 import "./logic.js";
 import "./interactions.js";
 import "./render.js";
-import { UI } from "./ui.js?v=20260715-realms3";
+import { UI } from "./ui.js?v=20260715-realms4";
 import {
   buildCharacter, buildWeapon, PRESETS, HAIRSTYLES, FACE_MARKS,
   ACCESSORIES, OUTFITS, AURAS, DEFAULT_LOOK, normalizeLook,
@@ -435,6 +435,7 @@ function wireMultiplayer(g, ui) {
   ui.setChatSender(sendChat);
   ui.setDuelSender(sendDuel);
   ui.setDuelSupported(false);
+  ui.setRealmSupported(false);
   ui.setOnlineState(false, 1);
   ui.setRealmSender(async (worldId) => {
     const next = BATTLE_REALMS[worldId] ? worldId : "overworld";
@@ -452,6 +453,10 @@ function wireMultiplayer(g, ui) {
       if (next !== "overworld") leaveBattleRealm(g);
       ui.updateBattleRealm("overworld", BATTLE_REALMS.overworld.name);
       g.paused = false;
+      if (next === "overworld") {
+        ui.toast("Returned to Verdant Overworld in local mode");
+        return;
+      }
       throw new Error("Battle Realm service is unavailable. Returned safely to the overworld.");
     }
     g.paused = false;
@@ -460,7 +465,9 @@ function wireMultiplayer(g, ui) {
   });
 
   net.onWelcome = (message) => {
-    ui.setDuelSupported((Number(message.protocol) || 1) >= 2 && !!message.capabilities?.pvp);
+    const realmProtocolReady = (Number(message.protocol) || 1) >= 2 && typeof message.world === "string";
+    ui.setRealmSupported(realmProtocolReady);
+    ui.setDuelSupported(realmProtocolReady && !!message.capabilities?.pvp);
     ui.updateBattleRealm(message.world || g.realmWorld, message.worldName || BATTLE_REALMS[g.realmWorld]?.name);
     if (!Number.isFinite(message.x) || !Number.isFinite(message.y)) return;
     const drift = Math.hypot(g.player.x - message.x, g.player.y - message.y);
