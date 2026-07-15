@@ -236,6 +236,7 @@ Game.prototype.render = function () {
   // remote players (multiplayer presence) — interpolate toward server pos
   for (const id in net.remote) {
     const rp = net.remote[id];
+    if ((rp.worldId || "overworld") !== this.realmWorld) continue;
     rp.rx += (rp.x - rp.rx) * 0.25;
     rp.ry += (rp.y - rp.ry) * 0.25;
     if (rp.moving) { rp.frameT += 0.016; if (rp.frameT > 0.12) { rp.frameT = 0; rp.frame = (rp.frame + 1) % 4; } }
@@ -935,6 +936,7 @@ Game.prototype.renderWorldNames = function (camx, camy) {
   }
 
   for (const [id, remote] of Object.entries(net.remote)) {
+    if ((remote.worldId || "overworld") !== this.realmWorld) continue;
     if (!Number.isFinite(remote.rx) || !Number.isFinite(remote.ry)) continue;
     const x = remote.rx - camx;
     const y = remote.ry - camy;
@@ -994,6 +996,7 @@ Game.prototype.renderWorldChat = function (_ctx, camx, camy) {
     });
   }
   for (const [id, remote] of Object.entries(net.remote)) {
+    if ((remote.worldId || "overworld") !== this.realmWorld) continue;
     if (!remote.chatText || remote.chatUntil <= this.t) continue;
     const x = remote.rx - camx, y = remote.ry - camy;
     if (x < -90 || x > view.w + 90 || y < -90 || y > view.h + 70) continue;

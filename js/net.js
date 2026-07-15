@@ -39,6 +39,13 @@ export const net = {
 
 const validWorld = (value) => MULTIPLAYER_WORLDS.some((world) => world.id === value) ? value : "overworld";
 
+function worldFromLook(look) {
+  try {
+    const parsed = typeof look === "string" ? JSON.parse(look) : look;
+    return validWorld(parsed?._realm);
+  } catch { return "overworld"; }
+}
+
 function remotePlayer(state) {
   return {
     x: state.x,
@@ -49,6 +56,7 @@ function remotePlayer(state) {
     moving: !!state.moving,
     name: state.name,
     look: state.look,
+    worldId: worldFromLook(state.look),
     duel: !!state.duel,
     mounted: !!state.mounted,
     mountId: typeof state.mountId === "string" ? state.mountId : null,
@@ -64,7 +72,7 @@ function applyState(remote, state) {
   remote.dir = state.dir;
   remote.moving = !!state.moving;
   if (state.name !== undefined) remote.name = state.name;
-  if (state.look !== undefined) remote.look = state.look;
+  if (state.look !== undefined) { remote.look = state.look; remote.worldId = worldFromLook(state.look); }
   if (state.duel !== undefined) remote.duel = !!state.duel;
   if (state.mounted !== undefined) remote.mounted = !!state.mounted;
   if (state.mountId !== undefined) remote.mountId = typeof state.mountId === "string" ? state.mountId : null;
@@ -105,7 +113,9 @@ function handleMessage(message) {
     net.selfId = message.id;
     net.protocol = message.protocol || 1;
     net.connected = true;
-    net.worldId = validWorld(message.world);
+    // Protocol v1 has no world field. Preserve the world requested by this
+    // client instead of silently snapping its network state back to overworld.
+    if (message.world !== undefined) net.worldId = validWorld(message.world);
     net.worldName = String(message.worldName || MULTIPLAYER_WORLDS.find((world) => world.id === net.worldId)?.name || "Verdant Overworld");
     net.capabilities = { pvp: !!message.capabilities?.pvp, boss: !!message.capabilities?.boss };
     net._reconnectAttempts = 0;
@@ -222,7 +232,7 @@ export async function connectMultiplayer(look, name, spawn, worldId = net.worldI
     ws.send(JSON.stringify({
       t: "join",
       name: name || "Traveler",
-      look: JSON.stringify(look || {}),
+      look: JSON.stringify({ ...(look || {}), _realm: net.worldId }),
       x: spawn?.x,
       y: spawn?.y,
       resumeToken: net.resumeToken,
@@ -306,7 +316,7 @@ export async function switchMultiplayerWorld(worldId, spawn) {
 }
 
 export function remoteCount() {
-  return Object.keys(net.remote).length;
+  return Object.values(net.remote).filter((remote) => (remote.worldId || "overworld") === net.worldId).length;
 }
 
 if (typeof document !== "undefined") {

@@ -285,6 +285,9 @@ export class UI {
   setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
   setRealmSender(sender) {
     this._realmSender = typeof sender === "function" ? sender : null;
+    document.querySelectorAll("[data-enter-realm]").forEach((button) => {
+      button.onclick = () => this.requestRealm(button.dataset.enterRealm);
+    });
     for (const id of ["battle-realms-return", "battle-realm-exit"]) {
       const button = document.getElementById(id);
       if (button) button.onclick = () => this.requestRealm("overworld");

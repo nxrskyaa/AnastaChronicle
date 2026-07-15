@@ -3,7 +3,7 @@ import { Game } from "./game.js";
 import "./logic.js";
 import "./interactions.js";
 import "./render.js";
-import { UI } from "./ui.js?v=20260715-realms5";
+import { UI } from "./ui.js?v=20260715-realms6";
 import {
   buildCharacter, buildWeapon, PRESETS, HAIRSTYLES, FACE_MARKS,
   ACCESSORIES, OUTFITS, AURAS, DEFAULT_LOOK, normalizeLook,
@@ -439,7 +439,7 @@ function wireMultiplayer(g, ui) {
   ui.setOnlineState(false, 1);
   ui.setRealmSender(async (worldId) => {
     const next = BATTLE_REALMS[worldId] ? worldId : "overworld";
-    if (next === g.realmWorld) return;
+    if (next === g.realmWorld && !(next === "overworld" && g._overworldSnapshot)) return;
     g.paused = true;
     g.resetInputState?.();
     const spawn = next === "overworld" ? leaveBattleRealm(g) : enterBattleRealm(g, next);
@@ -448,15 +448,21 @@ function wireMultiplayer(g, ui) {
     ui.setDuelSupported(false);
     ui.syncBoss?.(null);
     ui.updateBattleRealm(next, BATTLE_REALMS[next].name);
+    if (next === "overworld") {
+      // Returning is a local safety action first. Never leave the player trapped
+      // in an instance while a relay reconnect is slow or unavailable.
+      g.paused = false;
+      g.inputSuspendUntil = performance.now() + 240;
+      switchMultiplayerWorld(next, spawn).then((socket) => {
+        ui.toast(socket ? "Returned to Verdant Overworld" : "Returned to Verdant Overworld in local mode");
+      }).catch(() => ui.toast("Returned to Verdant Overworld in local mode"));
+      return;
+    }
     const socket = await switchMultiplayerWorld(next, spawn);
     if (!socket) {
       if (next !== "overworld") leaveBattleRealm(g);
       ui.updateBattleRealm("overworld", BATTLE_REALMS.overworld.name);
       g.paused = false;
-      if (next === "overworld") {
-        ui.toast("Returned to Verdant Overworld in local mode");
-        return;
-      }
       throw new Error("Battle Realm service is unavailable. Returned safely to the overworld.");
     }
     if (next === "raid-sanctum" && net.protocol < 2) g.bossTimer = 0;
