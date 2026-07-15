@@ -2769,4 +2769,21 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   #chat-dock .chat-dock-sigil{width:28px;height:24px}
   #chat-dock .chat-dock-copy,#chat-dock kbd{display:none!important}
 }
+/* Tablet and phone-landscape HUD: keep chat beside the status card. The old
+   300px bottom-left dock occupied the same touch zone as the analog stick. */
+@media(min-width:761px) and (max-width:1180px){
+  #chat-dock{
+    left:calc(var(--realm-safe-left) + 262px)!important;
+    right:auto!important;
+    top:var(--realm-safe-top)!important;
+    bottom:auto!important;
+    width:48px!important;
+    min-height:48px!important;
+    padding:7px!important;
+    grid-template-columns:1fr!important;
+  }
+  #chat-dock .chat-dock-sigil{margin:auto}
+  #chat-dock .chat-dock-copy,#chat-dock kbd{display:none!important}
+  #chat-dock .chat-unread{left:auto;right:-4px;top:-6px}
+}
 
