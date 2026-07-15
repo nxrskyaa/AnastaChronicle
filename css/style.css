@@ -2874,3 +2874,7 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   .guide-tabs button span{display:none}.guide-tabs button i{width:26px}.guide-progress{display:none}.guide-panel>.guide-head{grid-template-columns:minmax(0,1fr) 32px}.guide-hero{grid-template-columns:52px minmax(0,1fr)}.guide-seal{width:46px;height:46px}.guide-seal i{inset:8px}.guide-hero p{display:none}.guide-feature-grid{grid-template-columns:1fr}.guide-feature-grid article{min-height:76px}.guide-checklist article{grid-template-columns:28px minmax(0,1fr)}.guide-checklist article>b{grid-column:2;justify-self:start}.guide-checklist p{display:none}.guide-quest-title button{display:none}.guide-quest-card{grid-template-columns:42px minmax(0,1fr)}.guide-quest-giver span{display:none}.guide-quest-card>b{grid-column:2;justify-self:start}.guide-quest-card p{display:none}.guide-footer #guide-skip{font-size:0}.guide-footer #guide-skip::after{content:"CLOSE";font-size:6px}
 }
 
+@media(max-width:720px){
+  #panel-realms.battle-realms-panel{top:6px!important;right:auto!important;bottom:auto!important;left:6px!important;width:calc(100vw - 12px)!important;height:calc(100dvh - 12px)!important;max-height:none!important;transform:none!important;animation:none!important}
+}
+
