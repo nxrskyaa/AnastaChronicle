@@ -685,6 +685,11 @@ function startGame(savedLook, savedName, saveData) {
       setTimeout(() => ensureOnchainProfile(game, ui), 450);
     }
     showArrivalGuide(!!saveData);
+    if (!saveData && !game.flags.starterGuideSeen) {
+      setTimeout(() => {
+        if (window.__ANASTA__ === game && !game.flags.starterGuideSeen) ui.openStarterGuide?.(0);
+      }, 520);
+    }
     // Auto-save every 15s
     setInterval(persist, 15000);
     // Save on page hide / unload
@@ -748,6 +753,7 @@ function normalizeSaveData(raw) {
   const flags = raw.flags && typeof raw.flags === "object" ? raw.flags : {};
   safe.flags = {
     starterCache: !!flags.starterCache,
+    starterGuideSeen: !!flags.starterGuideSeen,
     guestGachaFreePulls: Object.prototype.hasOwnProperty.call(flags, "guestGachaFreePulls") ? Math.max(0, Math.min(5, Math.floor(Number(flags.guestGachaFreePulls) || 0))) : 5,
     gachaSequence: Math.max(0, Math.floor(Number(flags.gachaSequence) || 0)),
   };
@@ -971,7 +977,7 @@ function buildWalletRecoverySave() {
     fishing: { total: 0, best: 0, records: {} },
     quests: null,
     afkFishing: null,
-    flags: { starterCache: false, guestGachaFreePulls: 5, gachaSequence: 0 },
+    flags: { starterCache: false, starterGuideSeen: false, guestGachaFreePulls: 5, gachaSequence: 0 },
     cosmeticsOwned: [],
     equipped: "fist",
     pets: [], activePetId: null, mountId: null, mounted: false,

@@ -51,6 +51,7 @@ export class UI {
       afk: document.getElementById("panel-afk"),
       fishingMode: document.getElementById("panel-fishing-mode"),
       menu: document.getElementById("panel-menu"),
+      guide: document.getElementById("panel-guide"),
       chat: document.getElementById("panel-chat"),
       collection: document.getElementById("panel-collection"),
       craft: document.getElementById("panel-craft"),
@@ -74,6 +75,7 @@ export class UI {
     this._shopMode = "buy";
     this._afkSelection = AFK_FISHING_OPTIONS[0]?.minutes || 2;
     this._levelHideTimer = null;
+    this._guideStep = 0;
     // A delayed focus must never bring an already-closed chat back into the
     // interaction flow (especially after Continue on mobile keyboards).
     this._chatFocusTimer = null;
@@ -113,6 +115,14 @@ export class UI {
       catch (error) { this.toast(error?.message || "Wallet connection cancelled."); }
     });
     document.querySelectorAll("[data-open-panel]").forEach((button) => button.addEventListener("click", () => this.toggle(button.dataset.openPanel)));
+    document.querySelectorAll("[data-guide-step]").forEach((button) => button.addEventListener("click", () => this.setGuideStep(Number(button.dataset.guideStep))));
+    document.getElementById("guide-prev")?.addEventListener("click", () => this.setGuideStep(this._guideStep - 1));
+    document.getElementById("guide-next")?.addEventListener("click", () => {
+      if (this._guideStep >= 3) { this.close("guide"); this.toast("Starter Guide complete. Reopen it anytime from Realm Menu."); }
+      else this.setGuideStep(this._guideStep + 1);
+    });
+    document.getElementById("guide-skip")?.addEventListener("click", () => this.close("guide"));
+    document.getElementById("guide-open-quests")?.addEventListener("click", () => { this.close("guide"); this.toggle("quest"); });
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
     const chatInput = document.getElementById("chat-input");
     chatInput?.addEventListener("input", () => { const count = document.getElementById("chat-count"); if (count) count.textContent = `${chatInput.value.length}/160`; });
@@ -193,6 +203,74 @@ export class UI {
     const menuPath = document.getElementById("menu-class-path"); if (menuPath) menuPath.textContent = `${(classMeta.path || className).toUpperCase()} PATH`;
     for (const id of ["status-card", "panel-menu"]) document.getElementById(id)?.style.setProperty("--class-accent", loadout.color || "#5ec18e");
     this._skillClass = classId;
+  }
+
+  openStarterGuide(step = 0) {
+    this._guideStep = Math.max(0, Math.min(3, Math.floor(Number(step) || 0)));
+    if (this.panels.guide?.classList.contains("hidden")) this.toggle("guide");
+    else this.renderStarterGuide();
+  }
+
+  setGuideStep(step) {
+    const pages = [...document.querySelectorAll("[data-guide-page]")];
+    if (!pages.length) return;
+    this._guideStep = Math.max(0, Math.min(pages.length - 1, Math.floor(Number(step) || 0)));
+    pages.forEach((page, index) => page.classList.toggle("hidden", index !== this._guideStep));
+    document.querySelectorAll("[data-guide-step]").forEach((button) => {
+      const active = Number(button.dataset.guideStep) === this._guideStep;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    const label = document.getElementById("guide-progress-label");
+    if (label) label.textContent = `CHAPTER ${this._guideStep + 1} / ${pages.length}`;
+    const fill = document.getElementById("guide-progress-fill");
+    if (fill) fill.style.width = `${(this._guideStep + 1) / pages.length * 100}%`;
+    const previous = document.getElementById("guide-prev");
+    if (previous) previous.disabled = this._guideStep === 0;
+    const next = document.getElementById("guide-next");
+    if (next) next.textContent = this._guideStep === pages.length - 1 ? "FINISH GUIDE ✓" : "NEXT CHAPTER ›";
+    if (this._guideStep === 1) this.renderStarterChecks();
+    if (this._guideStep === 3) this.renderStarterQuests();
+  }
+
+  renderStarterGuide() { this.setGuideStep(this._guideStep); }
+
+  renderStarterChecks() {
+    if (!this.game) return;
+    const quests = this.game.quests;
+    const states = {
+      cache: !!this.game.flags?.starterCache,
+      quest: Object.keys(quests.active || {}).length > 0 || Object.keys(quests.done || {}).length > 0,
+      battle: (quests.killCount || 0) > 0,
+      fish: (quests.fishCount || 0) > 0,
+    };
+    document.querySelectorAll("[data-guide-check]").forEach((row) => {
+      const done = !!states[row.dataset.guideCheck];
+      row.classList.toggle("done", done);
+      const status = row.querySelector(":scope > b");
+      if (status) status.textContent = done ? "DONE" : "TO DO";
+    });
+  }
+
+  renderStarterQuests() {
+    const wrap = document.getElementById("guide-quest-list");
+    if (!wrap || !this.game) return;
+    wrap.innerHTML = "";
+    for (const quest of QUESTS) {
+      const state = this.game.quests.forGiver(quest.giver, this.game.player.inv).find((entry) => entry.q.id === quest.id);
+      const status = state?.done ? "DONE" : state?.ready ? "TURN IN" : state?.active ? `${state.progress}/${quest.target}` : "AVAILABLE";
+      const rewards = [quest.reward.gold ? `${quest.reward.gold}g` : "", quest.reward.xp ? `${quest.reward.xp}xp` : "", quest.reward.item ? (ITEMS[quest.reward.item]?.name || quest.reward.item) : ""].filter(Boolean).join(" · ");
+      const row = document.createElement("article");
+      row.className = `guide-quest-card${state?.done ? " done" : state?.active ? " active" : ""}`;
+      row.innerHTML = `<div class="guide-quest-giver"><i>${quest.giver.charAt(0)}</i><span>${quest.giver}</span></div><div><strong>${quest.title}</strong><p>${quest.desc}</p><small>REWARD · ${rewards}</small></div><b>${status}</b>`;
+      wrap.appendChild(row);
+    }
+  }
+
+  markStarterGuideSeen() {
+    if (!this.game?.flags || this.game.flags.starterGuideSeen) return;
+    this.game.flags.starterGuideSeen = true;
+    this.game.onProgressChange?.();
   }
 
   setChatSender(sender) { this._chatSender = typeof sender === "function" ? sender : null; }
@@ -339,6 +417,7 @@ export class UI {
       if (name === "quest") this.renderQuestLog();
       if (name === "companions") this.renderCompanions();
       if (name === "menu") this.renderMenu();
+      if (name === "guide") this.renderStarterGuide();
       if (name === "chat") this.renderChat();
       if (name === "collection") this.renderCollection();
       if (this.game && name === "chat") {
@@ -357,6 +436,7 @@ export class UI {
     this.panels[name]?.classList.add("hidden");
     if (name === "afk") clearInterval(this._afkClock);
     if (name === "fishingMode") this._fishingSpot = null;
+    if (name === "guide") this.markStarterGuideSeen();
     if (name === "chat") {
       clearTimeout(this._chatFocusTimer);
       this._chatFocusTimer = null;
@@ -371,7 +451,8 @@ export class UI {
   }
   closeAll() {
     const chatWasOpen = !!this.panels.chat && !this.panels.chat.classList.contains("hidden");
-    for (const k of ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden");
+    const guideWasOpen = !!this.panels.guide && !this.panels.guide.classList.contains("hidden");
+    for (const k of ["menu", "guide", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings"]) this.panels[k]?.classList.add("hidden");
     clearInterval(this._afkClock);
     if (chatWasOpen) {
       clearTimeout(this._chatFocusTimer);
@@ -380,11 +461,12 @@ export class UI {
       const active = document.activeElement;
       if (active && this.panels.chat?.contains(active)) active.blur?.();
     }
+    if (guideWasOpen) this.markStarterGuideSeen();
     if (this.game) { this.game.inputLocked = false; }
     if (this.game && !this.hasBlockingOpen()) this.game.paused = false;
   }
-  anyOpen() { return ["menu", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
-  hasBlockingOpen() { return ["menu", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  anyOpen() { return ["menu", "guide", "chat", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
+  hasBlockingOpen() { return ["menu", "guide", "collection", "inv", "shop", "gacha", "afk", "fishingMode", "craft", "cooking", "quest", "companions", "dialog", "settings", "level", "pet", "death"].some(k => this.panels[k] && !this.panels[k].classList.contains("hidden")); }
 
   toggleAutoBattle(force) {
     if (!this.game) return false;
@@ -471,6 +553,7 @@ export class UI {
     set("menu-location", this.currentRegion());
     set("menu-clock", document.getElementById("clock")?.textContent || "Day 06:00");
     set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
+    set("menu-guide-state", this.game.flags?.starterGuideSeen ? "Replay controls, features & quests" : "Start here · learn the realm");
     this.syncAutoBattle(true);
     set("menu-pet-progress", `${ownedPets} / ${MON_IDS.length} bonded`);
     set("menu-cooking-state", `${knownMeals}/${COOKING_RECIPES.length} recipes · ${servings} packed`);

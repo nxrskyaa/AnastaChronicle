@@ -263,6 +263,7 @@
       <button type="button" data-open-panel="craft"><i class="menu-rune forge"></i><span><b>Forge</b><small>Craft your arsenal</small></span><em>C</em></button>
       <button type="button" data-open-panel="cooking"><i class="menu-rune cooking"></i><span><b>Hearth Kitchen</b><small id="menu-cooking-state">12 camp recipes</small></span><em>K</em></button>
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
+      <button type="button" data-open-panel="guide"><i class="menu-rune quest"></i><span><b>Starter Guide</b><small id="menu-guide-state">Controls, features &amp; quest directory</small></span><em>START</em></button>
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
       <button id="auto-battle-toggle" type="button" role="switch" aria-checked="false"><i class="menu-rune battle"></i><span><b>AFK Auto Battle</b><small id="menu-battle-state">OFF · hunts nearby monsters</small></span><em>H</em></button>
       <button type="button" data-open-panel="companions"><i class="menu-rune pet"></i><span><b>Sanctuary</b><small id="menu-pet-progress">0 / 25 bonded</small></span><em>P NEXT</em></button>
@@ -275,6 +276,53 @@
       <div><span>OPT-IN PVP</span><strong id="duel-title">Traveler Duel</strong><p>Damage between players only activates when both travelers enable Duel Mode. World combat stays safe otherwise.</p></div>
       <button id="duel-toggle" type="button" role="switch" aria-checked="false"><i></i><span id="duel-toggle-label">SAFE MODE</span></button>
     </section>
+  </div>
+  <div id="panel-guide" class="panel panel-wide guide-panel hidden" role="dialog" aria-modal="true" aria-labelledby="starter-guide-title">
+    <div class="panel-head guide-head"><div><span class="panel-kicker">TRAVELER HANDBOOK</span><h2 id="starter-guide-title">Starter Guide</h2></div><div class="guide-progress"><span id="guide-progress-label">CHAPTER 1 / 4</span><div><i id="guide-progress-fill"></i></div></div><button class="panel-close" data-close="guide" aria-label="Close Starter Guide">&times;</button></div>
+    <nav class="guide-tabs" role="tablist" aria-label="Starter guide chapters">
+      <button type="button" data-guide-step="0" role="tab" aria-selected="true"><i>01</i><span>Begin</span></button>
+      <button type="button" data-guide-step="1" role="tab" aria-selected="false"><i>02</i><span>First Trail</span></button>
+      <button type="button" data-guide-step="2" role="tab" aria-selected="false"><i>03</i><span>Features</span></button>
+      <button type="button" data-guide-step="3" role="tab" aria-selected="false"><i>04</i><span>Quests</span></button>
+    </nav>
+    <div class="guide-pages">
+      <section class="guide-page" data-guide-page="0">
+        <div class="guide-hero"><div class="guide-seal" aria-hidden="true"><span>A</span><i></i></div><div><span>WELCOME TO THE VERDANT REALM</span><h3>Your first ten minutes, made clear.</h3><p>Explore at your own pace. The guide pauses the world, explains every major system, and stays available from Realm Menu.</p></div></div>
+        <div class="guide-control-grid">
+          <article><span>DESKTOP</span><strong>Move &amp; interact</strong><div><kbd>WASD</kbd><b>Move</b><kbd>F</kbd><b>Talk / gather</b><kbd>1-4</kbd><b>Skills</b><kbd>Enter</kbd><b>Chat</b></div></article>
+          <article><span>MOBILE / TABLET</span><strong>Touch controls</strong><div><kbd>Analog</kbd><b>Move</b><kbd>F</kbd><b>Interact</b><kbd>ATK</kbd><b>Attack</b><kbd>Skillbar</kbd><b>Skills</b></div></article>
+        </div>
+        <div class="guide-callout"><i></i><div><strong>Start with the golden cache south of Hearth Camp.</strong><p>Open it with F to bond Puffalo, your starter companion and mount.</p></div></div>
+      </section>
+      <section class="guide-page hidden" data-guide-page="1">
+        <div class="guide-section-title"><span>RECOMMENDED ROUTE</span><h3>The First Trail</h3><p>These milestones teach the core loop without locking you into a tutorial corridor.</p></div>
+        <div class="guide-checklist">
+          <article data-guide-check="cache"><i>1</i><div><strong>Claim the golden cache</strong><p>Travel south of camp, press F, then open Sanctuary to meet Puffalo.</p></div><b>TO DO</b></article>
+          <article data-guide-check="quest"><i>2</i><div><strong>Accept an NPC quest</strong><p>Talk to an NPC marked with !. Warden and Smith are good first choices.</p></div><b>TO DO</b></article>
+          <article data-guide-check="battle"><i>3</i><div><strong>Win your first battle</strong><p>Use your class attack and skills. Mage, Archer, Priest and Hunter auto-aim nearby foes.</p></div><b>TO DO</b></article>
+          <article data-guide-check="fish"><i>4</i><div><strong>Catch your first fish</strong><p>Interact at the water edge, then choose Manual or automatic fishing.</p></div><b>TO DO</b></article>
+        </div>
+      </section>
+      <section class="guide-page hidden" data-guide-page="2">
+        <div class="guide-section-title"><span>SYSTEM MAP</span><h3>Everything You Can Do</h3><p>Open Realm Menu anytime to reach these systems.</p></div>
+        <div class="guide-feature-grid">
+          <article><i>01</i><strong>Combat &amp; Classes</strong><p>Use class skills, dodge, guard and optional AFK Auto Battle.</p></article>
+          <article><i>02</i><strong>Forge &amp; Gear</strong><p>Gather wood, ore, gel and boss drops to craft class weapons.</p></article>
+          <article><i>03</i><strong>Fishing</strong><p>Manual fishing rewards timing; Auto Fishing repeats normal casts.</p></article>
+          <article><i>04</i><strong>Cooking</strong><p>Turn fish and gathered materials into healing food and buffs.</p></article>
+          <article><i>05</i><strong>Pets &amp; Mounts</strong><p>Bond companions, switch active pets and ride mountable creatures.</p></article>
+          <article><i>06</i><strong>Relic Gacha</strong><p>Use five starter pulls, gold, or Ritual for weapons and cosmetics.</p></article>
+          <article><i>07</i><strong>Multiplayer</strong><p>Chat, meet travelers, opt into mutual duels and fight bosses together.</p></article>
+          <article><i>08</i><strong>World Boss</strong><p>Enter the Infernyx arena. Shared damage grants co-op rewards.</p></article>
+          <article><i>09</i><strong>Save &amp; Ritual</strong><p>Guests save locally. Wallet profiles can publish recoverable checkpoints.</p></article>
+        </div>
+      </section>
+      <section class="guide-page hidden" data-guide-page="3">
+        <div class="guide-section-title guide-quest-title"><div><span>QUEST DIRECTORY</span><h3>Who Needs Your Help?</h3><p>Quest status and progress below come directly from your current Chronicle.</p></div><button id="guide-open-quests" type="button">OPEN ACTIVE QUESTS</button></div>
+        <div id="guide-quest-list" class="guide-quest-list"></div>
+      </section>
+    </div>
+    <footer class="guide-footer"><button id="guide-skip" type="button">CLOSE FOR NOW</button><div><button id="guide-prev" type="button" disabled>&lsaquo; BACK</button><button id="guide-next" type="button">NEXT CHAPTER &rsaquo;</button></div></footer>
   </div>
   <div id="panel-chat" class="panel panel-wide chat-panel hidden" role="dialog" aria-modal="true" aria-labelledby="realm-chat-title">
     <div class="panel-head"><div><span class="panel-kicker">LIVE OPEN WORLD</span><h2 id="realm-chat-title">Realm Chat</h2></div><div class="chat-presence"><i></i><span id="chat-presence-text">Connecting</span></div><button class="panel-close" data-close="chat" aria-label="Close Realm Chat">&times;</button></div>
