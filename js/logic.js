@@ -1130,6 +1130,7 @@ Game.prototype.applySharedBossReward = function (message) {
 };
 
 Game.prototype.spawnBoss = function () {
+  if (this.realmWorld !== "raid-sanctum") return;
   if (net.connected && net.protocol >= 2) return;
   if (this.boss && !this.boss.dead) return;
   const p = this.player;
@@ -1152,6 +1153,10 @@ Game.prototype.spawnBoss = function () {
   this.audio.sfx("level"); this.shake = Math.max(this.shake, 8);
 };
 Game.prototype.updateBoss = function (dt) {
+  if (this.realmWorld !== "raid-sanctum") {
+    if (this.boss) { this.boss = null; this.ui.syncBoss?.(null); }
+    return;
+  }
   if (net.connected && net.protocol >= 2) {
     if (net.boss?.active && (!this.boss?.shared || this.boss.serverId !== net.boss.id)) this.applySharedBoss(net.boss);
   } else {

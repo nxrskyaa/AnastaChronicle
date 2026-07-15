@@ -12,8 +12,9 @@ import { audio } from "./audio.js";
 import { computeView } from "./view.js";
 import {
   connectMultiplayer, net, remoteCount, requestBossState,
-  sendChat, sendDuel,
+  sendChat, sendDuel, switchMultiplayerWorld,
 } from "./net.js";
+import { enterBattleRealm, leaveBattleRealm, persistentRealmPosition, BATTLE_REALMS } from "./realms.js";
 import { CLASSES } from "./classes.js";
 import { normalizeActiveBuffs } from "./cooking.js";
 import { STARTER_MOUNT_ID } from "./monsters.js";
@@ -386,12 +387,13 @@ function showArrivalGuide(isReturning) {
 
 function savePayload(g) {
   const p = g.player;
+  const persistentPosition = persistentRealmPosition(g) || p;
   return {
     version: 3,
     name: look.name,
     look: normalizeLook(look),
     stats: { level: p.level, xp: p.xp, gold: p.gold, hp: p.hp, cls: p.cls },
-    position: { x: Number(p.x) || 0, y: Number(p.y) || 0, dir: p.dir || "down" },
+    position: { x: Number(persistentPosition.x) || 0, y: Number(persistentPosition.y) || 0, dir: persistentPosition.dir || p.dir || "down" },
     onchainPolicy,
     inv: p.inv,
     fishing: g.fishingStats,
@@ -434,15 +436,38 @@ function wireMultiplayer(g, ui) {
   ui.setDuelSender(sendDuel);
   ui.setDuelSupported(false);
   ui.setOnlineState(false, 1);
+  ui.setRealmSender(async (worldId) => {
+    const next = BATTLE_REALMS[worldId] ? worldId : "overworld";
+    if (next === g.realmWorld) return;
+    g.paused = true;
+    g.resetInputState?.();
+    const spawn = next === "overworld" ? leaveBattleRealm(g) : enterBattleRealm(g, next);
+    if (!spawn) { g.paused = false; throw new Error("That realm gate is not available."); }
+    ui.updateDuel(false);
+    ui.setDuelSupported(false);
+    ui.syncBoss?.(null);
+    ui.updateBattleRealm(next, BATTLE_REALMS[next].name);
+    const socket = await switchMultiplayerWorld(next, spawn);
+    if (!socket) {
+      if (next !== "overworld") leaveBattleRealm(g);
+      ui.updateBattleRealm("overworld", BATTLE_REALMS.overworld.name);
+      g.paused = false;
+      throw new Error("Battle Realm service is unavailable. Returned safely to the overworld.");
+    }
+    g.paused = false;
+    g.inputSuspendUntil = performance.now() + 240;
+    ui.toast(next === "overworld" ? "Returned to Verdant Overworld" : `Entered ${BATTLE_REALMS[next].name}`);
+  });
 
   net.onWelcome = (message) => {
-    ui.setDuelSupported((Number(message.protocol) || 1) >= 2);
+    ui.setDuelSupported((Number(message.protocol) || 1) >= 2 && !!message.capabilities?.pvp);
+    ui.updateBattleRealm(message.world || g.realmWorld, message.worldName || BATTLE_REALMS[g.realmWorld]?.name);
     if (!Number.isFinite(message.x) || !Number.isFinite(message.y)) return;
     const drift = Math.hypot(g.player.x - message.x, g.player.y - message.y);
     if (drift > 32) {
       g.player.x = message.x; g.player.y = message.y; g.player.vx = 0; g.player.vy = 0;
       g.moveTarget = null;
-      if (!message.resumed) ui.toast("Realm session restored at Hearth Camp");
+      if (!message.resumed && (message.world || "overworld") === "overworld") ui.toast("Realm session restored at Hearth Camp");
     }
   };
   net.onChat = (message) => {
@@ -489,7 +514,7 @@ function wireMultiplayer(g, ui) {
   };
   net.onPvpReject = (message) => {
     if (message.reason === "rate_limited") return;
-    const reasons = { mutual_duel_required: "Both travelers must arm Duel Mode.", out_of_range: "Duel target moved out of range.", invalid_target: "Duel target is no longer in the realm.", invalid_damage: "That attack exceeded the realm's duel limit." };
+    const reasons = { wrong_world: "Player damage is only authorized inside Crimson Duel Court.", mutual_duel_required: "Both travelers must arm Duel Mode.", out_of_range: "Duel target moved out of range.", invalid_target: "Duel target is no longer in the realm.", invalid_damage: "That attack exceeded the realm's duel limit." };
     ui.toast(reasons[message.reason] || "The realm rejected that duel strike.");
   };
   net.onBossState = (boss) => g.applySharedBoss?.(boss);
@@ -499,7 +524,7 @@ function wireMultiplayer(g, ui) {
   net.onBossReward = (message) => g.applySharedBossReward?.(message);
   net.onBossReject = (message) => {
     if (message.reason === "rate_limited") return;
-    const reasons = { out_of_range: "Enter the Infernyx arena before attacking.", inactive: "Infernyx is sealed. The next awakening is being prepared.", stale_boss: "That boss echo has already faded." };
+    const reasons = { wrong_world: "World Boss damage is only authorized inside the Raid Sanctum.", out_of_range: "Enter the Infernyx arena before attacking.", inactive: "Infernyx is sealed. The next awakening is being prepared.", stale_boss: "That boss echo has already faded." };
     ui.toast(reasons[message.reason] || "Boss strike rejected by the realm.");
   };
 
@@ -509,9 +534,9 @@ function wireMultiplayer(g, ui) {
     ui.setOnlineState(connected, connected ? remoteCount() + 1 : 1);
     if (connected && ui.duelActive !== net.duelActive) ui.updateDuel(net.duelActive);
     if (connected && !wasConnected) {
-      ui.receiveSystemChat("Connected to the shared Forest Realm.");
+      ui.receiveSystemChat(`Connected to ${net.worldName}.`);
       ui.toast("Realm linked · multiplayer online");
-      requestBossState();
+      if (net.capabilities.boss) requestBossState();
     } else if (!connected && wasConnected) {
       if (g.boss?.shared) { g.boss = null; g.ui.syncBoss?.(null); }
       ui.receiveSystemChat("Realm connection lost. Adventure continues in local mode.");

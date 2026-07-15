@@ -64,6 +64,7 @@ export class Game {
     this.raf = null;
     this.catchReveal = null;
     this.time = 6 * 60;
+    this.realmWorld = "overworld";
     this.weather = "clear";     // clear | rain | snow
     this.weatherT = 30;
     this.quests = new QuestLog();

@@ -1,7 +1,7 @@
 // Realtime multiplayer transport. Presence stays compatible with the original
 // JSON relay while protocol v2 adds chat, mutual duel events and a shared boss.
 
-import { getServerUrl, getSelectedServerId, MULTIPLAYER_ENABLED } from "./config.js";
+import { getServerUrl, getSelectedServerId, MULTIPLAYER_ENABLED, MULTIPLAYER_WORLDS } from "./config.js";
 
 export const net = {
   connected: false,
@@ -12,6 +12,9 @@ export const net = {
   resumeToken: null,
   protocol: 1,
   serverId: getSelectedServerId(),
+  worldId: "overworld",
+  worldName: "Verdant Overworld",
+  capabilities: { pvp: false, boss: false },
   duelActive: false,
   boss: null,
   _lastSend: 0,
@@ -31,7 +34,10 @@ export const net = {
   onBossReward: null,
   onBossReject: null,
   onWelcome: null,
+  onWorld: null,
 };
+
+const validWorld = (value) => MULTIPLAYER_WORLDS.some((world) => world.id === value) ? value : "overworld";
 
 function remotePlayer(state) {
   return {
@@ -99,9 +105,13 @@ function handleMessage(message) {
     net.selfId = message.id;
     net.protocol = message.protocol || 1;
     net.connected = true;
+    net.worldId = validWorld(message.world);
+    net.worldName = String(message.worldName || MULTIPLAYER_WORLDS.find((world) => world.id === net.worldId)?.name || "Verdant Overworld");
+    net.capabilities = { pvp: !!message.capabilities?.pvp, boss: !!message.capabilities?.boss };
     net._reconnectAttempts = 0;
     if (message.resumeToken) net.resumeToken = message.resumeToken;
     net.onWelcome?.(message);
+    net.onWorld?.(net.worldId, message);
   } else if (message.t === "players") {
     for (const state of message.list || []) {
       if (state.id === net.selfId) {
@@ -162,16 +172,17 @@ function handleMessage(message) {
   }
 }
 
-export async function connectMultiplayer(look, name, spawn) {
+export async function connectMultiplayer(look, name, spawn, worldId = net.worldId) {
   if (!MULTIPLAYER_ENABLED) return null;
-  net._join = { look, name, spawn: { x: spawn?.x, y: spawn?.y } };
+  net.worldId = validWorld(worldId);
+  net._join = { look, name, spawn: { x: spawn?.x, y: spawn?.y }, worldId: net.worldId };
   if (net.ws && (net.ws.readyState === 0 || net.ws.readyState === 1)) return net.ws;
   if (net._reconnectTimer) { clearTimeout(net._reconnectTimer); net._reconnectTimer = null; }
   let ws = null;
   try {
     if (net._ping) clearInterval(net._ping);
     net.serverId = getSelectedServerId();
-    ws = new WebSocket(getServerUrl(net.serverId));
+    ws = new WebSocket(getServerUrl(net.serverId, net.worldId));
     net.ws = ws;
 
     await new Promise((resolve, reject) => {
@@ -190,6 +201,7 @@ export async function connectMultiplayer(look, name, spawn) {
       if (net.ws !== ws) return;
       net.connected = false;
       net.duelActive = false;
+      net.capabilities = { pvp: false, boss: false };
       net.remote = {};
       net.boss = null;
       net.ws = null;
@@ -214,6 +226,7 @@ export async function connectMultiplayer(look, name, spawn) {
       x: spawn?.x,
       y: spawn?.y,
       resumeToken: net.resumeToken,
+      world: net.worldId,
     }));
 
     return ws;
@@ -249,21 +262,47 @@ export function sendChat(text) {
 }
 
 export function sendDuel(active) {
+  if (!net.capabilities.pvp) return false;
   return send({ t: "duel", active: !!active });
 }
 
 export function sendPvpHit(target, damage, kind = "basic") {
-  if (!target || target === net.selfId) return false;
+  if (!net.capabilities.pvp || !target || target === net.selfId) return false;
   return send({ t: "pvp_hit", target, damage, kind });
 }
 
 export function requestBossState() {
+  if (!net.capabilities.boss) return false;
   return send({ t: "boss_sync" });
 }
 
 export function sendBossHit(damage, bossId = net.boss?.id) {
-  if (!bossId) return false;
+  if (!net.capabilities.boss || !bossId) return false;
   return send({ t: "boss_hit", bossId, damage });
+}
+
+export async function switchMultiplayerWorld(worldId, spawn) {
+  const nextWorld = validWorld(worldId);
+  const join = net._join;
+  if (!join) return null;
+  if (net._reconnectTimer) { clearTimeout(net._reconnectTimer); net._reconnectTimer = null; }
+  if (net._ping) { clearInterval(net._ping); net._ping = null; }
+  const previous = net.ws;
+  if (previous) {
+    previous.onclose = null;
+    previous.onerror = null;
+    try { previous.close(1000, "world switch"); } catch { /* already closed */ }
+  }
+  net.connected = false;
+  net.ws = null;
+  net.remote = {};
+  net.selfId = null;
+  net.resumeToken = null;
+  net.duelActive = false;
+  net.boss = null;
+  net.capabilities = { pvp: false, boss: false };
+  net.worldId = nextWorld;
+  return connectMultiplayer(join.look, join.name, spawn, nextWorld);
 }
 
 export function remoteCount() {

@@ -154,6 +154,12 @@
       </div>
       <div class="boss-coop-row"><span><i></i> SHARED REALM</span><b id="boss-contribution">0 DMG</b></div>
     </div>
+    <aside id="battle-realm-hud" class="battle-realm-hud hidden" aria-live="polite">
+      <span id="battle-realm-kicker">BATTLE REALM</span>
+      <strong id="battle-realm-name">Verdant Overworld</strong>
+      <small id="battle-realm-rule">SAFE EXPLORATION</small>
+      <button id="battle-realm-exit" type="button">RETURN TO OVERWORLD</button>
+    </aside>
 
     <div id="top-right">
       <div class="top-right-tools">
@@ -263,6 +269,7 @@
       <button type="button" data-open-panel="craft"><i class="menu-rune forge"></i><span><b>Forge</b><small>Craft your arsenal</small></span><em>C</em></button>
       <button type="button" data-open-panel="cooking"><i class="menu-rune cooking"></i><span><b>Hearth Kitchen</b><small id="menu-cooking-state">12 camp recipes</small></span><em>K</em></button>
       <button type="button" data-open-panel="quest"><i class="menu-rune quest"></i><span><b>Chronicle</b><small>Active journeys</small></span><em>Q</em></button>
+      <button type="button" data-open-panel="realms"><i class="menu-rune realms"></i><span><b>Battle Realms</b><small id="menu-realm-state">PvP court &amp; co-op raid</small></span><em>GATE</em></button>
       <button type="button" data-open-panel="guide"><i class="menu-rune quest"></i><span><b>Starter Guide</b><small id="menu-guide-state">Controls, features &amp; quest directory</small></span><em>START</em></button>
       <button type="button" data-open-panel="collection"><i class="menu-rune fish"></i><span><b>Fish Archive</b><small id="menu-fish-progress">0 / 10 discovered</small></span><em>J</em></button>
       <button id="auto-battle-toggle" type="button" role="switch" aria-checked="false"><i class="menu-rune battle"></i><span><b>AFK Auto Battle</b><small id="menu-battle-state">OFF · hunts nearby monsters</small></span><em>H</em></button>
@@ -324,6 +331,26 @@
     </div>
     <footer class="guide-footer"><button id="guide-skip" type="button">CLOSE FOR NOW</button><div><button id="guide-prev" type="button" disabled>&lsaquo; BACK</button><button id="guide-next" type="button">NEXT CHAPTER &rsaquo;</button></div></footer>
   </div>
+  <div id="panel-realms" class="panel panel-wide battle-realms-panel hidden" role="dialog" aria-modal="true" aria-labelledby="battle-realms-title">
+    <div class="panel-head"><div><span class="panel-kicker">CROSS THE VEIL</span><h2 id="battle-realms-title">Battle Realms</h2></div><button class="panel-close" data-close="realms" aria-label="Close Battle Realms">&times;</button></div>
+    <div class="battle-realms-intro">
+      <i aria-hidden="true"></i><div><span>MULTIPLAYER INSTANCES</span><strong>One shard. Separate rules.</strong><p>Only travelers inside the same battle realm share presence, combat, and encounter state.</p></div>
+    </div>
+    <div class="battle-realm-grid">
+      <article class="realm-gate-card duel" data-realm-card="duel-arena">
+        <div class="realm-gate-art" aria-hidden="true"><i></i><b></b><span></span></div>
+        <div class="realm-gate-copy"><small>REALM 02 · PVP</small><h3>Crimson Duel Court</h3><p>A dedicated combat court. Player damage is server-authorized only when both travelers arm Duel Mode.</p><ul><li>Mutual opt-in damage</li><li>Safe Mode on entry</li><li>No monster interference</li></ul></div>
+        <button type="button" data-enter-realm="duel-arena"><span>ENTER DUEL COURT</span><em>›</em></button>
+      </article>
+      <article class="realm-gate-card raid" data-realm-card="raid-sanctum">
+        <div class="realm-gate-art" aria-hidden="true"><i></i><b></b><span></span></div>
+        <div class="realm-gate-copy"><small>REALM 03 · CO-OP</small><h3>Infernyx Raid Sanctum</h3><p>A synchronized dungeon where every traveler attacks one server-owned World Boss and shares the same phase.</p><ul><li>7,200 shared boss HP</li><li>Group target mechanics</li><li>Equal eligible rewards</li></ul></div>
+        <button type="button" data-enter-realm="raid-sanctum"><span>ENTER RAID SANCTUM</span><em>›</em></button>
+      </article>
+    </div>
+    <footer class="battle-realms-footer"><div><i></i><span id="battle-realm-connection">Connecting to realm service…</span></div><button id="battle-realms-return" type="button" class="hidden">RETURN TO OVERWORLD</button></footer>
+  </div>
+
   <div id="panel-chat" class="panel panel-wide chat-panel hidden" role="dialog" aria-modal="true" aria-labelledby="realm-chat-title">
     <div class="panel-head"><div><span class="panel-kicker">LIVE OPEN WORLD</span><h2 id="realm-chat-title">Realm Chat</h2></div><div class="chat-presence"><i></i><span id="chat-presence-text">Connecting</span></div><button class="panel-close" data-close="chat" aria-label="Close Realm Chat">&times;</button></div>
     <div id="chat-messages" class="chat-messages" role="log" aria-live="polite"><div class="chat-empty"><i></i><strong>The trail is quiet.</strong><p>Messages from other travelers will appear here.</p></div></div>

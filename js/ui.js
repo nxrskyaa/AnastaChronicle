@@ -51,6 +51,7 @@ export class UI {
       afk: document.getElementById("panel-afk"),
       fishingMode: document.getElementById("panel-fishing-mode"),
       menu: document.getElementById("panel-menu"),
+      realms: document.getElementById("panel-realms"),
       guide: document.getElementById("panel-guide"),
       chat: document.getElementById("panel-chat"),
       collection: document.getElementById("panel-collection"),
@@ -72,6 +73,7 @@ export class UI {
     this.duelSupported = false;
     this._chatSender = null;
     this._duelSender = null;
+    this._realmSender = null;
     this._shopMode = "buy";
     this._afkSelection = AFK_FISHING_OPTIONS[0]?.minutes || 2;
     this._levelHideTimer = null;
@@ -127,6 +129,9 @@ export class UI {
     document.getElementById("guide-skip")?.addEventListener("click", () => this.close("guide"));
     document.getElementById("guide-open-quests")?.addEventListener("click", () => { this.close("guide"); this.toggle("quest"); });
     document.getElementById("duel-toggle")?.addEventListener("click", () => this.requestDuel(!this.duelActive));
+    document.querySelectorAll("[data-enter-realm]").forEach((button) => button.addEventListener("click", () => this.requestRealm(button.dataset.enterRealm)));
+    document.getElementById("battle-realms-return")?.addEventListener("click", () => this.requestRealm("overworld"));
+    document.getElementById("battle-realm-exit")?.addEventListener("click", () => this.requestRealm("overworld"));
     const chatInput = document.getElementById("chat-input");
     chatInput?.addEventListener("input", () => { const count = document.getElementById("chat-count"); if (count) count.textContent = `${chatInput.value.length}/160`; });
     document.getElementById("chat-form")?.addEventListener("submit", (event) => { event.preventDefault(); this.submitChat(); });
@@ -278,12 +283,14 @@ export class UI {
 
   setChatSender(sender) { this._chatSender = typeof sender === "function" ? sender : null; }
   setDuelSender(sender) { this._duelSender = typeof sender === "function" ? sender : null; }
+  setRealmSender(sender) { this._realmSender = typeof sender === "function" ? sender : null; }
   setDuelSupported(supported) {
     this.duelSupported = !!supported;
     const button = document.getElementById("duel-toggle");
-    button?.classList.toggle("unavailable", this.online && !this.duelSupported);
-    button?.setAttribute("aria-disabled", String(this.online && !this.duelSupported));
-    if (button) button.title = this.online && !this.duelSupported ? "Duel service is updating" : "Mutual opt-in player duel";
+    const outsideCourt = this.game?.realmWorld !== "duel-arena";
+    button?.classList.toggle("unavailable", !this.online);
+    button?.setAttribute("aria-disabled", String(!this.online));
+    if (button) button.title = outsideCourt ? "Enter Crimson Duel Court" : "Mutual opt-in player duel";
     if (!this.duelSupported) this.duelActive = false;
     this.updateDuel(this.duelActive);
   }
@@ -295,6 +302,8 @@ export class UI {
     for (const id of ["menu-online-state", "menu-chat-state", "chat-presence-text"]) { const el = document.getElementById(id); if (el) el.textContent = state; }
     document.getElementById("chat-presence-text")?.parentElement?.classList.toggle("online", this.online);
     const dock = document.getElementById("chat-dock"); if (dock) dock.dataset.online = this.online ? "true" : "false";
+    const realmConnection = document.getElementById("battle-realm-connection");
+    if (realmConnection) realmConnection.textContent = this.online ? `${this.onlineCount} traveler${this.onlineCount === 1 ? "" : "s"} in this instance` : "Realm service offline";
     if (!this.online) this.updateDuel(false);
     this.setDuelSupported(this.duelSupported);
   }
@@ -304,11 +313,12 @@ export class UI {
     const button = document.getElementById("duel-toggle");
     button?.setAttribute("aria-checked", String(this.duelActive));
     const label = document.getElementById("duel-toggle-label");
-    if (label) label.textContent = this.duelActive ? "DUEL ARMED" : this.online && !this.duelSupported ? "SERVICE UPDATING" : "SAFE MODE";
+    if (label) label.textContent = this.duelActive ? "DUEL ARMED" : this.game?.realmWorld !== "duel-arena" ? "ENTER PVP REALM" : "SAFE MODE";
     document.getElementById("hud")?.classList.toggle("duel-armed", this.duelActive);
   }
 
   requestDuel(active) {
+    if (this.game?.realmWorld !== "duel-arena") { this.toggle("realms"); this.toast("Enter Crimson Duel Court to challenge other travelers."); return; }
     if (!this.online || !this._duelSender) { this.toast("Realm connection required for Duel Mode."); return; }
     if (!this.duelSupported) { this.toast("Duel service is updating. Safe Mode remains active."); return; }
     if (!this._duelSender(!!active)) { this.toast("Duel request could not reach the realm."); return; }
@@ -405,6 +415,37 @@ export class UI {
     const readingTime = Math.min(4200, Math.max(2200, 1300 + text.length * 34));
     clearTimeout(this._t); this._t = setTimeout(() => el.classList.remove("show"), readingTime);
   }
+
+  async requestRealm(worldId) {
+    if (!this.online || !this._realmSender) { this.toast("Realm connection required to cross a Battle Gate."); return; }
+    const buttons = document.querySelectorAll("[data-enter-realm],#battle-realms-return,#battle-realm-exit");
+    buttons.forEach((button) => { button.disabled = true; });
+    this.closeAll();
+    this.toast(worldId === "overworld" ? "Returning to Verdant Overworld…" : "Opening multiplayer realm gate…");
+    try { await this._realmSender(worldId); }
+    catch (error) { this.toast(error?.message || "The realm gate did not open."); }
+    finally { buttons.forEach((button) => { button.disabled = false; }); }
+  }
+
+  updateBattleRealm(worldId = "overworld", worldName = "Verdant Overworld") {
+    const special = worldId !== "overworld";
+    const duel = worldId === "duel-arena";
+    const hud = document.getElementById("battle-realm-hud");
+    hud?.classList.toggle("hidden", !special);
+    hud?.classList.toggle("duel", duel);
+    hud?.classList.toggle("raid", worldId === "raid-sanctum");
+    const name = document.getElementById("battle-realm-name"); if (name) name.textContent = worldName;
+    const rule = document.getElementById("battle-realm-rule"); if (rule) rule.textContent = duel ? "MUTUAL DUEL ONLY" : worldId === "raid-sanctum" ? "SHARED BOSS INSTANCE" : "SAFE EXPLORATION";
+    const returnButton = document.getElementById("battle-realms-return"); returnButton?.classList.toggle("hidden", !special);
+    const menuState = document.getElementById("menu-realm-state"); if (menuState) menuState.textContent = special ? `Inside ${worldName}` : "PvP court & co-op raid";
+    const mapTitle = document.querySelector(".minimap-head span"); if (mapTitle) mapTitle.textContent = worldId === "duel-arena" ? "CRIMSON COURT" : worldId === "raid-sanctum" ? "RAID SANCTUM" : "VERDANT TRAIL";
+    document.querySelectorAll("[data-realm-card]").forEach((card) => card.classList.toggle("active", card.dataset.realmCard === worldId));
+    document.querySelectorAll("[data-enter-realm]").forEach((button) => {
+      const active = button.dataset.enterRealm === worldId;
+      button.disabled = active;
+      const label = button.querySelector("span"); if (label) label.textContent = active ? "CURRENT REALM" : button.dataset.enterRealm === "duel-arena" ? "ENTER DUEL COURT" : "ENTER RAID SANCTUM";
+    });
+  }
   toggle(name) {
     const p = this.panels[name]; if (!p) return;
     this.audio?.sfx("ui");
@@ -420,6 +461,7 @@ export class UI {
       if (name === "quest") this.renderQuestLog();
       if (name === "companions") this.renderCompanions();
       if (name === "menu") this.renderMenu();
+      if (name === "realms") this.renderBattleRealms();
       if (name === "guide") this.renderStarterGuide();
       if (name === "chat") this.renderChat();
       if (name === "collection") this.renderCollection();
@@ -533,6 +575,8 @@ export class UI {
 
   currentRegion() {
     const p = this.game?.player; if (!p) return "Verdant Wilds";
+    if (this.game.realmWorld === "duel-arena") return "Crimson Duel Court";
+    if (this.game.realmWorld === "raid-sanctum") return "Infernyx Raid Sanctum";
     const x = p.x / 24, y = p.y / 24;
     if (y < 25) return "Frostfield";
     if (x > 72 && y < 50) return "Azure Coast";
@@ -562,6 +606,14 @@ export class UI {
     set("menu-cooking-state", `${knownMeals}/${COOKING_RECIPES.length} recipes · ${servings} packed`);
     this.setOnlineState(this.online, this.onlineCount);
     this.updateDuel(this.duelActive);
+  }
+
+  renderBattleRealms() {
+    const worldId = this.game?.realmWorld || "overworld";
+    const names = { overworld: "Verdant Overworld", "duel-arena": "Crimson Duel Court", "raid-sanctum": "Infernyx Raid Sanctum" };
+    this.updateBattleRealm(worldId, names[worldId]);
+    const status = document.getElementById("battle-realm-connection");
+    if (status) status.textContent = this.online ? `${this.onlineCount} traveler${this.onlineCount === 1 ? "" : "s"} in this instance` : "Realm service offline";
   }
 
   formatDuration(milliseconds) {

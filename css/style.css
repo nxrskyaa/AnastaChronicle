@@ -2290,6 +2290,61 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   .arrival-actions span{font-size:.2rem;white-space:nowrap}
 }
 
+/* Battle Realms ---------------------------------------------------------- */
+#panel-realms.hidden{display:none!important}
+.battle-realms-panel{
+  --realm-panel:#0d1c1c;
+  top:50%;left:50%;width:min(920px,calc(100vw - 34px));height:min(690px,calc(100dvh - 32px));
+  display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden;
+  transform:translate(-50%,-50%);border:2px solid #8f7047;border-radius:2px;
+  background:linear-gradient(155deg,rgba(17,38,35,.98),rgba(8,18,21,.99));
+  box-shadow:0 24px 70px rgba(0,0,0,.72),inset 0 0 0 3px #192e29,inset 0 0 0 5px #503e2b;
+}
+.battle-realms-panel>.panel-head{border-bottom:2px solid #755837;background:linear-gradient(90deg,#214f3c,#173a32 60%,#291f1b)}
+.battle-realms-intro{display:grid;grid-template-columns:58px minmax(0,1fr);gap:14px;align-items:center;padding:13px 18px;border-bottom:1px solid #355248;background:repeating-linear-gradient(135deg,rgba(105,177,140,.04) 0 2px,transparent 2px 7px)}
+.battle-realms-intro>i{position:relative;width:48px;height:48px;border:2px solid #c7a963;transform:rotate(45deg);box-shadow:inset 0 0 0 4px #173229,0 0 18px rgba(103,210,164,.14)}
+.battle-realms-intro>i::before,.battle-realms-intro>i::after{content:"";position:absolute;inset:9px;border:2px solid #62bb91}
+.battle-realms-intro>i::after{inset:17px;background:#e0c878;border:0;box-shadow:0 0 8px #62bb91}
+.battle-realms-intro span,.realm-gate-copy>small{color:#85c9a8;font-family:"Press Start 2P",monospace;font-size:.45rem;letter-spacing:.09em}
+.battle-realms-intro strong{display:block;margin:4px 0;color:#f2dfad;font-family:"Cinzel",serif;font-size:1.15rem}
+.battle-realms-intro p{color:#9fb0a9;font-size:.72rem;line-height:1.45}
+.battle-realm-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;min-height:0;padding:15px 18px 18px;overflow:auto}
+.realm-gate-card{position:relative;display:grid;grid-template-rows:126px minmax(0,1fr) auto;min-width:0;overflow:hidden;border:2px solid #76543a;background:#14211f;box-shadow:inset 0 0 0 2px #0a1112,0 8px 22px rgba(0,0,0,.32)}
+.realm-gate-card.active{border-color:#e0c16f;box-shadow:inset 0 0 0 2px #0a1112,0 0 22px rgba(224,193,111,.18)}
+.realm-gate-art{position:relative;overflow:hidden;border-bottom:2px solid #4e3a2d;background:linear-gradient(#1e3031 0 54%,#293d35 54% 68%,#9a7650 68% 100%)}
+.realm-gate-art::before{content:"";position:absolute;inset:auto 0 0;height:42px;background:repeating-linear-gradient(90deg,transparent 0 21px,rgba(40,25,19,.3) 21px 23px),repeating-linear-gradient(0deg,#886445 0 8px,#a98258 8px 15px)}
+.realm-gate-art>i{position:absolute;left:50%;bottom:15px;width:152px;height:66px;transform:translateX(-50%);border:4px solid #4f3d32;border-radius:50%;background:radial-gradient(ellipse,#513733 0 35%,#24211f 36% 45%,#9c7651 46% 58%,transparent 59%);box-shadow:0 8px 0 rgba(0,0,0,.25)}
+.realm-gate-art>b,.realm-gate-art>span{position:absolute;bottom:18px;width:9px;height:74px;background:#563e31;box-shadow:inset 2px 0 #b08a56}
+.realm-gate-art>b{left:24%}.realm-gate-art>span{right:24%}
+.realm-gate-art>b::before,.realm-gate-art>span::before{content:"";position:absolute;left:-8px;top:0;width:25px;height:11px;background:#d7b05f;clip-path:polygon(0 0,100% 0,82% 100%,18% 100%)}
+.realm-gate-card.duel .realm-gate-art{background:linear-gradient(#2d2026 0 54%,#382b2b 54% 68%,#8a604b 68% 100%)}
+.realm-gate-card.duel .realm-gate-art>i{border-color:#803d3d;background:radial-gradient(ellipse,#b74f48 0 5%,#3c1b21 6% 35%,#d0a35f 36% 39%,#292020 40% 48%,#98664e 49% 58%,transparent 59%);box-shadow:0 0 25px rgba(201,72,66,.32)}
+.realm-gate-card.raid .realm-gate-art{background:linear-gradient(#161421 0 54%,#232132 54% 68%,#4a3e46 68% 100%)}
+.realm-gate-card.raid .realm-gate-art>i{border-color:#6e4b7e;background:radial-gradient(ellipse,#f0783e 0 5%,#321828 6% 28%,#8c507d 29% 35%,#16131c 36% 49%,#654c5d 50% 58%,transparent 59%);box-shadow:0 0 30px rgba(195,74,55,.38)}
+.realm-gate-copy{padding:14px 15px 12px}.realm-gate-copy h3{margin:5px 0 8px;color:#f0dfb5;font-family:"Cinzel",serif;font-size:1.05rem}.realm-gate-copy p{color:#a9b5ae;font-size:.72rem;line-height:1.48}.realm-gate-copy ul{display:grid;gap:5px;margin:11px 0 0;padding:0;list-style:none}.realm-gate-copy li{position:relative;padding-left:15px;color:#c6d3c9;font-size:.66rem}.realm-gate-copy li::before{content:"";position:absolute;left:0;top:4px;width:7px;height:7px;border:1px solid #c9aa62;transform:rotate(45deg)}
+.realm-gate-card>button{display:flex;align-items:center;justify-content:space-between;margin:0 13px 13px;padding:11px 12px;border:2px solid #927044;background:linear-gradient(#3e8464,#285c49);color:#fff1c9;font-family:"Press Start 2P",monospace;font-size:.52rem;box-shadow:inset 0 0 0 2px #17372d,0 3px 0 #07110e}.realm-gate-card.duel>button{background:linear-gradient(#a54d48,#733137);border-color:#c68c5c;box-shadow:inset 0 0 0 2px #4b2025,0 3px 0 #16080b}.realm-gate-card>button em{font-size:1rem;font-style:normal}.realm-gate-card>button:disabled{filter:saturate(.45);opacity:.7;cursor:default}
+.battle-realms-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 18px;border-top:2px solid #4d3b2d;background:#111b1b}.battle-realms-footer>div{display:flex;align-items:center;gap:8px;color:#9eb4aa;font-size:.68rem}.battle-realms-footer>div>i{width:8px;height:8px;border-radius:50%;background:#65d29e;box-shadow:0 0 8px #65d29e}.battle-realms-footer>button{padding:8px 11px;border:1px solid #a8794c;background:#4f2c29;color:#f4d6a5;font-family:"Press Start 2P",monospace;font-size:.46rem}
+.menu-rune.realms::before,.menu-rune.realms::after{content:"";position:absolute;top:5px;width:9px;height:22px;border:2px solid currentColor;border-radius:50% 50% 2px 2px}.menu-rune.realms::before{left:4px;transform:rotate(-12deg)}.menu-rune.realms::after{right:4px;transform:rotate(12deg)}
+
+.battle-realm-hud{position:absolute;z-index:7;top:13px;left:50%;width:min(280px,calc(100vw - 260px));padding:7px 10px 8px;transform:translateX(-50%);border:2px solid #8a6640;background:linear-gradient(100deg,rgba(16,32,30,.96),rgba(9,18,21,.96));box-shadow:0 7px 18px rgba(0,0,0,.42),inset 0 0 0 1px rgba(224,196,129,.15);text-align:center;clip-path:polygon(7px 0,calc(100% - 7px) 0,100% 7px,100% calc(100% - 7px),calc(100% - 7px) 100%,7px 100%,0 calc(100% - 7px),0 7px)}
+.battle-realm-hud.duel{border-color:#a9584f;background:linear-gradient(100deg,rgba(55,22,26,.97),rgba(20,14,19,.97))}.battle-realm-hud.raid{border-color:#735482;background:linear-gradient(100deg,rgba(32,20,40,.97),rgba(16,12,20,.97))}
+.battle-realm-hud>span{display:block;color:#d2b66d;font-family:"Press Start 2P",monospace;font-size:.38rem;letter-spacing:.1em}.battle-realm-hud>strong{display:block;margin:4px 0 2px;color:#fff0c6;font-family:"Cinzel",serif;font-size:.84rem}.battle-realm-hud>small{display:block;color:#8ebaa5;font-size:.48rem;letter-spacing:.08em}.battle-realm-hud>button{margin-top:5px;padding:4px 7px;border:1px solid #846b49;background:#203c32;color:#e8d8ae;font-size:.48rem;font-weight:700}
+
+.world-name-tag.npc-name-tag{--name-accent:var(--npc-accent,#79c9a4);padding:5px 9px 5px 11px;border-color:color-mix(in srgb,var(--npc-accent,#79c9a4) 65%,#3a423b);background:linear-gradient(145deg,rgba(22,34,29,.97),rgba(9,16,16,.97));font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,.4),inset 3px 0 0 var(--npc-accent,#79c9a4)}
+.world-name-tag.npc-name-tag small{margin-left:7px;padding-left:7px;border-left:1px solid rgba(213,226,213,.25);color:#aebfb4;font-size:8px;font-weight:600;letter-spacing:.08em}.world-name-tag.npc-name-tag.ambient{opacity:.92}
+
+@media(max-width:720px){
+  .battle-realms-panel{top:6px;left:6px;width:calc(100vw - 12px);height:calc(100dvh - 12px);transform:none}
+  .battle-realms-intro{grid-template-columns:42px 1fr;padding:9px 11px}.battle-realms-intro>i{width:34px;height:34px}.battle-realms-intro>i::before{inset:6px}.battle-realms-intro>i::after{inset:12px}.battle-realms-intro strong{font-size:.9rem}.battle-realms-intro p{font-size:.64rem}
+  .battle-realm-grid{grid-template-columns:1fr;padding:10px;gap:10px}.realm-gate-card{grid-template-columns:104px minmax(0,1fr);grid-template-rows:minmax(132px,auto) auto}.realm-gate-art{grid-row:1/3;border:0;border-right:2px solid #4e3a2d}.realm-gate-art>i{left:50%;bottom:42px;width:96px;height:52px}.realm-gate-art>b{left:17%}.realm-gate-art>span{right:17%}.realm-gate-copy{padding:10px}.realm-gate-copy h3{font-size:.87rem}.realm-gate-copy p{font-size:.64rem}.realm-gate-copy ul{gap:3px;margin-top:7px}.realm-gate-copy li{font-size:.58rem}.realm-gate-card>button{grid-column:2;margin:0 9px 9px;padding:9px;font-size:.44rem}
+  .battle-realms-footer{padding:8px 10px}.battle-realms-footer>div{font-size:.59rem}.battle-realms-footer>button{font-size:.4rem}
+  .battle-realm-hud{top:calc(8px + env(safe-area-inset-top));width:min(222px,calc(100vw - 148px));padding:5px 7px}.battle-realm-hud>strong{font-size:.65rem}.battle-realm-hud>small{font-size:.4rem}.battle-realm-hud>button{font-size:.42rem}
+  .world-name-tag.npc-name-tag{font-size:11px}.world-name-tag.npc-name-tag small{font-size:7px}
+}
+@media(max-width:430px){
+  .battle-realms-intro p{display:none}.battle-realm-grid{padding:8px}.realm-gate-card{grid-template-columns:82px minmax(0,1fr)}.realm-gate-art>i{width:74px;height:42px}.realm-gate-art>b,.realm-gate-art>span{width:6px;height:57px}.realm-gate-copy p{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}.realm-gate-copy li{font-size:.54rem}.battle-realms-footer>div{max-width:58%}.battle-realm-hud{left:auto;right:70px;width:170px;transform:none}.battle-realm-hud>span,.battle-realm-hud>small{display:none}.battle-realm-hud>strong{margin:0 0 3px;font-size:.58rem}
+}
+
 /* ===== UNIFIED PIXEL CHRONICLE UI ========================================
    Creator and HUD now use the same paper / carved wood / moss language as
    the title screen and inventory reference.  This block intentionally lives

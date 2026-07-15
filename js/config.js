@@ -8,6 +8,11 @@ export const SERVER_OPTIONS = Object.freeze([
   Object.freeze({ id: "azure-02", name: "Azure Coast", code: "02", capacity: 300 }),
   Object.freeze({ id: "umbral-03", name: "Umbral Wilds", code: "03", capacity: 300 }),
 ]);
+export const MULTIPLAYER_WORLDS = Object.freeze([
+  Object.freeze({ id: "overworld", name: "Verdant Overworld", pvp: false, boss: false }),
+  Object.freeze({ id: "duel-arena", name: "Crimson Duel Court", pvp: true, boss: false }),
+  Object.freeze({ id: "raid-sanctum", name: "Infernyx Raid Sanctum", pvp: false, boss: true }),
+]);
 
 export function getSelectedServerId() {
   try {
@@ -22,9 +27,10 @@ export function setSelectedServerId(id) {
   return selected;
 }
 
-export function getServerUrl(id = getSelectedServerId()) {
+export function getServerUrl(id = getSelectedServerId(), worldId = "overworld") {
   const selected = SERVER_OPTIONS.some((server) => server.id === id) ? id : SERVER_OPTIONS[0].id;
-  return `${SERVER_BASE_URL}?server=${encodeURIComponent(selected)}`;
+  const world = MULTIPLAYER_WORLDS.some((entry) => entry.id === worldId) ? worldId : "overworld";
+  return `${SERVER_BASE_URL}?server=${encodeURIComponent(selected)}&world=${encodeURIComponent(world)}`;
 }
 
 // Kept as a compatibility export for diagnostics and older integrations.

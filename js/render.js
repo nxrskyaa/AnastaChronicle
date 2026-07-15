@@ -9,6 +9,7 @@ import { activeRod } from "./fishing.js";
 import { drawFishSprite } from "./fishart.js";
 import { MON_ELEMENT, MON_META } from "./monsters.js";
 import { CLASSES } from "./classes.js";
+import { renderBattleRealmGround } from "./realms.js";
 
 const T = 24, MAP_W = 110, MAP_H = 110;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -164,6 +165,8 @@ Game.prototype.render = function () {
       }
     }
   }
+
+  renderBattleRealmGround(ctx, this, camx, camy);
 
   // Infernyx arena is a permanent code-drawn landmark, kept clear of random props.
   if (this.bossArena) {
@@ -443,14 +446,6 @@ Game.prototype.render = function () {
         ctx.fillRect(sx + side * 11, sy - 30 + breathe, 1, 1);
       }
       if (o.ambient || (!hasQuest && !ready)) drawNpcEmote(ctx, o, sx, sy, this.t);
-      // Ambient residents reveal their tag only up close, keeping busy regions readable.
-      if (!o.ambient || playerNear || this._interactTarget === o) {
-        const tagW = o.ambient ? 42 : 36;
-        ctx.font = "7px 'IBM Plex Sans',sans-serif"; ctx.textAlign = "center";
-        ctx.fillStyle = o.ambient ? "rgba(20,35,31,.72)" : "rgba(0,0,0,0.5)"; ctx.fillRect(sx - tagW / 2, sy - 46, tagW, 9);
-        if (o.ambient) { ctx.fillStyle = o.look?.accent || "#79c9a4"; ctx.fillRect(sx - tagW / 2, sy - 46, 2, 9); }
-        ctx.fillStyle = "#e8ecf2"; ctx.fillText(o.name, sx, sy - 39); ctx.textAlign = "left";
-      }
     }
     else if (d.k === "remote") {
       const rsx = Math.round(o.rx - camx), rsy = Math.round(o.ry - camy);
@@ -913,6 +908,31 @@ Game.prototype.renderWorldNames = function (camx, camy) {
   const scaleY = rect.height / view.h;
   const active = new Set();
   this._worldNameEls ||= new Map();
+
+  for (const npc of this.npcs || []) {
+    const x = npc.x - camx, y = npc.y - camy;
+    const near = Math.hypot(this.player.x - npc.x, this.player.y - npc.y) < 118;
+    if ((npc.ambient && !near && this._interactTarget !== npc) || x < -50 || x > view.w + 50 || y < -80 || y > view.h + 40) continue;
+    const key = `npc:${npc.id || npc.name}`;
+    active.add(key);
+    let el = this._worldNameEls.get(key);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = `world-name-tag npc-name-tag${npc.ambient ? " ambient" : ""}`;
+      el.append(document.createElement("span"), document.createElement("small"));
+      layer.appendChild(el);
+      this._worldNameEls.set(key, el);
+    }
+    const [label, role] = el.children;
+    if (label.textContent !== npc.name) { label.textContent = npc.name; el._nameHalf = Math.ceil(el.offsetWidth / 2) + 8; }
+    const roleText = String(npc.role || "Resident").toUpperCase();
+    if (role.textContent !== roleText) role.textContent = roleText;
+    el.style.setProperty("--npc-accent", npc.look?.accent || "#79c9a4");
+    const rawPx = rect.left + x * scaleX;
+    const margin = Math.min(rect.width / 2, el._nameHalf || 48);
+    el.style.left = `${Math.round(clamp(rawPx, rect.left + margin, rect.right - margin))}px`;
+    el.style.top = `${Math.round(clamp(rect.top + (y - 47) * scaleY, rect.top + 18, rect.bottom - 10))}px`;
+  }
 
   for (const [id, remote] of Object.entries(net.remote)) {
     if (!Number.isFinite(remote.rx) || !Number.isFinite(remote.ry)) continue;
