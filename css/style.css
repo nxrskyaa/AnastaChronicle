@@ -1181,6 +1181,10 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   background:linear-gradient(160deg,#f3dda8,#dfbd7d)!important;
   box-shadow:0 0 0 2px #b47c4e,0 24px 70px rgba(0,0,0,.62),inset 0 0 0 2px rgba(255,246,194,.55)!important;
 }
+/* Keep dialog visibility authoritative. The chat layout uses an intentional
+   !important display override, so the generic .hidden utility needs the
+   dialog id's higher specificity to win on initial load and after Close. */
+#panel-chat.hidden{display:none!important}
 .chat-panel::before{content:"WORLD / 01";right:76px;top:15px;color:#f4e3a6;border-color:rgba(255,236,164,.46);font-family:"IBM Plex Sans",sans-serif;font-size:10px;font-weight:800;letter-spacing:.1em}
 .chat-panel>.panel-head{
   display:grid!important;
