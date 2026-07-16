@@ -2783,6 +2783,11 @@ kbd{display:inline-block;padding:.12rem .38rem;border:1px solid var(--line2);bor
   #creator .preview-summary>div span{font-size:.54rem!important}
 }
 
+/* Color presets must win in every creator layout, including iPad landscape
+   where the desktop parchment rule remains active. */
+#creator .creator-panel .swatch[data-color]{background:var(--swatch-color)!important;background-image:none!important;-webkit-appearance:none!important;appearance:none!important}
+#creator #char-preview{max-width:100%!important;max-height:100%!important}
+
 /* ===== FINAL REALM CHAT SURFACE ========================================== */
 .chat-panel{
   width:min(580px,calc(100vw - 32px))!important;

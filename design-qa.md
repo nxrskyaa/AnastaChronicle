@@ -62,4 +62,30 @@ The hair-color region was checked using computed styles. The first eight control
 
 - P3: a future pass could add a user-controlled preview zoom, but it is not required for legibility now.
 
+## Character Creator iPad Landscape QA — 2026-07-16
+
+- Source visual truth: `C:\Users\xywal\AppData\Local\Temp\codex-clipboard-dc22a08c-6c61-4a8a-97bb-4c704ccd4cdc.png`
+- Implementation screenshot: `C:\Users\xywal\Documents\New project\creator-ipad-landscape-qa.png`
+- Viewport: 1024 x 896 CSS px (iPad landscape layout)
+- State: Guest Play > Create New Traveler > Appearance; red hair swatch selected
+- Primary interactions tested: Guest Play, Create New Traveler, Appearance tab, hair-color selection
+
+### Regression and root cause
+
+The earlier palette fix only consumed `--swatch-color` inside the phone breakpoint. At iPad landscape width, the desktop parchment rule still won the cascade, so all 13 hair controls computed to the same `rgb(216, 181, 120)`. The preview canvas also rendered wider than its 288 px stage, producing the cropped and stretched character shown in the supplied capture.
+
+### Post-fix evidence
+
+- All 13 hair controls now compute to 13 distinct RGB colors at 1024 x 896.
+- Selecting `#b5432f` sets `aria-pressed="true"` and computes to `rgb(181, 67, 47)`.
+- Preview stage: 288 x 456.4 px. Preview canvas: 282.74 x 451.6 px, fully contained inside the stage.
+- Document horizontal overflow: 0 px.
+- The canvas backing size and pixel scale now follow the responsive preview slot, keeping the traveler centered and sharp instead of stretching the old fixed buffer.
+
+### Findings
+
+- No remaining P0/P1/P2 issue in the tested iPad landscape creator flow.
+- The fix applies across creator layouts instead of relying on a portrait-only media query.
+- Existing pixel-art controls, class data, customization content, and creator behavior remain unchanged.
+
 final result: passed

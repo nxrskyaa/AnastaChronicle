@@ -150,6 +150,15 @@ function updateCreatorSummary() {
 function drawPreview(now = performance.now()) {
   const cv = document.getElementById("char-preview");
   if (!cv) return;
+  // Match the backing canvas to its responsive slot. The old fixed 192x220
+  // buffer was stretched on iPad landscape, making the traveler soft/cropped.
+  const rect = cv.getBoundingClientRect();
+  const renderWidth = Math.max(96, Math.round(rect.width));
+  const renderHeight = Math.max(110, Math.round(rect.height));
+  if (cv.width !== renderWidth || cv.height !== renderHeight) {
+    cv.width = renderWidth;
+    cv.height = renderHeight;
+  }
   const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, cv.width, cv.height);
   const resolved = normalizeLook(look);
@@ -164,10 +173,13 @@ function drawPreview(now = performance.now()) {
   const pose = previewState === "attack" ? previewCache.atk : previewState === "arcana" ? previewCache.cast : previewCache.idle;
   const bodyFrames = pose?.[rotDir] || previewCache.walk[rotDir];
   const body = bodyFrames[phase % bodyFrames.length];
-  const x = 32, y = 42, scale = 4;
+  const scale = Math.max(2, Math.min(8, Math.floor(Math.min((cv.width - 24) / 32, (cv.height - 28) / 40))));
+  const x = Math.round((cv.width - 32 * scale) / 2);
+  const y = Math.max(8, Math.round(cv.height - 40 * scale - 18));
   if (previewState === "arcana") {
     ctx.save(); ctx.globalAlpha = .32 + Math.sin(pulse * 5) * .08; ctx.strokeStyle = resolved.accent; ctx.lineWidth = 2;
-    for (let i = 0; i < 3; i++) ctx.strokeRect(56 - i * 4, 170 - i * 3, 80 + i * 8, 20 + i * 6);
+    const ringWidth = Math.min(96, cv.width * .54);
+    for (let i = 0; i < 3; i++) ctx.strokeRect(Math.round(cv.width / 2 - ringWidth / 2 - i * 4), cv.height - 30 - i * 3, Math.round(ringWidth + i * 8), 16 + i * 5);
     ctx.restore();
   }
   ctx.drawImage(body, 0, 0, 32, 40, x, y, 32 * scale, 40 * scale);
@@ -179,7 +191,7 @@ function drawPreview(now = performance.now()) {
     ctx.fillStyle = resolved.accent;
     for (let i = 0; i < 5; i++) {
       const a = pulse * (1.3 + i * .07) + i * 1.26;
-      ctx.fillRect(Math.round(96 + Math.cos(a) * (40 + i * 2)), Math.round(116 + Math.sin(a) * (24 + i)), 3, 3);
+      ctx.fillRect(Math.round(cv.width / 2 + Math.cos(a) * (scale * 10 + i * 2)), Math.round(y + 20 * scale + Math.sin(a) * (scale * 6 + i)), 3, 3);
     }
   }
 }
