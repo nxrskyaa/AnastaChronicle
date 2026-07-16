@@ -211,7 +211,12 @@ function swatch(part) {
     b.setAttribute("aria-pressed", look[part] === v ? "true" : "false");
     b.disabled = locked;
     if (textPart) { b.textContent = locked ? `LOCKED · ${relic.name}` : relic?.name || v; b.classList.add("txt"); }
-    else b.style.background = v;
+    else {
+      // A CSS variable survives the mobile/iPad theme's !important button
+      // rules, while an inline `background` declaration does not.
+      b.style.setProperty("--swatch-color", v);
+      b.dataset.color = v;
+    }
     b.addEventListener("click", () => {
       audio.sfx("ui"); look[part] = v; invalidatePreview();
       wrap.querySelectorAll(".swatch").forEach(s => { s.classList.remove("sel"); s.setAttribute("aria-pressed", "false"); });
