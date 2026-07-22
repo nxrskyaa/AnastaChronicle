@@ -116,6 +116,29 @@ const SPECIES = {
     eyes(ctx, 16, 24, 22 + b, 0);
     P(ctx, 18, 26 + b, 4, 1, d);
   },
+  // Sparring Dummy — straw training post for the Crimson Duel Court.
+  // Stationary combat target so solo travelers can warm up before PvP.
+  sparring_dummy: (ctx, f) => {
+    const b = [0, -1, 0, 1][f] * 0.35;
+    shadow(ctx, 20, 35, 11);
+    const wood = "#8a5a34", woodD = shade(wood, 0.72), straw = "#d7b46a", strawL = shade(straw, 1.15), cloth = "#b94543", clothL = "#e07060";
+    // stake
+    P(ctx, 18, 18 + b, 4, 16, wood); P(ctx, 18, 18 + b, 1, 16, woodD);
+    // straw torso
+    E(ctx, 20, 20 + b, 9, 11, straw); E(ctx, 20, 18 + b, 7, 7, strawL);
+    // rope wraps
+    P(ctx, 12, 16 + b, 16, 2, woodD); P(ctx, 13, 24 + b, 14, 2, woodD);
+    // crimson practice sash
+    P(ctx, 12, 20 + b, 16, 3, cloth); P(ctx, 12, 20 + b, 16, 1, clothL);
+    // wooden head block
+    E(ctx, 20, 10 + b, 6.5, 5.5, wood); E(ctx, 20, 9 + b, 4.5, 3.5, shade(wood, 1.12));
+    // painted target face
+    E(ctx, 20, 10 + b, 3.2, 2.8, cloth);
+    P(ctx, 19, 9 + b, 2, 2, "#fff0c8");
+    // loose straw tufts
+    P(ctx, 11, 14 + b, 2, 4, strawL); P(ctx, 27, 15 + b, 2, 4, straw);
+    P(ctx, 14, 28 + b, 2, 3, straw); P(ctx, 24, 28 + b, 2, 3, strawL);
+  },
   // Sparkit — electric bunny
   sparkit: (ctx, f) => {
     const b = [0, -1, 0, 1][f];
@@ -445,6 +468,11 @@ const cache = {};   // id -> [frame canvases]
 export const MON_IDS = Object.keys(SPECIES);
 export const STARTER_MOUNT_ID = "puffalo";
 export const MON_META = Object.freeze({
+  sparring_dummy: {
+    name: "Sparring Dummy", element: "rock", habitat: "ruins", role: "training post", rarity: "common",
+    petScale: 0.9, mountable: false, mountScale: 1, mountSpeed: 1,
+    description: "A straw-and-wood practice post used to warm up in the Crimson Duel Court."
+  },
   leaflet: {
     name: "Leaflet", element: "grass", habitat: "meadow", role: "seed tender", rarity: "common",
     petScale: 0.82, mountable: false, mountScale: 1, mountSpeed: 1,

@@ -95,6 +95,23 @@ function place(game, type, tx, ty, offset = 0) {
   game.buildings.push({ type, x: tx * T, y: ty * T, sortY: ty * T + offset });
 }
 
+function placeSparringDummy(game, x, y, tier = 1) {
+  const baseHp = 48 + tier * 28;
+  const h = 40;
+  game.enemies.push({
+    id: "sparring_dummy",
+    x, y, sortY: y, tier,
+    habitat: "ruins", hx: x, hy: y,
+    hp: baseHp, maxHp: baseHp,
+    dmg: 0, speed: 0,
+    xp: 4 + tier * 3, gold: tier,
+    bob: Math.random() * 6, frame: 0, frameT: Math.random(),
+    atkCd: 0, hurt: 0, dead: false, h,
+    state: "idle", angry: 0, wanderT: 0, wdx: 0, wdy: 0,
+    sparring: true, frozen: 0,
+  });
+}
+
 function buildDuelCourt(game) {
   const { map, vmap } = makeBattleMap("duel-arena");
   resetTransientWorld(game);
@@ -114,6 +131,22 @@ function buildDuelCourt(game) {
   ];
   for (const [type, x, y] of structures) place(game, type, x, y);
   decorateOuterRing(game, seeded(0xc0115e), 55 * T, 55 * T, 18 * T, "crimson");
+  // Solo warm-up posts. Keep them inside the court ring so travelers can
+  // practice combos without needing another online duelist.
+  const dummies = [
+    [48 * T, 52 * T, 1], [62 * T, 52 * T, 1],
+    [48 * T, 58 * T, 2], [62 * T, 58 * T, 2],
+    [55 * T, 50 * T, 3], [55 * T, 60 * T, 2],
+  ];
+  for (const [x, y, tier] of dummies) placeSparringDummy(game, x, y, tier);
+  // Soft ambient motion so the court does not feel like a static void.
+  for (let k = 0; k < 18; k++) {
+    const angle = (k / 18) * Math.PI * 2;
+    const radius = 9 * T + (k % 3) * 18;
+    const x = 55 * T + Math.cos(angle) * radius;
+    const y = 55 * T + Math.sin(angle) * radius * 0.72;
+    game.tufts.push({ x, y, ph: Math.random() * 7 });
+  }
 }
 
 function buildRaidSanctum(game) {

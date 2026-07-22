@@ -634,6 +634,7 @@ export class UI {
     const p = this.game.player;
     const discovered = FISH.filter(fish => (this.game.fishingStats?.records?.[fish.id]?.count || 0) > 0).length;
     const ownedPets = Array.isArray(this.game.pets) ? this.game.pets.length : 0;
+    const companionTotal = MON_IDS.filter((id) => id !== "sparring_dummy").length;
     const knownMeals = knownRecipeIds({ level: p.level }).length;
     const servings = Object.keys(FOOD_ITEMS).reduce((sum, id) => sum + Math.max(0, p.inv[id] || 0), 0);
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
@@ -644,7 +645,7 @@ export class UI {
     set("menu-fish-progress", `${discovered} / ${FISH.length} discovered`);
     set("menu-guide-state", this.game.flags?.starterGuideSeen ? "Replay controls, features & quests" : "Start here · learn the realm");
     this.syncAutoBattle(true);
-    set("menu-pet-progress", `${ownedPets} / ${MON_IDS.length} bonded`);
+    set("menu-pet-progress", `${ownedPets} / ${companionTotal} bonded`);
     set("menu-cooking-state", `${knownMeals}/${COOKING_RECIPES.length} recipes · ${servings} packed`);
     this.setOnlineState(this.online, this.onlineCount);
     this.updateDuel(this.duelActive);
@@ -967,16 +968,17 @@ export class UI {
 
   syncPet(force = false) {
     const g = this.game; if (!g) return;
-    const owned = Array.isArray(g.pets) ? g.pets.filter(id => MON_IDS.includes(id)) : [];
+    const owned = Array.isArray(g.pets) ? g.pets.filter(id => MON_IDS.includes(id) && id !== "sparring_dummy") : [];
+    const companionTotal = MON_IDS.filter((id) => id !== "sparring_dummy").length;
     const active = g.activePetId || g.pet?.id || null;
     const token = `${owned.join(",")}|${active || ""}`;
     const chip = document.getElementById("pet-chip");
     chip?.classList.remove("hidden");
     const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
     set("pet-chip-name", active ? petName(active) : "Sanctuary");
-    set("pet-chip-count", `${owned.length}/${MON_IDS.length}`);
-    set("companion-owned-count", `${owned.length} / ${MON_IDS.length} BONDED`);
-    const fill = document.getElementById("companion-progress-fill"); if (fill) fill.style.width = `${owned.length / MON_IDS.length * 100}%`;
+    set("pet-chip-count", `${owned.length}/${companionTotal}`);
+    set("companion-owned-count", `${owned.length} / ${companionTotal} BONDED`);
+    const fill = document.getElementById("companion-progress-fill"); if (fill) fill.style.width = `${owned.length / companionTotal * 100}%`;
     const canvas = document.getElementById("companion-active-art");
     const ctx = canvas?.getContext("2d"); if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     const orb = document.getElementById("companion-element-orb");
@@ -1012,6 +1014,7 @@ export class UI {
     const active = this.game.activePetId || this.game.pet?.id;
     grid.innerHTML = "";
     for (const id of MON_IDS) {
+      if (id === "sparring_dummy") continue; // combat prop, not a companion
       const isOwned = owned.has(id), isActive = id === active, isStarterHint = id === STARTER_MOUNT_ID && !isOwned;
       const meta = MON_META[id];
       const button = document.createElement("button");

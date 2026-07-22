@@ -490,17 +490,44 @@ Game.prototype.doAttack = function (damageMul = 1) {
 Game.prototype.killEnemy = function (e) {
   e.dead = true;
   const p = this.player;
+  const sparring = !!e.sparring || e.id === "sparring_dummy";
   p.xp += e.xp; p.gold += e.gold;
-  this.quests.killCount++;
-  const drop = e.tier >= 2 ? "ore" : "gel";
-  p.inv[drop] = (p.inv[drop] || 0) + 1 + (Math.random() < 0.5 ? 1 : 0);
-  if (Math.random() < 0.4) p.inv.herb = (p.inv.herb || 0) + 1;
-  for (let i = 0; i < 6; i++) this.particles.push({ x: e.x, y: e.y - e.h / 2, vx: (Math.random() - 0.5) * 40, vy: -20 - Math.random() * 30, life: 0.4, color: "rgba(120,220,150,0.8)" });
+  if (!sparring) {
+    this.quests.killCount++;
+    const drop = e.tier >= 2 ? "ore" : "gel";
+    p.inv[drop] = (p.inv[drop] || 0) + 1 + (Math.random() < 0.5 ? 1 : 0);
+    if (Math.random() < 0.4) p.inv.herb = (p.inv.herb || 0) + 1;
+  } else if (Math.random() < 0.35) {
+    // Occasional straw-dust reward so training still feels productive.
+    p.inv.gel = (p.inv.gel || 0) + 1;
+  }
+  for (let i = 0; i < 6; i++) this.particles.push({ x: e.x, y: e.y - e.h / 2, vx: (Math.random() - 0.5) * 40, vy: -20 - Math.random() * 30, life: 0.4, color: sparring ? "rgba(215,180,106,0.85)" : "rgba(120,220,150,0.8)" });
   this.fx.push({ kind: "pop", x: e.x, y: e.y - e.h / 2, t: 0, dur: 0.35 });
-  this.shake = Math.max(this.shake, 4);
+  this.shake = Math.max(this.shake, sparring ? 3 : 4);
   this.audio.sfx("coin");
   while (p.xp >= xpFor(p.level)) { p.xp -= xpFor(p.level); p.level++; p.maxHp += 12; p.hp = p.maxHp; p.maxStamina += 8; p.stamina = p.maxStamina; this.ui.showLevel(p.level); this.onLevelUp?.(p.level); this.audio.sfx("level"); this.fx.push({ kind: "levelring", x: p.x, y: p.y, t: 0, dur: 0.7 }); }
-  setTimeout(() => { this.enemies = this.enemies.filter(x => x !== e); this.spawnEnemy(); }, 400);
+  setTimeout(() => {
+    this.enemies = this.enemies.filter(x => x !== e);
+    if (sparring) {
+      // Rebuild the same post in place so the court never empties out.
+      const baseHp = 48 + (e.tier || 1) * 28;
+      this.enemies.push({
+        id: "sparring_dummy",
+        x: e.hx ?? e.x, y: e.hy ?? e.y, sortY: e.hy ?? e.y, tier: e.tier || 1,
+        habitat: "ruins", hx: e.hx ?? e.x, hy: e.hy ?? e.y,
+        hp: baseHp, maxHp: baseHp,
+        dmg: 0, speed: 0,
+        xp: 4 + (e.tier || 1) * 3, gold: e.tier || 1,
+        bob: Math.random() * 6, frame: 0, frameT: Math.random(),
+        atkCd: 0, hurt: 0, dead: false, h: e.h || 40,
+        state: "idle", angry: 0, wanderT: 0, wdx: 0, wdy: 0,
+        sparring: true, frozen: 0,
+      });
+      return;
+    }
+    // Wild respawns only make sense on the overworld map.
+    if (this.realmWorld === "overworld") this.spawnEnemy();
+  }, 400);
 };
 
 Game.prototype.updateEnemies = function (dt) {
@@ -514,6 +541,15 @@ Game.prototype.updateEnemies = function (dt) {
     if (e.frozen) { e.frozen -= dt; if (e.frozen < 0) e.frozen = 0; }
     // idle bounce frame
     e.frameT += dt; if (e.frameT > 0.28) { e.frameT = 0; e.frame = (e.frame + 1) % 4; }
+
+    // Training posts stay planted. They still take damage and play hit feedback,
+    // but they never chase, attack, or wander off the court.
+    if (e.sparring || e.id === "sparring_dummy") {
+      e.state = "idle";
+      e.angry = 0;
+      e.x = e.hx; e.y = e.hy; e.sortY = e.y;
+      continue;
+    }
 
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy);
     const AGGRO = 78;          // small aggro radius — must get close
@@ -841,7 +877,10 @@ Game.prototype.hurtEnemy = function (e, hit, crit) {
   if (e.dead) return;
   const p = this.player;
   const buffed = Math.round(hit * (p.buffT > 0 ? (p.buffMul || 1) : 1));
-  e.hp -= buffed; e.hurt = 0.2; e.angry = 6; e.state = "chase";
+  const sparring = !!e.sparring || e.id === "sparring_dummy";
+  e.hp -= buffed; e.hurt = 0.2;
+  if (!sparring) { e.angry = 6; e.state = "chase"; }
+  else { e.angry = 0; e.state = "idle"; }
   this.addFloater(e.x, e.y - e.h, buffed, crit);
   this.spawnHit(e.x, e.y - e.h * 0.4);
   this.audio.sfx(crit ? "crit" : "hit");

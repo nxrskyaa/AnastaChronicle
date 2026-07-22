@@ -14,7 +14,8 @@ const T = 24;
 const MAP_W = 110, MAP_H = 110;
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const PET_IDS = new Set(MON_IDS);
+// Training posts are combat props, not companions.
+const PET_IDS = new Set(MON_IDS.filter((id) => id !== "sparring_dummy"));
 
 export class Game {
   constructor(canvas, ui, look) {
@@ -447,9 +448,11 @@ export class Game {
     } while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.camp.x, y - this.camp.y) < 12 * T || Math.hypot(x - this.bossArena.x, y - this.bossArena.y) < this.bossArena.radius) && tries < 30);
     const tier = Math.random() < 0.6 ? 1 : Math.random() < 0.8 ? 2 : 3;
     const habitat = this.creatureHabitatAt(x, y);
-    const candidates = MON_IDS.filter((candidate) => habitat.includes(MON_META[candidate]?.habitat));
+    // Training posts are Duel Court props only — keep them out of wild spawns.
+    const wildIds = MON_IDS.filter((candidate) => candidate !== "sparring_dummy");
+    const candidates = wildIds.filter((candidate) => habitat.includes(MON_META[candidate]?.habitat));
     const rarityWeight = { common: 5, uncommon: 3, rare: 2, epic: 1 };
-    const pool = (candidates.length ? candidates : MON_IDS).flatMap((candidate) =>
+    const pool = (candidates.length ? candidates : wildIds).flatMap((candidate) =>
       Array(rarityWeight[MON_META[candidate]?.rarity] || 2).fill(candidate)
     );
     const id = pool[(Math.random() * pool.length) | 0];
@@ -485,7 +488,8 @@ export class Game {
     let x, y, tries = 0;
     do { x = rand(5 * T, (MAP_W - 5) * T); y = rand(5 * T, (MAP_H - 5) * T); tries++; }
     while ((this.tileAt(x, y) === 2 || Math.hypot(x - this.bossArena.x, y - this.bossArena.y) < this.bossArena.radius) && tries < 30);
-    const pet = Math.random() < 0.35 ? MON_IDS[(Math.random() * MON_IDS.length) | 0] : null;
+    const petPool = [...PET_IDS];
+    const pet = Math.random() < 0.35 && petPool.length ? petPool[(Math.random() * petPool.length) | 0] : null;
     this.chests.push({ x, y, sortY: y, opened: false, openT: 0, pet });
   }
 
